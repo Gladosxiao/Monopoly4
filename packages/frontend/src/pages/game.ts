@@ -15,7 +15,7 @@ import { getCurrentGame, setCurrentGame } from '../state/game.js';
 import { createBoardCanvas, renderBoard, getTileIndexAt } from '../board.js';
 import { createTestPanel, isTestMode } from '../testMode/index.js';
 import { registerCleanup, navigateToLogin, navigateToLobby } from '../router.js';
-import { showToast, showPrompt } from '../ui/common.js';
+import { showToast, showPrompt, escapeHtml } from '../ui/common.js';
 import {
   rollDice,
   buyProperty,
@@ -700,6 +700,79 @@ function isLogHighlighted(log: GameLog): boolean {
   return false;
 }
 
+/** 转义正则特殊字符 */
+function escapeRegex(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+type NameToken =
+  | { kind: 'player'; id: string; name: string; color: string }
+  | { kind: 'card'; id: string; name: string; type: string }
+  | { kind: 'item'; id: string; name: string; type: string };
+
+/**
+ * 将日志纯文本渲染为富文本 HTML：
+ * - 玩家名称 → 对应角色颜色
+ * - 金额（$ 数字）→ 金色高亮
+ * - 卡片/道具名称 → 按类型着色
+ */
+function renderLogMessage(state: GameState, message: string): string {
+  const tokens: NameToken[] = [];
+
+  state.players.forEach((p) =>
+    tokens.push({ kind: 'player', id: p.id, name: p.username, color: p.color })
+  );
+  Object.values(CARD_DEFINITIONS).forEach((c) =>
+    tokens.push({ kind: 'card', id: c.id, name: c.name, type: c.type })
+  );
+  Object.values(ITEM_DEFINITIONS).forEach((i) =>
+    tokens.push({ kind: 'item', id: i.id, name: i.name, type: i.type })
+  );
+
+  // 先匹配长的名称，避免短名称被截断
+  tokens.sort((a, b) => b.name.length - a.name.length);
+
+  let text = escapeHtml(message);
+
+  // 步骤 1：用唯一占位符替换所有需要着色的名称
+  tokens.forEach((t, idx) => {
+    const regex = new RegExp(escapeRegex(t.name), 'g');
+    text = text.replace(regex, `__NAME_${idx}_#__`);
+  });
+
+  // 步骤 2：用占位符替换金额
+  const moneyValues: string[] = [];
+  text = text.replace(/\$[\d,]+/g, (match) => {
+    moneyValues.push(match);
+    return `__MONEY_${moneyValues.length - 1}_#__`;
+  });
+
+  // 步骤 3：将名称占位符恢复为带样式的 HTML
+  tokens.forEach((t, idx) => {
+    let html: string;
+    if (t.kind === 'player') {
+      html = `<span class="log-player" style="color:${t.color}">${escapeHtml(t.name)}</span>`;
+    } else if (t.kind === 'card') {
+      const bg = CARD_TYPE_COLORS[t.type] || '#555';
+      html = `<span class="log-card" style="background:${bg}">${escapeHtml(t.name)}</span>`;
+    } else {
+      const bg = ITEM_TYPE_COLORS[t.type] || '#555';
+      html = `<span class="log-prop" style="background:${bg}">${escapeHtml(t.name)}</span>`;
+    }
+    text = text.replaceAll(`__NAME_${idx}_#__`, html);
+  });
+
+  // 步骤 4：将金额占位符恢复为金色高亮
+  moneyValues.forEach((value, idx) => {
+    text = text.replaceAll(
+      `__MONEY_${idx}_#__`,
+      `<span class="log-money">${value}</span>`
+    );
+  });
+
+  return text;
+}
+
 export function renderLogs(container: HTMLElement, state: GameState): void {
   const el = container.querySelector<HTMLDivElement>('#game-logs')!;
   el.innerHTML = '';
@@ -709,7 +782,7 @@ export function renderLogs(container: HTMLElement, state: GameState): void {
     if (isLogHighlighted(log)) {
       div.classList.add('log-highlight');
     }
-    div.textContent = log.message;
+    div.innerHTML = renderLogMessage(state, log.message);
     el.appendChild(div);
   });
 }
