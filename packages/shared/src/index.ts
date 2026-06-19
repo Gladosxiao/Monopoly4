@@ -55,16 +55,24 @@ export interface Room {
 
 // ==================== 游戏配置 ====================
 
+export type LandLease = '1m' | '3m' | '6m' | '1y' | '2y' | 'perpetual';
+export type GameTime = '1m' | '3m' | '6m' | '1y' | '2y' | 'perpetual';
+export type WinCondition = 3 | 5 | 10 | 50 | 100 | 'unlimited';
+
 export interface GameConfig {
   totalFunds: number;
   moveMode: 'walk' | 'bike' | 'car';
-  winCondition: 3 | 5 | 10 | 'unlimited';
+  landLease: LandLease;
+  gameTime: GameTime;
+  winCondition: WinCondition;
   mapId: string;
 }
 
 export const DEFAULT_GAME_CONFIG: GameConfig = {
   totalFunds: 100000,
   moveMode: 'walk',
+  landLease: 'perpetual',
+  gameTime: 'perpetual',
   winCondition: 'unlimited',
   mapId: 'simple',
 };
@@ -80,7 +88,7 @@ export type TileType =
   | 'hospital'
   | 'shop'
   | 'card'
-  | 'coupon30'
+  | 'coupon'
   | 'tax';
 
 export type PropertySize = 'small' | 'large';
@@ -100,6 +108,7 @@ export interface Tile {
   type: TileType;
   size?: PropertySize; // 仅 property 类型，区分小块/大块土地
   group?: number; // 连接式路段分组，property 类型使用
+  couponValue?: number; // 仅 coupon 类型，点券数值
   basePrice: number;
   baseRent: number;
   level: number;
@@ -144,6 +153,8 @@ export interface PlayerSpirit {
   remainingDays: number;
 }
 
+export type VehicleType = 'walk' | 'bike' | 'car';
+
 export interface Player {
   id: string;
   username: string;
@@ -154,6 +165,7 @@ export interface Player {
   deposit: number;
   loan: number;
   coupons: number;
+  vehicle: VehicleType;
   position: number;
   properties: number[];
   cards: CardInstance[];
@@ -162,6 +174,7 @@ export interface Player {
   statusEffects: StatusEffect[];
   isBankrupt: boolean;
   isAI: boolean;
+  liquidationCount: number;
 }
 
 export interface CardInstance {
@@ -184,6 +197,11 @@ export interface RoadEffect {
   multiplier: number;
   remainingDays: number;
   sourcePlayerId: string;
+}
+
+export interface SpiritOnMap {
+  spiritId: string;
+  pathIndex: number;
 }
 
 export interface CardUseTarget {
@@ -212,9 +230,11 @@ export interface GameState {
   winnerId?: string;
   logs: GameLog[];
   roadEffects: RoadEffect[];
+  spirits: SpiritOnMap[];
   // 当前回合临时状态
   lastRoll?: number;
   pendingTileIndex?: number;
+  selectedDiceCount?: number;
 }
 
 export interface GameLog {
@@ -273,7 +293,7 @@ export interface ClientToServerEvents {
   'room:leave': (roomId: string) => void;
   'room:ready': (roomId: string, isReady: boolean) => void;
   'room:character': (roomId: string, characterId: string) => void;
-  'game:roll': (roomId: string) => void;
+  'game:roll': (roomId: string, diceCount?: number) => void;
   'game:buy': (roomId: string) => void;
   'game:upgrade': (roomId: string) => void;
   'game:rebuild': (roomId: string, tileIndex: number, buildingType: BuildingType) => void;
@@ -307,7 +327,7 @@ export const SIMPLE_MAP: GameMap = {
     { index: 11, name: '苹果园', type: 'property', size: 'small', group: 2, basePrice: 18000, baseRent: 900, level: 0 },
     { index: 12, name: '命运', type: 'fate', basePrice: 0, baseRent: 0, level: 0 },
     { index: 13, name: '橡树林', type: 'property', size: 'small', group: 3, basePrice: 20000, baseRent: 1000, level: 0 },
-    { index: 14, name: '机会', type: 'chance', basePrice: 0, baseRent: 0, level: 0 },
+    { index: 14, name: '得点券 10', type: 'coupon', couponValue: 10, basePrice: 0, baseRent: 0, level: 0 },
     { index: 15, name: '枫叶林', type: 'property', size: 'small', group: 3, basePrice: 22000, baseRent: 1100, level: 0 },
     // 医院
     { index: 16, name: '医院', type: 'hospital', basePrice: 0, baseRent: 0, level: 0 },
@@ -328,7 +348,7 @@ export const SIMPLE_MAP: GameMap = {
     { index: 27, name: '市政厅', type: 'property', size: 'large', group: 6, basePrice: 34000, baseRent: 1700, level: 0 },
     { index: 28, name: '卡片格', type: 'card', basePrice: 0, baseRent: 0, level: 0 },
     { index: 29, name: '剧院', type: 'property', size: 'large', group: 7, basePrice: 36000, baseRent: 1800, level: 0 },
-    { index: 30, name: '机会', type: 'chance', basePrice: 0, baseRent: 0, level: 0 },
+    { index: 30, name: '得点券 30', type: 'coupon', couponValue: 30, basePrice: 0, baseRent: 0, level: 0 },
     { index: 31, name: '歌剧院', type: 'property', size: 'large', group: 7, basePrice: 38000, baseRent: 1900, level: 0 },
     // 税务
     { index: 32, name: '税务', type: 'tax', basePrice: 0, baseRent: 0, level: 0 },
@@ -338,7 +358,7 @@ export const SIMPLE_MAP: GameMap = {
     { index: 35, name: '云顶宫', type: 'property', size: 'large', group: 8, basePrice: 45000, baseRent: 2250, level: 0 },
     { index: 36, name: '卡片格', type: 'card', basePrice: 0, baseRent: 0, level: 0 },
     { index: 37, name: '钻石大道', type: 'property', size: 'large', group: 9, basePrice: 50000, baseRent: 2500, level: 0 },
-    { index: 38, name: '机会', type: 'chance', basePrice: 0, baseRent: 0, level: 0 },
+    { index: 38, name: '得点券 50', type: 'coupon', couponValue: 50, basePrice: 0, baseRent: 0, level: 0 },
     { index: 39, name: '黄金广场', type: 'property', size: 'large', group: 9, basePrice: 60000, baseRent: 3000, level: 0 },
   ],
 };

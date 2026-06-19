@@ -14,8 +14,8 @@ import { authMiddleware, type AuthRequest } from '../auth.js';
 import { saveRoomToDb, loadRoomFromDb } from '../routes/rooms.js';
 import {
   createGame,
-  getDiceCount,
-  rollDice,
+  getMaxDiceCount,
+  roll,
   movePlayer,
   buyProperty,
   upgradeProperty,
@@ -141,15 +141,19 @@ export function setupSocketIO(httpServer: HttpServer): void {
       io.to(roomId).emit('game:state', state);
     });
 
-    socket.on('game:roll', (roomId) => {
+    socket.on('game:roll', (roomId, diceCount) => {
       const state = games.get(roomId);
       if (!state) return;
       if (!canRoll(state, user.id)) {
         socket.emit('error', '现在不能掷骰');
         return;
       }
-      const steps = rollDice(getDiceCount(state.config.moveMode));
-      movePlayer(state, steps);
+      const rollResult = roll(state, diceCount);
+      if (!rollResult.success) {
+        socket.emit('error', rollResult.message);
+        return;
+      }
+      movePlayer(state, rollResult.steps!);
       io.to(roomId).emit('game:state', state);
     });
 

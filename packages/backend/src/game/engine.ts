@@ -24,8 +24,11 @@ import {
   type RoadEffect,
   type CardUseTarget,
   type ItemUseTarget,
+  type VehicleType,
   SIMPLE_MAP,
   CHARACTERS,
+  CARD_IDS,
+  SPIRIT_IDS,
   getSpiritDefinition,
   getCardDefinition,
 } from '@monopoly4/shared';
@@ -47,6 +50,7 @@ export function createGame(roomId: string, config: GameConfig, roomPlayers: Room
       deposit: 0,
       loan: 0,
       coupons: 300,
+      vehicle: config.moveMode,
       position: 0,
       properties: [],
       cards: [],
@@ -54,6 +58,7 @@ export function createGame(roomId: string, config: GameConfig, roomPlayers: Room
       statusEffects: [],
       isBankrupt: false,
       isAI: false,
+      liquidationCount: 0,
     };
   });
 
@@ -68,6 +73,7 @@ export function createGame(roomId: string, config: GameConfig, roomPlayers: Room
     month: 1,
     priceIndex: 1,
     roadEffects: [],
+    spirits: spawnSpirits(),
     logs: [
       {
         timestamp: Date.now(),
@@ -78,7 +84,38 @@ export function createGame(roomId: string, config: GameConfig, roomPlayers: Room
   };
 }
 
-export function getDiceCount(moveMode: GameConfig['moveMode']): number {
+function spawnSpirits(): { spiritId: string; pathIndex: number }[] {
+  // 首期在地图上放置若干神明 NPC，供请神符寻找最近者
+  return [
+    { spiritId: 'smallWealthGod', pathIndex: 5 },
+    { spiritId: 'bigWealthGod', pathIndex: 15 },
+    { spiritId: 'smallPovertyGod', pathIndex: 25 },
+    { spiritId: 'bigPovertyGod', pathIndex: 35 },
+  ];
+}
+
+function pathDistance(pathLength: number, from: number, to: number): number {
+  const forward = (to - from + pathLength) % pathLength;
+  const backward = (from - to + pathLength) % pathLength;
+  return Math.min(forward, backward);
+}
+
+function findNearestSpirit(state: GameState, player: Player): { spiritId: string; pathIndex: number } | undefined {
+  if (state.spirits.length === 0) return undefined;
+  const pathLength = state.map.path.length;
+  let nearest = state.spirits[0];
+  let minDist = pathDistance(pathLength, player.position, nearest.pathIndex);
+  for (const spirit of state.spirits.slice(1)) {
+    const dist = pathDistance(pathLength, player.position, spirit.pathIndex);
+    if (dist < minDist) {
+      minDist = dist;
+      nearest = spirit;
+    }
+  }
+  return nearest;
+}
+
+export function getMaxDiceCount(moveMode: GameConfig['moveMode']): number {
   switch (moveMode) {
     case 'bike':
       return 2;
@@ -89,6 +126,12 @@ export function getDiceCount(moveMode: GameConfig['moveMode']): number {
   }
 }
 
+/** 根据当前载具获取可选骰子数范围 */
+export function getAllowedDiceCounts(moveMode: GameConfig['moveMode']): number[] {
+  const max = getMaxDiceCount(moveMode);
+  return Array.from({ length: max }, (_, i) => i + 1);
+}
+
 export function rollDice(count: number): number {
   let sum = 0;
   for (let i = 0; i < count; i++) {
@@ -97,8 +140,31 @@ export function rollDice(count: number): number {
   return sum;
 }
 
+export function roll(state: GameState, diceCount?: number): { success: boolean; message?: string; steps?: number } {
+  const player = getCurrentPlayer(state);
+  const max = getMaxDiceCount(player.vehicle);
+  const count = diceCount ?? max;
+  if (count < 1 || count > max) {
+    return { success: false, message: `当前载具最多可投 ${max} 颗骰子` };
+  }
+  state.selectedDiceCount = count;
+  const steps = rollDice(count);
+  return { success: true, steps };
+}
+
 export function spinWheel(sides: number): number {
   return Math.floor(Math.random() * sides) + 1;
+}
+
+function getVehicleLevel(vehicle: VehicleType): number {
+  switch (vehicle) {
+    case 'car':
+      return 3;
+    case 'bike':
+      return 2;
+    default:
+      return 1;
+  }
 }
 
 export function getCurrentPlayer(state: GameState): Player {
@@ -131,7 +197,8 @@ function addRoadEffect(state: GameState, effect: RoadEffect): void {
 
 /**
  * 判断访客是否无需支付当前地块的过路费。
- * 免租条件：大财神附身、同盟关系、路段被查封、持有免费卡。
+ * 免租条件：大财神附身、同盟关系、路段被查封。
+ * 免费卡仅在结算支付时按阈值自动抵扣，不直接改变租金计算。
  */
 export function isRentExempt(
   visitor: Player,
@@ -156,9 +223,6 @@ export function isRentExempt(
     );
     if (sealed) return true;
   }
-
-  // 免费卡：触发一次免租
-  if (hasStatusEffect(visitor, 'freePass')) return true;
 
   return false;
 }
@@ -225,7 +289,8 @@ export function calculateRent(
       break;
     }
     case 'mall':
-      base = tile.baseRent * tile.level * spinWheel(6);
+      // 商场转盘倍数为 1-8
+      base = tile.baseRent * tile.level * spinWheel(8);
       break;
     case 'hotel': {
       hotelDays = spinWheel(6);
@@ -233,9 +298,9 @@ export function calculateRent(
       break;
     }
     case 'gasStation': {
-      // 仅对乘坐交通工具的玩家生效；步行时只收象征性费用
+      // 按本回合步数及交通工具等级收费
       const steps = state.lastRoll ?? 1;
-      const rate = state.config.moveMode === 'walk' ? 50 : 200;
+      const rate = getVehicleLevel(visitor.vehicle) * 50;
       base = steps * rate;
       break;
     }
@@ -299,6 +364,24 @@ export function movePlayer(state: GameState, steps: number): GameState {
   return state;
 }
 
+function drawRandomCard(): string {
+  return CARD_IDS[Math.floor(Math.random() * CARD_IDS.length)];
+}
+
+function acquireCard(state: GameState, player: Player, cardId: string): void {
+  if (player.cards.length >= 15) {
+    // 已达上限，自动舍弃最早获得的一张
+    const discarded = player.cards.shift()!;
+    state.logs.push({
+      timestamp: Date.now(),
+      type: 'player:discardCard',
+      actorId: player.id,
+      message: `${player.username} 卡片已满，自动舍弃 ${getCardDefinition(discarded.cardId)?.name ?? discarded.cardId}`,
+    });
+  }
+  player.cards.push({ instanceId: cryptoRandomId(), cardId });
+}
+
 /**
  * 处理玩家到达当前地块后的效果。
  * - property：买地/升级/支付过路费
@@ -344,20 +427,24 @@ export function handleTileEffect(state: GameState): GameState {
     const tax = 5000;
     payMoney(state, player, tax, '税款');
   } else if (tile.type === 'card') {
-    player.coupons += 30;
+    // 经过卡片格免费获得一张随机卡片
+    const cardId = drawRandomCard();
+    acquireCard(state, player, cardId);
+    const def = getCardDefinition(cardId);
     state.logs.push({
       timestamp: Date.now(),
-      type: 'player:coupon',
+      type: 'player:drawCard',
       actorId: player.id,
-      message: `${player.username} 获得 30 点券`,
+      message: `${player.username} 经过卡片格，免费获得 ${def?.name ?? cardId}`,
     });
-  } else if (tile.type === 'coupon30') {
-    player.coupons += 30;
+  } else if (tile.type === 'coupon') {
+    const value = tile.couponValue ?? 30;
+    player.coupons += value;
     state.logs.push({
       timestamp: Date.now(),
       type: 'player:coupon',
       actorId: player.id,
-      message: `${player.username} 获得 30 点券`,
+      message: `${player.username} 获得 ${value} 点券`,
     });
   } else if (tile.type === 'fate' || tile.type === 'chance') {
     // MVP 简化为随机小额金钱事件
@@ -383,6 +470,13 @@ function consumeFreePass(player: Player): boolean {
   return false;
 }
 
+function shouldAutoUseFreePass(state: GameState, player: Player, amount: number): boolean {
+  // 金额超过 2000×物价指数，或剩余资金不足时方可自动使用免费卡
+  const threshold = 2000 * state.priceIndex;
+  const total = player.cash + player.deposit;
+  return amount > threshold || total < amount;
+}
+
 function applyRentPayment(
   state: GameState,
   player: Player,
@@ -391,8 +485,8 @@ function applyRentPayment(
 ): number {
   if (rent <= 0) return 0;
 
-  // 免费卡自动抵扣一次房租
-  if (consumeFreePass(player)) {
+  // 免费卡自动抵扣一次房租（满足阈值条件）
+  if (shouldAutoUseFreePass(state, player, rent) && consumeFreePass(player)) {
     state.logs.push({
       timestamp: Date.now(),
       type: 'player:freePass',
@@ -416,13 +510,10 @@ function applyRentPayment(
       player.cash = 0;
       player.deposit = 0;
       owner.cash += total;
-      player.isBankrupt = true;
-      state.logs.push({
-        timestamp: Date.now(),
-        type: 'player:bankrupt',
-        actorId: player.id,
-        message: `${player.username} 资金不足，破产了！`,
-      });
+      if (tryLiquidate(state, player)) {
+        // 法拍后复活，仍需支付剩余欠款
+        return applyRentPayment(state, player, owner, rent - total);
+      }
       return total;
     }
   }
@@ -445,8 +536,8 @@ function applyRentPayment(
 export function payMoney(state: GameState, player: Player, amount: number, reason: string): void {
   if (amount <= 0) return;
 
-  // 免费卡可免除罚金/税金
-  if (consumeFreePass(player)) {
+  // 免费卡可免除罚金/税金（满足阈值条件）
+  if (shouldAutoUseFreePass(state, player, amount) && consumeFreePass(player)) {
     state.logs.push({
       timestamp: Date.now(),
       type: 'player:freePass',
@@ -467,13 +558,11 @@ export function payMoney(state: GameState, player: Player, amount: number, reaso
     } else {
       player.cash = 0;
       player.deposit = 0;
-      player.isBankrupt = true;
-      state.logs.push({
-        timestamp: Date.now(),
-        type: 'player:bankrupt',
-        actorId: player.id,
-        message: `${player.username} 资金不足，破产了！`,
-      });
+      if (tryLiquidate(state, player)) {
+        // 法拍后复活，继续缴纳剩余款项
+        payMoney(state, player, amount - total, reason);
+        return;
+      }
       return;
     }
   }
@@ -512,13 +601,10 @@ export function transferMoney(
       from.cash = 0;
       from.deposit = 0;
       to.cash += total;
-      from.isBankrupt = true;
-      state.logs.push({
-        timestamp: Date.now(),
-        type: 'player:bankrupt',
-        actorId: from.id,
-        message: `${from.username} 资金不足，破产了！`,
-      });
+      if (tryLiquidate(state, from)) {
+        transferMoney(state, from, to, amount - total, reason);
+        return;
+      }
       return;
     }
   }
@@ -528,6 +614,82 @@ export function transferMoney(
     actorId: from.id,
     targetId: to.id,
     message: `${from.username} 向 ${to.username} 支付 ${reason} $${amount}`,
+  });
+}
+
+/**
+ * 破产法拍：强制变卖土地以抵债，限 3 次。
+ * 若法拍后资金回正，则继续游戏并返回 true；否则标记破产并返回 false。
+ */
+function tryLiquidate(state: GameState, player: Player): boolean {
+  if (player.liquidationCount >= 3) {
+    markBankrupt(state, player);
+    return false;
+  }
+
+  player.liquidationCount += 1;
+
+  // 按评估价 80% 强制变卖土地，优先变卖等级低的土地
+  const sortedProperties = [...player.properties].sort((a, b) => {
+    const ta = state.map.tiles[a];
+    const tb = state.map.tiles[b];
+    return (ta.level + (ta.buildingType === 'chainStore' ? 1 : 0)) - (tb.level + (tb.buildingType === 'chainStore' ? 1 : 0));
+  });
+
+  let soldValue = 0;
+  for (const tileIndex of sortedProperties) {
+    const tile = state.map.tiles[tileIndex];
+    const value = Math.floor(tile.basePrice * (1 + tile.level * 0.5) * state.priceIndex * 0.8);
+    tile.ownerId = undefined;
+    tile.buildingType = undefined;
+    tile.level = 0;
+    player.cash += value;
+    soldValue += value;
+    state.logs.push({
+      timestamp: Date.now(),
+      type: 'player:liquidate',
+      actorId: player.id,
+      message: `${player.username} 法拍 ${tile.name}，获得 $${value}`,
+    });
+    if (player.cash + player.deposit >= 0) break;
+  }
+
+  player.properties = player.properties.filter((idx) => state.map.tiles[idx].ownerId === player.id);
+
+  if (player.cash + player.deposit >= 0) {
+    state.logs.push({
+      timestamp: Date.now(),
+      type: 'player:revive',
+      actorId: player.id,
+      message: `${player.username} 通过法拍复活（第 ${player.liquidationCount} 次）`,
+    });
+    return true;
+  }
+
+  if (player.liquidationCount >= 3) {
+    markBankrupt(state, player);
+    return false;
+  }
+
+  // 仍可继续法拍（理论上应在同一支付流程中继续）
+  return tryLiquidate(state, player);
+}
+
+function markBankrupt(state: GameState, player: Player): void {
+  player.isBankrupt = true;
+  // 破产者所有土地回归银行
+  for (const tileIndex of player.properties) {
+    const tile = state.map.tiles[tileIndex];
+    tile.ownerId = undefined;
+    tile.buildingType = undefined;
+    tile.level = 0;
+  }
+  player.properties = [];
+  state.logs.push({
+    timestamp: Date.now(),
+    type: 'player:bankrupt',
+    actorId: player.id,
+    message: `${player.username} 资金不足，破产了！`,
   });
 }
 
@@ -777,16 +939,16 @@ export function useCard(
       break;
     }
     case 'summonSpirit': {
-      const spiritId = target?.targetPlayerId;
-      if (!spiritId) return { success: false, message: '请选择要召唤的神明' };
-      const spiritDef = getSpiritDefinition(spiritId);
+      const nearest = findNearestSpirit(state, player);
+      if (!nearest) return { success: false, message: '附近没有可召唤的神明' };
+      const spiritDef = getSpiritDefinition(nearest.spiritId);
       if (!spiritDef) return { success: false, message: '未知神明' };
-      player.spirit = { spiritId, remainingDays: spiritDef.duration };
+      player.spirit = { spiritId: nearest.spiritId, remainingDays: spiritDef.duration };
       state.logs.push({
         timestamp: Date.now(),
         type: 'card:summonSpirit',
         actorId: player.id,
-        message: `${player.username} 使用请神符召唤 ${spiritDef.name}`,
+        message: `${player.username} 使用请神符召唤附近的神明 ${spiritDef.name}`,
       });
       break;
     }
@@ -909,16 +1071,76 @@ export function endTurn(state: GameState): GameState {
     if (state.day > 30) {
       state.month += 1;
       state.day = 1;
-      state.priceIndex = Math.min(6, calculatePriceIndex(state));
+      monthlySettlement(state);
     }
+  }
+
+  // 检查胜利条件
+  const winResult = checkWinCondition(state);
+  if (winResult.ended) {
+    state.status = 'ended';
+    state.winnerId = winResult.winnerId;
+    state.logs.push({
+      timestamp: Date.now(),
+      type: 'game:end',
+      message: winResult.winnerId
+        ? `游戏结束，${state.players.find((p) => p.id === winResult.winnerId)?.username} 获胜！`
+        : '游戏结束',
+    });
+    return state;
   }
 
   state.currentPlayerIndex = nextIndex;
   state.status = 'rolling';
   state.lastRoll = undefined;
   state.pendingTileIndex = undefined;
+  state.selectedDiceCount = undefined;
 
   return state;
+}
+
+export function calculateNetAssets(state: GameState, player: Player): number {
+  const propertyValue = player.properties.reduce((v, idx) => {
+    const tile = state.map.tiles[idx];
+    return v + tile.basePrice * (1 + tile.level * 0.5);
+  }, 0);
+  return player.cash + player.deposit - player.loan + propertyValue;
+}
+
+function checkWinCondition(state: GameState): { ended: boolean; winnerId?: string } {
+  // 资金目标胜利
+  const winCondition = state.config.winCondition;
+  if (typeof winCondition === 'number') {
+    const target = state.config.totalFunds * winCondition;
+    for (const player of state.players) {
+      if (player.isBankrupt) continue;
+      if (player.cash + player.deposit >= target) {
+        return { ended: true, winnerId: player.id };
+      }
+    }
+  }
+
+  // 游戏时间限制
+  const gameTime = state.config.gameTime;
+  if (gameTime !== 'perpetual') {
+    const limitMonths =
+      gameTime === '1m' ? 1 : gameTime === '3m' ? 3 : gameTime === '6m' ? 6 : gameTime === '1y' ? 12 : 24;
+    if (state.month > limitMonths) {
+      let winnerId: string | undefined;
+      let maxAssets = -Infinity;
+      for (const player of state.players) {
+        if (player.isBankrupt) continue;
+        const assets = calculateNetAssets(state, player);
+        if (assets > maxAssets) {
+          maxAssets = assets;
+          winnerId = player.id;
+        }
+      }
+      return { ended: true, winnerId };
+    }
+  }
+
+  return { ended: false };
 }
 
 function decrementEffects(state: GameState): void {
@@ -954,6 +1176,33 @@ export function calculatePriceIndex(state: GameState): number {
     return sum + p.cash + p.deposit + propertyValue;
   }, 0);
   return Math.max(1, totalAssets / totalFunds);
+}
+
+function monthlySettlement(state: GameState): void {
+  // 调整物价指数
+  state.priceIndex = Math.min(6, calculatePriceIndex(state));
+
+  // 发放无贷款者 10% 存款利息
+  for (const player of state.players) {
+    if (player.isBankrupt) continue;
+    if (player.loan === 0 && player.deposit > 0) {
+      const interest = Math.floor(player.deposit * 0.1);
+      player.deposit += interest;
+      state.logs.push({
+        timestamp: Date.now(),
+        type: 'player:interest',
+        actorId: player.id,
+        message: `${player.username} 获得银行存款利息 $${interest}`,
+      });
+    }
+  }
+
+  // TODO: 贷款利息、股东分红、乐透开奖、土地到期、例假日判定等后续扩展
+  state.logs.push({
+    timestamp: Date.now(),
+    type: 'game:monthly',
+    message: `第 ${state.month} 个月度结算完成`,
+  });
 }
 
 export function canRoll(state: GameState, playerId: string): boolean {

@@ -65,8 +65,8 @@ export function startGame(roomId: string): void {
   getSocket().emit('game:start', roomId);
 }
 
-export function rollDice(roomId: string): void {
-  getSocket().emit('game:roll', roomId);
+export function rollDice(roomId: string, diceCount?: number): void {
+  getSocket().emit('game:roll', roomId, diceCount);
 }
 
 export function buyProperty(roomId: string): void {

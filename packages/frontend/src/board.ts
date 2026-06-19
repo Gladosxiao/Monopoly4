@@ -9,7 +9,7 @@ const TILE_COLORS: Record<Tile['type'], string> = {
   hospital: '#e67e22',
   shop: '#1abc9c',
   card: '#34495e',
-  coupon30: '#16a085',
+  coupon: '#16a085',
   tax: '#c0392b',
 };
 
