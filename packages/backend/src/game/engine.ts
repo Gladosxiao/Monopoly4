@@ -2013,7 +2013,9 @@ function decrementEffects(state: GameState): void {
     state.marketStatus.loanFrozenDays -= 1;
   }
   // 股价每日波动
-  updateStockPrices(state);
+  if (state.config.enableStock !== false) {
+    updateStockPrices(state);
+  }
 }
 
 export function calculatePriceIndex(state: GameState): number {
@@ -2098,8 +2100,10 @@ function settleMonth(state: GameState): void {
       });
     }
   }
-  dividendPayout(state);
-  updateChairmen(state);
+  if (state.config.enableStock !== false) {
+    dividendPayout(state);
+    updateChairmen(state);
+  }
   state.logs.push({
     timestamp: Date.now(),
     type: 'game:month',
