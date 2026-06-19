@@ -7,6 +7,7 @@ export const FATE_EVENTS: FateEvent[] = [
     name: '乱丢垃圾罚款',
     description: '罚款 600 元。',
     weight: 8,
+    isNegative: true,
     apply: () => ({
       result: { success: true, message: '乱丢垃圾罚款 600 元' },
       effects: [{ type: 'cash', amount: -600, reason: '乱丢垃圾罚款' }],
@@ -17,6 +18,7 @@ export const FATE_EVENTS: FateEvent[] = [
     name: '遗失钱包',
     description: '损失 1000 元。',
     weight: 6,
+    isNegative: true,
     apply: () => ({
       result: { success: true, message: '遗失钱包，损失 1000 元' },
       effects: [{ type: 'cash', amount: -1000, reason: '遗失钱包' }],
@@ -27,6 +29,7 @@ export const FATE_EVENTS: FateEvent[] = [
     name: '行人闯越马路',
     description: '罚款 3000 元。',
     weight: 5,
+    isNegative: true,
     apply: () => ({
       result: { success: true, message: '行人闯越马路罚款 3000 元' },
       effects: [{ type: 'cash', amount: -3000, reason: '行人闯越马路罚款' }],
@@ -37,6 +40,7 @@ export const FATE_EVENTS: FateEvent[] = [
     name: '骑机车未戴安全帽',
     description: '罚款 3000 元（需骑机车）。',
     weight: 3,
+    isNegative: true,
     condition: (ctx) => hasVehicle(ctx, 'bike'),
     apply: () => ({
       result: { success: true, message: '骑机车未戴安全帽罚款 3000 元' },
@@ -48,6 +52,7 @@ export const FATE_EVENTS: FateEvent[] = [
     name: '汽车超速',
     description: '罚款 3000 元（需开车）。',
     weight: 3,
+    isNegative: true,
     condition: (ctx) => hasVehicle(ctx, 'car'),
     apply: () => ({
       result: { success: true, message: '汽车超速罚款 3000 元' },
@@ -59,6 +64,7 @@ export const FATE_EVENTS: FateEvent[] = [
     name: '付保险费',
     description: '支付 5000 元保险费。',
     weight: 4,
+    isNegative: true,
     apply: () => ({
       result: { success: true, message: '支付保险费 5000 元' },
       effects: [{ type: 'cash', amount: -5000, reason: '保险费' }],
@@ -69,6 +75,7 @@ export const FATE_EVENTS: FateEvent[] = [
     name: '人头被盗用冒贷',
     description: '被冒名贷款 10000 元，计入贷款。',
     weight: 3,
+    isNegative: true,
     apply: () => ({
       result: { success: true, message: '人头被盗用冒贷，贷款增加 10000 元' },
       effects: [{ type: 'loan', amount: 10000, reason: '人头被盗用冒贷' }],
@@ -79,6 +86,7 @@ export const FATE_EVENTS: FateEvent[] = [
     name: '股票违约交割',
     description: '损失持有股票的 10%。',
     weight: 3,
+    isNegative: true,
     apply: () => ({
       result: { success: true, message: '股票违约交割，损失持股市值 10%' },
       effects: [{ type: 'sellAllStocks', reason: '股票违约交割' }],
@@ -129,6 +137,7 @@ export const FATE_EVENTS: FateEvent[] = [
     name: '被外星人绑架',
     description: '住院/失踪 3 天，无法行动。',
     weight: 2,
+    isNegative: true,
     condition: (ctx) => canApplyStatus(ctx, 'hospital'),
     apply: () => ({
       result: { success: true, message: '被外星人绑架，住院 3 天' },
@@ -140,6 +149,7 @@ export const FATE_EVENTS: FateEvent[] = [
     name: '强迫出国观光',
     description: '出国 3 天，无法行动与收租。',
     weight: 2,
+    isNegative: true,
     condition: (ctx) => canApplyStatus(ctx, 'abroad'),
     apply: () => ({
       result: { success: true, message: '强迫出国观光 3 天' },
@@ -151,6 +161,7 @@ export const FATE_EVENTS: FateEvent[] = [
     name: '掉进水沟',
     description: '就医 3 天。',
     weight: 3,
+    isNegative: true,
     condition: (ctx) => canApplyStatus(ctx, 'hospital'),
     apply: () => ({
       result: { success: true, message: '掉进水沟，就医 3 天' },
@@ -162,6 +173,7 @@ export const FATE_EVENTS: FateEvent[] = [
     name: '酒醉大闹警局',
     description: '坐牢 3 天。',
     weight: 3,
+    isNegative: true,
     condition: (ctx) => canApplyStatus(ctx, 'jail'),
     apply: () => ({
       result: { success: true, message: '酒醉大闹警局，坐牢 3 天' },
@@ -173,6 +185,7 @@ export const FATE_EVENTS: FateEvent[] = [
     name: '殴打警员',
     description: '坐牢 5 天。',
     weight: 2,
+    isNegative: true,
     condition: (ctx) => canApplyStatus(ctx, 'jail'),
     apply: () => ({
       result: { success: true, message: '殴打警员，坐牢 5 天' },
@@ -184,6 +197,7 @@ export const FATE_EVENTS: FateEvent[] = [
     name: '走私毒品',
     description: '坐牢 7 天。',
     weight: 1,
+    isNegative: true,
     condition: (ctx) => canApplyStatus(ctx, 'jail'),
     apply: () => ({
       result: { success: true, message: '走私毒品，坐牢 7 天' },
@@ -195,6 +209,7 @@ export const FATE_EVENTS: FateEvent[] = [
     name: '变卖所有股票求现',
     description: '强制卖出玩家持有的全部股票，获得现金。',
     weight: 2,
+    isNegative: true,
     apply: () => ({
       result: { success: true, message: '变卖所有股票求现' },
       effects: [{ type: 'sellAllStocks', reason: '变卖所有股票求现' }],
@@ -205,6 +220,7 @@ export const FATE_EVENTS: FateEvent[] = [
     name: '机车被偷遗失',
     description: '失去机车，恢复步行。',
     weight: 2,
+    isNegative: true,
     condition: (ctx) => hasVehicle(ctx, 'bike'),
     apply: () => ({
       result: { success: true, message: '机车被偷遗失，恢复步行' },
@@ -216,6 +232,7 @@ export const FATE_EVENTS: FateEvent[] = [
     name: '汽车撞电线杆全毁',
     description: '失去汽车，恢复步行。',
     weight: 2,
+    isNegative: true,
     condition: (ctx) => hasVehicle(ctx, 'car'),
     apply: () => ({
       result: { success: true, message: '汽车撞电线杆全毁，恢复步行' },

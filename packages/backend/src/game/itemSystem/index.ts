@@ -7,6 +7,7 @@ import type {
 import { ITEM_DEFINITIONS, ITEM_IDS } from '@monopoly4/shared';
 import { getCurrentPlayer } from '../engine.js';
 import { getItemEffect, type ItemContext, type ItemEffectResult } from './effects.js';
+import { tryBlockShopByMisfortune } from '../spiritEffects.js';
 
 export interface BuyItemResult {
   success: boolean;
@@ -59,6 +60,10 @@ export function buyItem(
   const totalCost = def.cost * quantity;
   if (player.coupons < totalCost) {
     return { success: false, message: '点券不足' };
+  }
+  if (tryBlockShopByMisfortune(state, player, totalCost)) {
+    player.coupons -= totalCost;
+    return { success: false, message: '衰神作祟，商店购买失败' };
   }
 
   player.coupons -= totalCost;

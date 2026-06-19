@@ -1,6 +1,7 @@
 import type { GameState, Player, Tile } from '@monopoly4/shared';
 import { randomFateEvent, randomNewsEvent } from './registry.js';
 import type { EventContext, EventEffect, EventResult, EventTrigger, NewsCategory } from './types.js';
+import { hasAnyOfSpirits } from './conditions.js';
 
 export * from './types.js';
 export * from './registry.js';
@@ -25,6 +26,26 @@ function makeContext(
   return { state, player, tile, triggeredBy };
 }
 
+function blockNegativeEvent(
+  state: GameState,
+  player: Player,
+  eventName: string
+): EventOutcome {
+  state.logs.push({
+    timestamp: Date.now(),
+    type: 'spirit:block',
+    actorId: player.id,
+    message: `${player.username} 的${player.spirit?.spiritId === 'landGod' ? '土地公' : '天使'}挡下了负面事件「${eventName}」`,
+  });
+  return {
+    eventId: 'blocked',
+    eventName,
+    description: '被神明挡下',
+    effects: [],
+    result: { success: false, message: '被神明挡下' },
+  };
+}
+
 export function triggerFateEvent(
   state: GameState,
   player: Player,
@@ -33,6 +54,9 @@ export function triggerFateEvent(
 ): EventOutcome {
   const ctx = makeContext(state, player, tile, triggeredBy);
   const event = randomFateEvent(ctx);
+  if (event.isNegative && hasAnyOfSpirits(ctx, ['landGod', 'angel'])) {
+    return blockNegativeEvent(state, player, event.name);
+  }
   const { result, effects } = event.apply(ctx);
   return {
     eventId: event.id,
@@ -51,6 +75,9 @@ export function triggerNewsEvent(
 ): EventOutcome {
   const ctx = makeContext(state, player, tile, 'news');
   const event = randomNewsEvent(ctx, category);
+  if (event.isNegative && hasAnyOfSpirits(ctx, ['landGod', 'angel'])) {
+    return blockNegativeEvent(state, player, event.name);
+  }
   const { result, effects } = event.apply(ctx);
   return {
     eventId: event.id,

@@ -63,6 +63,8 @@ export interface FateEvent {
   name: string;
   description: string;
   weight: number;
+  /** 是否为负面事件，拥有土地公/天使的玩家可 100% 挡下 */
+  isNegative?: boolean;
   condition?: (ctx: EventContext) => boolean;
   apply: (ctx: EventContext) => { result: EventResult; effects: EventEffect[] };
 }
@@ -104,6 +106,8 @@ export interface NewsEvent {
   description: string;
   category: NewsCategory;
   weight: number;
+  /** 是否为负面事件，拥有土地公/天使的玩家可 100% 挡下 */
+  isNegative?: boolean;
   condition?: (ctx: EventContext) => boolean;
   apply: (ctx: EventContext) => { result: EventResult; effects: EventEffect[] };
 }

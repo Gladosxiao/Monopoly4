@@ -4,6 +4,7 @@
 import type { GameState, Player, Tile, Trap } from '@monopoly4/shared';
 import { ITEM_DEFINITIONS } from '@monopoly4/shared';
 import { claimInsurance } from '../financialSystem/index.js';
+import { tryBlockBuildingDestruction } from '../spiritEffects.js';
 
 function log(state: GameState, type: string, actorId: string, message: string, targetId?: string): void {
   state.logs.push({
@@ -119,7 +120,12 @@ export function tickBomb(state: GameState, player: Player): void {
     player.statusEffects = player.statusEffects.filter((e) => e.type !== 'bomb');
     const centerTile = state.map.tiles[player.position];
     if (centerTile.type === 'property' && centerTile.level > 0) {
-      centerTile.level -= 1;
+      const owner = centerTile.ownerId ? state.players.find((p) => p.id === centerTile.ownerId) : undefined;
+      if (owner && tryBlockBuildingDestruction(state, owner, '定时炸弹')) {
+        // 土地公守护，建筑不受损
+      } else {
+        centerTile.level -= 1;
+      }
     }
     // 中心格上的其他玩家也住院
     for (const p of state.players) {

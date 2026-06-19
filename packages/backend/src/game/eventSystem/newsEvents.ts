@@ -18,6 +18,7 @@ export const NEWS_EVENTS: NewsEvent[] = [
     description: '所有在狱玩家刑期 +3 天。',
     category: 'irresponsible',
     weight: 3,
+    isNegative: true,
     apply: () => ({
       result: { success: true, message: '狱中囚犯延长刑期 3 天' },
       effects: [{ type: 'extendAll', status: 'jail', days: 3, reason: '狱中囚犯延长刑期' }],
@@ -40,6 +41,7 @@ export const NEWS_EVENTS: NewsEvent[] = [
     description: '所有住院玩家住院天数 +3 天。',
     category: 'irresponsible',
     weight: 3,
+    isNegative: true,
     apply: () => ({
       result: { success: true, message: '住院病患延长住院 3 天' },
       effects: [{ type: 'extendAll', status: 'hospital', days: 3, reason: '住院病患延长住院' }],
@@ -63,6 +65,7 @@ export const NEWS_EVENTS: NewsEvent[] = [
     description: '行人（步行）休息一回合。',
     category: 'traffic',
     weight: 3,
+    isNegative: true,
     apply: () => ({
       result: { success: true, message: '豪雨特报，步行玩家休息一回合' },
       effects: [{ type: 'freezeVehicle', vehicle: 'walk', days: 1, reason: '豪雨特报' }],
@@ -74,6 +77,7 @@ export const NEWS_EVENTS: NewsEvent[] = [
     description: '汽车玩家停止一回合。',
     category: 'traffic',
     weight: 3,
+    isNegative: true,
     apply: () => ({
       result: { success: true, message: '交通阻塞，汽车玩家停止一回合' },
       effects: [{ type: 'freezeVehicle', vehicle: 'car', days: 1, reason: '交通阻塞' }],
@@ -97,6 +101,7 @@ export const NEWS_EVENTS: NewsEvent[] = [
     description: '所有股票价格下跌 10%。',
     category: 'finance',
     weight: 3,
+    isNegative: true,
     apply: () => ({
       result: { success: true, message: '股市重挫崩盘，下跌 10%' },
       effects: [{ type: 'stockMarketMove', direction: 'down', percent: 10, reason: '股市重挫崩盘' }],
@@ -108,6 +113,7 @@ export const NEWS_EVENTS: NewsEvent[] = [
     description: '15 天内无法贷款。',
     category: 'finance',
     weight: 2,
+    isNegative: true,
     apply: () => ({
       result: { success: true, message: '银行挤兑停止放款 15 天' },
       effects: [{ type: 'bankRun', days: 15, reason: '银行挤兑停止放款' }],
@@ -130,6 +136,7 @@ export const NEWS_EVENTS: NewsEvent[] = [
     description: '指定公司被罚款 5000 元。',
     category: 'finance',
     weight: 3,
+    isNegative: true,
     apply: (ctx) => {
       const companyId = randomCompanyId(ctx);
       if (!companyId) return { result: { success: false, message: '没有可处罚的公司' }, effects: [] };
@@ -145,6 +152,7 @@ export const NEWS_EVENTS: NewsEvent[] = [
     description: '指定公司被罚款 10000 元。',
     category: 'finance',
     weight: 3,
+    isNegative: true,
     apply: (ctx) => {
       const companyId = randomCompanyId(ctx);
       if (!companyId) return { result: { success: false, message: '没有可处罚的公司' }, effects: [] };
@@ -209,6 +217,7 @@ export const NEWS_EVENTS: NewsEvent[] = [
     description: '所有玩家按现金 5% 缴税。',
     category: 'government',
     weight: 2,
+    isNegative: true,
     apply: () => ({
       result: { success: true, message: '所有人缴交所得税 5%' },
       effects: [{ type: 'taxAll', taxType: 'income', rate: 0.05, reason: '所得税' }],
@@ -220,6 +229,7 @@ export const NEWS_EVENTS: NewsEvent[] = [
     description: '所有玩家按土地价值 5% 缴税。',
     category: 'government',
     weight: 2,
+    isNegative: true,
     apply: () => ({
       result: { success: true, message: '所有人缴交地价税 5%' },
       effects: [{ type: 'taxAll', taxType: 'land', rate: 0.05, reason: '地价税' }],
@@ -231,6 +241,7 @@ export const NEWS_EVENTS: NewsEvent[] = [
     description: '所有持股玩家按股票价值 5% 缴税。',
     category: 'government',
     weight: 2,
+    isNegative: true,
     apply: () => ({
       result: { success: true, message: '所有人缴交证交税 5%' },
       effects: [{ type: 'taxAll', taxType: 'stock', rate: 0.05, reason: '证交税' }],
@@ -243,6 +254,7 @@ export const NEWS_EVENTS: NewsEvent[] = [
     description: '大范围随机摧毁一处建筑。',
     category: 'weather',
     weight: 1,
+    isNegative: true,
     apply: () => ({
       result: { success: true, message: '外星人攻打地球，随机摧毁一处建筑' },
       effects: [{ type: 'destroyRandomBuilding', reason: '外星人攻打地球' }],
@@ -254,6 +266,7 @@ export const NEWS_EVENTS: NewsEvent[] = [
     description: '指定股票停牌 3 天。',
     category: 'finance',
     weight: 2,
+    isNegative: true,
     apply: (ctx) => {
       const stockId = randomStockId(ctx);
       if (!stockId) return { result: { success: false, message: '没有可停牌的股票' }, effects: [] };

@@ -7,6 +7,7 @@ import type {
 import { CARD_DEFINITIONS, CARD_IDS } from '@monopoly4/shared';
 import { getCurrentPlayer } from '../engine.js';
 import { getCardEffect, type CardContext, type CardEffectResult } from './effects.js';
+import { tryBlockShopByMisfortune } from '../spiritEffects.js';
 
 export interface BuyCardResult {
   success: boolean;
@@ -55,6 +56,10 @@ export function buyCard(
   }
   if (player.cards.length >= 15) {
     return { success: false, message: '卡片已满，需要先丢弃一张' };
+  }
+  if (tryBlockShopByMisfortune(state, player, def.cost)) {
+    player.coupons -= def.cost;
+    return { success: false, message: '衰神作祟，商店购买失败' };
   }
   player.coupons -= def.cost;
   player.cards.push({ instanceId: generateId(), cardId });

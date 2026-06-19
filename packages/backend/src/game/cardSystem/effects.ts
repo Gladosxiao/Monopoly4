@@ -13,6 +13,7 @@ import type {
 } from '@monopoly4/shared';
 import { CARD_DEFINITIONS, CARD_IDS, ITEM_DEFINITIONS, getSpiritDefinition } from '@monopoly4/shared';
 import { getCurrentPlayer, payMoney, transferMoney, rebuildTile } from '../engine.js';
+import { tryBlockBuildingDestruction, adjustStatusDaysBySpirit } from '../spiritEffects.js';
 
 export interface CardContext {
   targetPlayerId?: string;
@@ -77,9 +78,13 @@ function addStatusEffect(
 ): void {
   // 同类型效果刷新天数
   player.statusEffects = player.statusEffects.filter((e) => e.type !== type);
+  const adjustedDays =
+    type === 'hospital' || type === 'jail'
+      ? adjustStatusDaysBySpirit(player, type as 'hospital' | 'jail', days)
+      : days;
   player.statusEffects.push({
     type: type as any,
-    remainingDays: days,
+    remainingDays: adjustedDays,
     sourcePlayerId,
     data,
   });
@@ -212,6 +217,10 @@ const devil: CardEffect = (state, caster, ctx) => {
   let count = 0;
   state.map.tiles.forEach((tile) => {
     if (tile.group === group && tile.type === 'property' && tile.ownerId && tile.level > 0) {
+      const owner = state.players.find((p) => p.id === tile.ownerId);
+      if (owner && tryBlockBuildingDestruction(state, owner, '恶魔卡')) {
+        return;
+      }
       tile.level -= 1;
       count += 1;
     }
@@ -224,6 +233,10 @@ const monster: CardEffect = (state, caster, ctx) => {
   const tile = findTile(state, ctx.targetTileIndex);
   if (!tile || tile.type !== 'property' || !tile.ownerId || tile.level <= 0) {
     return { success: false, message: '需要选择有建筑的土地' };
+  }
+  const owner = state.players.find((p) => p.id === tile.ownerId);
+  if (owner && tryBlockBuildingDestruction(state, owner, '怪兽卡')) {
+    return { success: true };
   }
   tile.level = 0;
   tile.buildingType = 'house';
@@ -257,6 +270,10 @@ const demolish: CardEffect = (state, caster, ctx) => {
   }
   // 降级建筑
   if (tile.level > 0) {
+    const owner = tile.ownerId ? state.players.find((p) => p.id === tile.ownerId) : undefined;
+    if (owner && tryBlockBuildingDestruction(state, owner, '拆除卡')) {
+      return { success: true };
+    }
     tile.level -= 1;
     log(state, 'card:demolish', caster.id, `${caster.username} 使用拆除卡拆除了 ${tile.name} 一级`);
     return { success: true };

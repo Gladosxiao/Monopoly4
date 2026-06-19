@@ -4,6 +4,7 @@
 import type { GameState, Player, NpcInstance, NpcType, Tile } from '@monopoly4/shared';
 import { NPC_DEFINITIONS, NPC_TYPES, getNpcDefinition } from '@monopoly4/shared';
 import { claimInsurance } from '../financialSystem/index.js';
+import { tryBlockBuildingDestruction } from '../spiritEffects.js';
 
 function generateId(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
@@ -153,13 +154,18 @@ export function triggerNpcEffect(state: GameState, npc: NpcInstance, player: Pla
     case 'hoodlum': {
       const tile = randomOwnedTile(state, player);
       if (tile && tile.level > 0) {
-        tile.level -= 1;
-        log(
-          state,
-          'npc:hoodlum',
-          player.id,
-          `${player.username} 遇到 ${def.name}，${tile.name} 的建筑被降 1 级`
-        );
+        const owner = tile.ownerId ? state.players.find((p) => p.id === tile.ownerId) : undefined;
+        if (owner && tryBlockBuildingDestruction(state, owner, '流氓 NPC')) {
+          // 土地公守护，跳过破坏
+        } else {
+          tile.level -= 1;
+          log(
+            state,
+            'npc:hoodlum',
+            player.id,
+            `${player.username} 遇到 ${def.name}，${tile.name} 的建筑被降 1 级`
+          );
+        }
       } else {
         log(state, 'npc:hoodlum', player.id, `${player.username} 遇到 ${def.name}，但没有建筑可破坏`);
       }

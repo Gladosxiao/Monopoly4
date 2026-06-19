@@ -5,6 +5,7 @@
 import type { GameState, Player, Tile, Trap, ItemDefinition, TurnSnapshot } from '@monopoly4/shared';
 import { ITEM_DEFINITIONS } from '@monopoly4/shared';
 import { getCurrentPlayer, payMoney } from '../engine.js';
+import { tryBlockBuildingDestruction, adjustStatusDaysBySpirit } from '../spiritEffects.js';
 
 export interface ItemContext {
   targetTileIndex?: number;
@@ -67,9 +68,13 @@ function addStatusEffect(
   data?: Record<string, unknown>
 ): void {
   player.statusEffects = player.statusEffects.filter((e) => e.type !== type);
+  const adjustedDays =
+    type === 'hospital' || type === 'jail'
+      ? adjustStatusDaysBySpirit(player, type as 'hospital' | 'jail', days)
+      : days;
   player.statusEffects.push({
     type: type as any,
-    remainingDays: days,
+    remainingDays: adjustedDays,
     sourcePlayerId,
     data,
   });
@@ -185,8 +190,13 @@ const missile: ItemEffect = (state, user, ctx) => {
   // 简化为只影响目标地块；完整 3×3 需要地图坐标支持
   let hit = false;
   if (centerTile.type === 'property' && centerTile.level > 0) {
-    centerTile.level -= 1;
-    hit = true;
+    const owner = centerTile.ownerId ? state.players.find((p) => p.id === centerTile.ownerId) : undefined;
+    if (owner && tryBlockBuildingDestruction(state, owner, '飞弹')) {
+      // 土地公守护，建筑不受损
+    } else {
+      centerTile.level -= 1;
+      hit = true;
+    }
   }
 
   // 对站在目标地块的玩家造成住院效果，并摧毁其载具
@@ -253,6 +263,7 @@ const timeMachine: ItemEffect = (state, user) => {
     p.items = sp.items.map((i) => ({ ...i }));
     p.statusEffects = sp.statusEffects.map((e) => ({ ...e }));
     p.stockHoldings = { ...sp.stockHoldings };
+    p.stockCostBasis = { ...sp.stockCostBasis };
     p.insuranceDays = sp.insuranceDays;
     p.isBankrupt = sp.isBankrupt;
     p.liquidationCount = sp.liquidationCount;
@@ -308,7 +319,12 @@ const nuke: ItemEffect = (state, user, ctx) => {
   for (const tileIndex of affected) {
     const tile = state.map.tiles[tileIndex];
     if (tile.type === 'property' && tile.level > 0) {
-      tile.level -= 1;
+      const owner = tile.ownerId ? state.players.find((p) => p.id === tile.ownerId) : undefined;
+      if (owner && tryBlockBuildingDestruction(state, owner, '核子飞弹')) {
+        // 土地公守护，建筑不受损
+      } else {
+        tile.level -= 1;
+      }
     }
     for (const p of state.players) {
       if (p.position === tileIndex && !p.isBankrupt) {
