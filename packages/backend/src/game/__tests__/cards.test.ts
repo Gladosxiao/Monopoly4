@@ -142,14 +142,15 @@ describe('攻击/土地类卡片', () => {
     expect(state.map.tiles[3].level).toBe(2);
   });
 
-  it('怪兽卡摧毁一栋建筑降低一级', () => {
+  it('怪兽卡摧毁一栋建筑彻底归零', () => {
     const state = makeTestState();
     setOwner(state, 21, 'p2', 'mall', 3);
     prepareActingState(state);
     const id = giveCard(state.players[0], 'monster');
     const result = useCard(state, 'p1', id, { targetTileIndex: 21 });
     expect(result.success).toBe(true);
-    expect(state.map.tiles[21].level).toBe(2);
+    expect(state.map.tiles[21].level).toBe(0);
+    expect(state.map.tiles[21].buildingType).toBe('house');
   });
 
   it('拆除卡降低目标建筑一级', () => {

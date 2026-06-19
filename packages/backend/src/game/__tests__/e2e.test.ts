@@ -309,16 +309,23 @@ describe('createGame', () => {
 });
 
 describe('rollDice', () => {
-  it('返回结果在 1 到骰子数 * 6 之间', () => {
+  it('返回每颗骰子的点数数组', () => {
     for (let i = 0; i < 20; i++) {
       const result = rollDice(1);
-      expect(result).toBeGreaterThanOrEqual(1);
-      expect(result).toBeLessThanOrEqual(6);
+      expect(result).toHaveLength(1);
+      expect(result[0]).toBeGreaterThanOrEqual(1);
+      expect(result[0]).toBeLessThanOrEqual(6);
     }
     for (let i = 0; i < 20; i++) {
       const result = rollDice(3);
-      expect(result).toBeGreaterThanOrEqual(3);
-      expect(result).toBeLessThanOrEqual(18);
+      expect(result).toHaveLength(3);
+      const total = result.reduce((a, b) => a + b, 0);
+      expect(total).toBeGreaterThanOrEqual(3);
+      expect(total).toBeLessThanOrEqual(18);
+      result.forEach((die) => {
+        expect(die).toBeGreaterThanOrEqual(1);
+        expect(die).toBeLessThanOrEqual(6);
+      });
     }
   });
 });

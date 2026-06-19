@@ -96,9 +96,11 @@ describe('rollDice & roll', () => {
     vi.restoreAllMocks();
   });
 
-  it('rollDice 返回值在合理范围内', () => {
+  it('rollDice 返回每颗骰子的点数数组', () => {
     for (let i = 1; i <= 6; i++) {
-      expect(rollDice(i)).toBe(i);
+      const result = rollDice(i);
+      expect(result).toHaveLength(i);
+      expect(result).toEqual(Array(i).fill(1));
     }
   });
 
