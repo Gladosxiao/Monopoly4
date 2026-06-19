@@ -262,3 +262,5 @@ export const SIMPLE_MAP: GameMap = {
     { index: 39, name: '黄金广场', type: 'property', group: 9, basePrice: 60000, baseRent: 3000, level: 0 },
   ],
 };
+
+export * from './data/minigames.js';
