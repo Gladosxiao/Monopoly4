@@ -53,6 +53,7 @@ import {
   disconnectSocket,
 } from './socket.js';
 import { createBoardCanvas, renderBoard } from './board.js';
+import { createTestPanel, destroyTestPanel, isTestMode, enableTestMode } from './testMode/index.js';
 
 const app = document.getElementById('app')!;
 
@@ -64,6 +65,7 @@ let cleanupFns: Array<() => void> = [];
 function clean() {
   cleanupFns.forEach((fn) => fn());
   cleanupFns = [];
+  destroyTestPanel();
   app.innerHTML = '';
 }
 
@@ -396,6 +398,12 @@ async function navigateToGame(roomId: string): Promise<void> {
       alert(msg);
     })
   );
+
+  // 测试模式：在游戏界面添加测试面板
+  if (isTestMode()) {
+    const testPanel = createTestPanel(() => currentGame);
+    document.body.appendChild(testPanel);
+  }
 }
 
 function renderPlayersInfo(container: HTMLElement, state: GameState): void {
@@ -729,6 +737,11 @@ function promptItemTarget(state: GameState, itemId: string): ItemUseTarget {
     target.targetTileIndex = parseInt(window.prompt('输入目标地块索引：') || '', 10);
   }
   return target;
+}
+
+// 检测 URL 参数 ?test=1 启用测试模式
+if (new URLSearchParams(window.location.search).get('test') === '1') {
+  enableTestMode();
 }
 
 // 启动

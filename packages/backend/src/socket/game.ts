@@ -46,6 +46,8 @@ import {
 } from '../game/engine.js';
 import { getShopCards, canBuyCard } from '../game/cardSystem/index.js';
 import { getShopItems, canBuyItem } from '../game/itemSystem/index.js';
+import * as testMode from '../game/testMode/index.js';
+import { runAITurn, startAIAuto } from '../game/testMode/aiPlayer.js';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'monopoly4-dev-secret';
 
@@ -409,6 +411,186 @@ export function setupSocketIO(httpServer: HttpServer): void {
         return;
       }
       endTurn(state);
+      io.to(roomId).emit('game:state', state);
+    });
+
+    // ===== 测试模式事件 =====
+    // 仅在测试模式启用时生效
+
+    socket.on('test:getSnapshot', (roomId: string) => {
+      const state = games.get(roomId);
+      if (!state) return;
+      socket.emit('test:update', testMode.getTestSnapshot(state));
+    });
+
+    socket.on('test:setCash', (roomId: string, playerId: string, cash: number) => {
+      const state = games.get(roomId);
+      if (!state) return;
+      testMode.setPlayerCash(state, playerId, cash);
+      io.to(roomId).emit('game:state', state);
+    });
+
+    socket.on('test:setDeposit', (roomId: string, playerId: string, deposit: number) => {
+      const state = games.get(roomId);
+      if (!state) return;
+      testMode.setPlayerDeposit(state, playerId, deposit);
+      io.to(roomId).emit('game:state', state);
+    });
+
+    socket.on('test:setCoupons', (roomId: string, playerId: string, coupons: number) => {
+      const state = games.get(roomId);
+      if (!state) return;
+      testMode.setPlayerCoupons(state, playerId, coupons);
+      io.to(roomId).emit('game:state', state);
+    });
+
+    socket.on('test:setLoan', (roomId: string, playerId: string, loan: number) => {
+      const state = games.get(roomId);
+      if (!state) return;
+      testMode.setPlayerLoan(state, playerId, loan);
+      io.to(roomId).emit('game:state', state);
+    });
+
+    socket.on('test:setPosition', (roomId: string, playerId: string, position: number) => {
+      const state = games.get(roomId);
+      if (!state) return;
+      testMode.setPlayerPosition(state, playerId, position);
+      io.to(roomId).emit('game:state', state);
+    });
+
+    socket.on('test:setPriceIndex', (roomId: string, priceIndex: number) => {
+      const state = games.get(roomId);
+      if (!state) return;
+      testMode.setPriceIndex(state, priceIndex);
+      io.to(roomId).emit('game:state', state);
+    });
+
+    socket.on('test:setVehicle', (roomId: string, playerId: string, vehicle: string) => {
+      const state = games.get(roomId);
+      if (!state) return;
+      testMode.setPlayerVehicle(state, playerId, vehicle as 'walk' | 'bike' | 'car');
+      io.to(roomId).emit('game:state', state);
+    });
+
+    socket.on('test:setSpirit', (roomId: string, playerId: string, spiritId: string) => {
+      const state = games.get(roomId);
+      if (!state) return;
+      testMode.setPlayerSpirit(state, playerId, spiritId);
+      io.to(roomId).emit('game:state', state);
+    });
+
+    socket.on('test:giveCard', (roomId: string, playerId: string, cardId: string) => {
+      const state = games.get(roomId);
+      if (!state) return;
+      testMode.giveCard(state, playerId, cardId);
+      io.to(roomId).emit('game:state', state);
+    });
+
+    socket.on('test:giveItem', (roomId: string, playerId: string, itemId: string, quantity?: number) => {
+      const state = games.get(roomId);
+      if (!state) return;
+      testMode.giveItem(state, playerId, itemId, quantity);
+      io.to(roomId).emit('game:state', state);
+    });
+
+    socket.on('test:setTileLevel', (roomId: string, tileIndex: number, level: number) => {
+      const state = games.get(roomId);
+      if (!state) return;
+      testMode.setTileLevel(state, tileIndex, level);
+      io.to(roomId).emit('game:state', state);
+    });
+
+    socket.on('test:setTileOwner', (roomId: string, tileIndex: number, playerId: string) => {
+      const state = games.get(roomId);
+      if (!state) return;
+      testMode.setTileOwner(state, tileIndex, playerId);
+      io.to(roomId).emit('game:state', state);
+    });
+
+    socket.on('test:clearEffects', (roomId: string, playerId: string) => {
+      const state = games.get(roomId);
+      if (!state) return;
+      testMode.clearStatusEffects(state, playerId);
+      io.to(roomId).emit('game:state', state);
+    });
+
+    socket.on('test:freeShop', (roomId: string) => {
+      const state = games.get(roomId);
+      if (!state) return;
+      const player = state.players[state.currentPlayerIndex];
+      const shop = testMode.openFreeShop(state, player.id);
+      socket.emit('test:freeShopResult', shop);
+    });
+
+    socket.on('test:freeBuyCard', (roomId: string, cardId: string) => {
+      const state = games.get(roomId);
+      if (!state) return;
+      const player = state.players[state.currentPlayerIndex];
+      testMode.freeBuyCard(state, player.id, cardId);
+      io.to(roomId).emit('game:state', state);
+    });
+
+    socket.on('test:freeBuyItem', (roomId: string, itemId: string, quantity?: number) => {
+      const state = games.get(roomId);
+      if (!state) return;
+      const player = state.players[state.currentPlayerIndex];
+      testMode.freeBuyItem(state, player.id, itemId, quantity);
+      io.to(roomId).emit('game:state', state);
+    });
+
+    socket.on('test:forceEndTurn', (roomId: string) => {
+      const state = games.get(roomId);
+      if (!state) return;
+      testMode.forceEndTurn(state);
+      io.to(roomId).emit('game:state', state);
+    });
+
+    // AI 玩家控制
+    let aiStopFn: (() => void) | null = null;
+    let aiBroadcastTimer: ReturnType<typeof setInterval> | null = null;
+
+    socket.on('test:aiStart', (roomId: string, intervalMs?: number) => {
+      const state = games.get(roomId);
+      if (!state) return;
+      if (aiStopFn) aiStopFn();
+      if (aiBroadcastTimer) clearInterval(aiBroadcastTimer);
+      const ms = intervalMs ?? 2000;
+      // 使用 startAIAuto 驱动 AI 行动
+      const stopAI = startAIAuto(state, ms);
+      // 额外设置广播定时器，确保状态同步到客户端
+      aiBroadcastTimer = setInterval(() => {
+        io.to(roomId).emit('game:state', state);
+        if (state.status === 'ended') {
+          if (aiBroadcastTimer) clearInterval(aiBroadcastTimer);
+          aiBroadcastTimer = null;
+        }
+      }, ms + 50);
+      aiStopFn = () => {
+        stopAI();
+        if (aiBroadcastTimer) { clearInterval(aiBroadcastTimer); aiBroadcastTimer = null; }
+      };
+    });
+
+    socket.on('test:aiStop', () => {
+      if (aiStopFn) {
+        aiStopFn();
+        aiStopFn = null;
+      }
+    });
+
+    socket.on('test:aiStep', (roomId: string) => {
+      const state = games.get(roomId);
+      if (!state) return;
+      const player = state.players[state.currentPlayerIndex];
+      if (!player.isAI) {
+        // 找第一个 AI 玩家
+        const aiPlayer = state.players.find(p => p.isAI && !p.isBankrupt);
+        if (aiPlayer) {
+          runAITurn(state, aiPlayer.id);
+        }
+      } else {
+        runAITurn(state, player.id);
+      }
       io.to(roomId).emit('game:state', state);
     });
 

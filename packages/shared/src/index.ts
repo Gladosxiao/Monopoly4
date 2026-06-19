@@ -428,6 +428,9 @@ export interface ServerToClientEvents {
   'game:state': (state: GameState) => void;
   'game:log': (log: GameLog) => void;
   'error': (message: string) => void;
+  // 测试模式事件
+  'test:update': (snapshot: unknown) => void;
+  'test:freeShopResult': (shop: unknown) => void;
 }
 
 export interface ClientToServerEvents {
@@ -457,6 +460,28 @@ export interface ClientToServerEvents {
   // 乐透与魔法屋
   'game:lotteryBet': (roomId: string, number: number) => void;
   'game:magicSpell': (roomId: string, targetPlayerId: string, spell: 'swapCash' | 'dismissSpirit' | 'stealCard' | 'jail') => void;
+  // 测试模式事件
+  'test:getSnapshot': (roomId: string) => void;
+  'test:setCash': (roomId: string, playerId: string, cash: number) => void;
+  'test:setDeposit': (roomId: string, playerId: string, deposit: number) => void;
+  'test:setCoupons': (roomId: string, playerId: string, coupons: number) => void;
+  'test:setLoan': (roomId: string, playerId: string, loan: number) => void;
+  'test:setPosition': (roomId: string, playerId: string, position: number) => void;
+  'test:setPriceIndex': (roomId: string, priceIndex: number) => void;
+  'test:setVehicle': (roomId: string, playerId: string, vehicle: string) => void;
+  'test:setSpirit': (roomId: string, playerId: string, spiritId: string) => void;
+  'test:giveCard': (roomId: string, playerId: string, cardId: string) => void;
+  'test:giveItem': (roomId: string, playerId: string, itemId: string, quantity?: number) => void;
+  'test:setTileLevel': (roomId: string, tileIndex: number, level: number) => void;
+  'test:setTileOwner': (roomId: string, tileIndex: number, playerId: string) => void;
+  'test:clearEffects': (roomId: string, playerId: string) => void;
+  'test:freeShop': (roomId: string) => void;
+  'test:freeBuyCard': (roomId: string, cardId: string) => void;
+  'test:freeBuyItem': (roomId: string, itemId: string, quantity?: number) => void;
+  'test:forceEndTurn': (roomId: string) => void;
+  'test:aiStart': (roomId: string, intervalMs?: number) => void;
+  'test:aiStop': () => void;
+  'test:aiStep': (roomId: string) => void;
 }
 
 // ==================== 简化地图 ====================
