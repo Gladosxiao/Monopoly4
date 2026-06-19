@@ -115,16 +115,20 @@ describe('Socket 房间与游戏流程', () => {
       createdAt: Date.now(),
     });
 
+    const hostUpdated1 = waitForEvent(host, 'room:updated');
+    const guestUpdated1 = waitForEvent(guest, 'room:updated');
     host.emit('room:join', roomId);
     guest.emit('room:join', roomId);
-    await waitForEvent(host, 'room:updated');
-    await waitForEvent(guest, 'room:updated');
+    await hostUpdated1;
+    await guestUpdated1;
 
+    const hostReady = waitForEvent(host, 'room:updated');
     guest.emit('room:ready', roomId, true);
-    await waitForEvent(host, 'room:updated');
+    await hostReady;
 
+    const statePromise = waitForEvent<import('@monopoly4/shared').GameState>(host, 'game:state');
     host.emit('game:start', roomId);
-    const state = await waitForEvent<import('@monopoly4/shared').GameState>(host, 'game:state');
+    const state = await statePromise;
     expect(state.status).not.toBe('waiting');
     expect(state.players).toHaveLength(2);
 
@@ -183,13 +187,16 @@ describe('Socket 房间与游戏流程', () => {
       createdAt: Date.now(),
     });
 
+    const hostUpdated = waitForEvent(host, 'room:updated');
+    const guestUpdated = waitForEvent(guest, 'room:updated');
     host.emit('room:join', roomId);
     guest.emit('room:join', roomId);
-    await waitForEvent(host, 'room:updated');
-    await waitForEvent(guest, 'room:updated');
+    await hostUpdated;
+    await guestUpdated;
 
+    const errorPromise = waitForEvent<string>(guest, 'error');
     guest.emit('game:start', roomId);
-    const error = await waitForEvent<string>(guest, 'error');
+    const error = await errorPromise;
     expect(error).toContain('房主');
 
     host.close();

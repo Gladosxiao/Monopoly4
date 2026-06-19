@@ -31,16 +31,25 @@ describe('股票系统', () => {
     expect(getStockMarketValue(state, player.id)).toBe(stock.price * 10);
   });
 
-  it('updateChairmen 将持股最多者设为董事长', () => {
+  it('updateChairmen 将持股超过10%最多者设为董事长', () => {
     const state = makeThreePlayerState();
     const stock = state.stocks[0];
     state.players[0].stockHoldings[stock.id] = 5;
-    state.players[1].stockHoldings[stock.id] = 10;
+    state.players[1].stockHoldings[stock.id] = 1001;
     updateChairmen(state);
     expect(state.companies.find((c) => c.id === stock.companyId)?.chairmanPlayerId).toBe('p2');
   });
 
-  it('买入股票减少资金并增加持股', () => {
+  it('持股未超过10%时不设董事长', () => {
+    const state = makeThreePlayerState();
+    const stock = state.stocks[0];
+    state.players[0].stockHoldings[stock.id] = 500;
+    state.players[1].stockHoldings[stock.id] = 999;
+    updateChairmen(state);
+    expect(state.companies.find((c) => c.id === stock.companyId)?.chairmanPlayerId).toBeUndefined();
+  });
+
+  it('买入股票减少资金并增加持股，并记录加权成本', () => {
     const state = makeTestState();
     const player = state.players[0];
     const stock = state.stocks[0];
@@ -49,6 +58,7 @@ describe('股票系统', () => {
     const result = tradeStock(state, player.id, stock.id, 5);
     expect(result.success).toBe(true);
     expect(player.stockHoldings[stock.id]).toBe(5);
+    expect(player.stockCostBasis[stock.id]).toBe(price);
     expect(player.cash).toBe(initialCash - price * 5);
     expect(stock.availableShares).toBe(stock.totalShares - 5);
   });
@@ -63,6 +73,7 @@ describe('股票系统', () => {
     expect(result.success).toBe(true);
     expect(player.cash).toBe(0);
     expect(player.deposit).toBe(100000 - (stock.price * 10 - 100));
+    expect(player.stockCostBasis[stock.id]).toBe(stock.price);
   });
 
   it('资金不足时买入失败', () => {
@@ -83,14 +94,15 @@ describe('股票系统', () => {
     expect(result.success).toBe(false);
   });
 
-  it('卖出股票增加现金并减少持股', () => {
+  it('卖出股票增加现金并减少持股，成本价保留', () => {
     const state = makeTestState();
     const player = state.players[0];
     const stock = state.stocks[0];
-    giveStock(state, player, stock.id, 5);
+    giveStock(state, player, stock.id, 5, stock.price);
     const result = tradeStock(state, player.id, stock.id, -3);
     expect(result.success).toBe(true);
     expect(player.stockHoldings[stock.id]).toBe(2);
+    expect(player.stockCostBasis[stock.id]).toBe(stock.price);
     expect(stock.availableShares).toBe(stock.totalShares - 2);
   });
 
@@ -99,8 +111,19 @@ describe('股票系统', () => {
     const player = state.players[0];
     const stock = state.stocks[0];
     player.stockHoldings[stock.id] = 1;
+    player.stockCostBasis[stock.id] = stock.price;
     const result = tradeStock(state, player.id, stock.id, -5);
     expect(result.success).toBe(false);
+  });
+
+  it('清仓后删除成本记录', () => {
+    const state = makeTestState();
+    const player = state.players[0];
+    const stock = state.stocks[0];
+    giveStock(state, player, stock.id, 3, stock.price);
+    const result = tradeStock(state, player.id, stock.id, -3);
+    expect(result.success).toBe(true);
+    expect(player.stockCostBasis[stock.id]).toBeUndefined();
   });
 
   it('sellAllStocks 清空持股并返还现金', () => {
@@ -113,6 +136,19 @@ describe('股票系统', () => {
     expect(total).toBe(stock.price * 10);
     expect(player.cash).toBe(beforeCash + total);
     expect(Object.keys(player.stockHoldings)).toHaveLength(0);
+    expect(Object.keys(player.stockCostBasis)).toHaveLength(0);
+  });
+
+  it('多次买入按加权平均更新成本价', () => {
+    const state = makeTestState();
+    const player = state.players[0];
+    const stock = state.stocks[0];
+    stock.price = 100;
+    tradeStock(state, player.id, stock.id, 2);
+    stock.price = 200;
+    tradeStock(state, player.id, stock.id, 2);
+    expect(player.stockHoldings[stock.id]).toBe(4);
+    expect(player.stockCostBasis[stock.id]).toBe(Math.floor((100 * 2 + 200 * 2) / 4));
   });
 
   it('updateStockPrices 在 ±10% 范围内波动股价', () => {

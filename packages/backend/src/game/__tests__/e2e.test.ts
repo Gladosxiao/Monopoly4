@@ -580,10 +580,9 @@ describe('破产结算', () => {
     vi.restoreAllMocks();
   });
 
-  it('支付过路费导致破产并将地产转移给债主', () => {
+  it('支付过路费导致破产，无产可破时直接结算', () => {
     const state = makeTestState();
     setOwner(state, 1, 'p1', 'house', 5);
-    setOwner(state, 5, 'p2', 'house', 0);
     const p1 = state.players[0];
     const p2 = state.players[1];
     p2.cash = 0;
@@ -594,9 +593,34 @@ describe('破产结算', () => {
     handleTileEffect(state);
 
     expect(p2.isBankrupt).toBe(true);
-    expect(state.map.tiles[5].ownerId).toBe('p1');
-    expect(p1.properties).toContain(5);
+    expect(p2.cash).toBe(0);
+    expect(p2.deposit).toBe(0);
+    expect(state.logs.some((l) => l.type === 'player:bankrupt')).toBe(true);
+  });
+
+  it('法拍后仍不足以支付过路费，剩余地产转移给债主', () => {
+    const state = makeTestState();
+    setOwner(state, 1, 'p1', 'house', 5);
+    state.map.tiles[1].baseRent = 50000;
+    // p2 拥有 4 处低价地产，前 3 次法拍无法覆盖高租金，第 4 处转移给债主
+    for (const idx of [5, 7, 9, 11]) {
+      setOwner(state, idx, 'p2', 'house', 0);
+      state.map.tiles[idx].basePrice = 1000;
+    }
+    const p1 = state.players[0];
+    const p2 = state.players[1];
+    p2.cash = 0;
+    p2.deposit = 0;
+    state.currentPlayerIndex = 1;
+    state.pendingTileIndex = 1;
+
+    handleTileEffect(state);
+
+    expect(p2.isBankrupt).toBe(true);
     expect(p2.properties).toEqual([]);
+    expect(state.map.tiles[11].ownerId).toBe('p1');
+    expect(p1.properties).toContain(11);
+    expect(state.logs.filter((l) => l.type === 'liquidation:property').length).toBe(3);
     expect(state.logs.some((l) => l.type === 'player:bankrupt')).toBe(true);
   });
 

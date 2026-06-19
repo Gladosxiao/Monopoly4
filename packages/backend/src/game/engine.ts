@@ -24,6 +24,7 @@ import {
   type RoadEffect,
   type CardUseTarget,
   type ItemUseTarget,
+  type MiniGameType,
   CHARACTERS,
   DEFAULT_COMPANIES,
   DEFAULT_STOCKS,
@@ -33,6 +34,12 @@ import {
   getSpiritDefinition,
 } from '@monopoly4/shared';
 import { loadGameMap } from './mapLoader.js';
+import {
+  tryBlockBuildingDestruction,
+  applyFortuneCost,
+  tryFortuneGodCardOnPass,
+  adjustStatusDaysBySpirit,
+} from './spiritEffects.js';
 import { useCard as useCardSystem, type CardContext } from './cardSystem/index.js';
 import { buyCard as buyCardFromSystem, sellCard as sellCardFromSystem } from './cardSystem/index.js';
 import { useItem as useItemSystem, type ItemContext } from './itemSystem/index.js';
@@ -100,6 +107,7 @@ export function createGame(roomId: string, config: GameConfig, roomPlayers: Room
       items: [],
       statusEffects: [],
       stockHoldings: {},
+      stockCostBasis: {},
       insuranceDays: 0,
       isBankrupt: false,
       isAI: rp.isAI ?? false,
@@ -355,6 +363,7 @@ function saveTurnSnapshot(state: GameState): void {
       items: p.items.map((i) => ({ ...i })),
       statusEffects: p.statusEffects.map((e) => ({ ...e })),
       stockHoldings: { ...p.stockHoldings },
+      stockCostBasis: { ...p.stockCostBasis },
       insuranceDays: p.insuranceDays,
       isBankrupt: p.isBankrupt,
       liquidationCount: p.liquidationCount,
@@ -662,13 +671,18 @@ function onPassTile(state: GameState, tileIndex: number, player: Player): boolea
     tile.ownerId !== player.id &&
     tile.level > 0
   ) {
-    tile.level -= 1;
-    state.logs.push({
-      timestamp: Date.now(),
-      type: 'item:engineerTruckDestroy',
-      actorId: player.id,
-      message: `${player.username} 的工程车经过 ${tile.name}，建筑被拆除 1 级`,
-    });
+    const owner = state.players.find((p) => p.id === tile.ownerId);
+    if (owner && tryBlockBuildingDestruction(state, owner, '工程车拆除')) {
+      // 土地公守护成功，跳过拆除
+    } else {
+      tile.level -= 1;
+      state.logs.push({
+        timestamp: Date.now(),
+        type: 'item:engineerTruckDestroy',
+        actorId: player.id,
+        message: `${player.username} 的工程车经过 ${tile.name}，建筑被拆除 1 级`,
+      });
+    }
   }
 
   return false;
@@ -696,6 +710,8 @@ export function handleTileEffect(state: GameState): GameState {
       // 自己的地，可升级
       return state;
     } else {
+      // 福神经过对手土地可能随机获得卡片
+      tryFortuneGodCardOnPass(state, player, tile.name);
       // 付过路费
       const owner = state.players.find((p) => p.id === tile.ownerId);
       if (owner && !owner.isBankrupt) {
@@ -788,6 +804,17 @@ export function handleTileEffect(state: GameState): GameState {
         message: `${player.username} 抵达医院，提前出院`,
       });
     }
+  } else if (tile.type === 'miniGame') {
+    const miniGameType = tile.miniGameType ?? 'balloon';
+    state.pendingMiniGame = miniGameType;
+    state.status = 'minigame';
+    state.logs.push({
+      timestamp: Date.now(),
+      type: 'game:miniGame',
+      actorId: player.id,
+      message: `${player.username} 进入小游戏：${MINI_GAME_NAMES[miniGameType]}`,
+    });
+    return state;
   }
 
   return state;
@@ -950,13 +977,14 @@ export function castMagicSpell(
       break;
     }
     case 'jail': {
-      target.statusEffects.push({ type: 'jail', remainingDays: 3, sourcePlayerId: player.id });
+      const jailDays = adjustStatusDaysBySpirit(target, 'jail', 3);
+      target.statusEffects.push({ type: 'jail', remainingDays: jailDays, sourcePlayerId: player.id });
       state.logs.push({
         timestamp: Date.now(),
         type: 'player:magic',
         actorId: player.id,
         targetId: target.id,
-        message: `${player.username} 在魔法屋将 ${target.username} 关进监狱 3 天`,
+        message: `${player.username} 在魔法屋将 ${target.username} 关进监狱 ${jailDays} 天`,
       });
       break;
     }
@@ -981,6 +1009,106 @@ function consumeFreePass(player: Player): boolean {
   return false;
 }
 
+function getAvailableFunds(player: Player): number {
+  return player.cash + player.deposit;
+}
+
+function deductFunds(player: Player, amount: number): void {
+  if (player.cash >= amount) {
+    player.cash -= amount;
+  } else {
+    const fromDeposit = amount - player.cash;
+    player.cash = 0;
+    player.deposit -= fromDeposit;
+  }
+}
+
+/**
+ * 破产前强制清算：股票 → 地产（最多 3 次法拍）。
+ * 若清算后资金足够返回 covered=true；否则返回 false。
+ */
+function tryLiquidate(
+  state: GameState,
+  player: Player,
+  amountNeeded: number
+): { covered: boolean; liquidated: boolean } {
+  if (amountNeeded <= 0 || getAvailableFunds(player) >= amountNeeded) {
+    return { covered: true, liquidated: false };
+  }
+
+  let liquidated = false;
+
+  // 1. 强制卖出全部股票
+  const stockCash = sellAllStocks(state, player.id);
+  if (stockCash > 0) {
+    liquidated = true;
+    state.logs.push({
+      timestamp: Date.now(),
+      type: 'liquidation:stocks',
+      actorId: player.id,
+      message: `${player.username} 被强制卖出全部股票，获得 $${stockCash}`,
+    });
+  }
+  if (getAvailableFunds(player) >= amountNeeded) {
+    return { covered: true, liquidated };
+  }
+
+  // 2. 法拍地产，最多 3 块
+  while (
+    player.liquidationCount < 3 &&
+    player.properties.length > 0 &&
+    getAvailableFunds(player) < amountNeeded
+  ) {
+    const idx = [...player.properties].sort((a, b) => {
+      const ta = state.map.tiles[a];
+      const tb = state.map.tiles[b];
+      return tb.basePrice * (1 + tb.level * 0.5) - ta.basePrice * (1 + ta.level * 0.5);
+    })[0];
+    const tile = state.map.tiles[idx];
+    const auctionValue = Math.max(0, Math.floor(tile.basePrice * (1 + tile.level * 0.5) * state.priceIndex * 0.7));
+
+    tile.ownerId = undefined;
+    tile.level = 0;
+    tile.buildingType = 'house';
+    player.properties = player.properties.filter((i) => i !== idx);
+    player.cash += auctionValue;
+    player.liquidationCount += 1;
+    liquidated = true;
+
+    state.logs.push({
+      timestamp: Date.now(),
+      type: 'liquidation:property',
+      actorId: player.id,
+      message: `${player.username} 法拍 ${tile.name}，获得 $${auctionValue}`,
+    });
+  }
+
+  return { covered: getAvailableFunds(player) >= amountNeeded, liquidated };
+}
+
+function transferPropertiesTo(state: GameState, from: Player, to: Player): void {
+  for (const tile of state.map.tiles) {
+    if (tile.ownerId === from.id) {
+      tile.ownerId = to.id;
+      if (!to.properties.includes(tile.index)) {
+        to.properties.push(tile.index);
+      }
+    }
+  }
+  from.properties = [];
+}
+
+function clearPlayerProperties(state: GameState, player: Player): void {
+  for (const tile of state.map.tiles) {
+    if (tile.ownerId === player.id) {
+      tile.ownerId = undefined;
+      tile.level = 0;
+      tile.buildingType = 'house';
+    }
+  }
+  player.properties = [];
+}
+
 function applyRentPayment(
   state: GameState,
   player: Player,
@@ -1000,29 +1128,21 @@ function applyRentPayment(
     return 0;
   }
 
-  if (player.cash >= rent) {
-    player.cash -= rent;
+  if (getAvailableFunds(player) >= rent) {
+    deductFunds(player, rent);
     owner.cash += rent;
   } else {
-    const total = player.cash + player.deposit;
-    if (total >= rent) {
-      const fromDeposit = rent - player.cash;
-      player.cash = 0;
-      player.deposit -= fromDeposit;
+    const { covered } = tryLiquidate(state, player, rent);
+    if (covered) {
+      deductFunds(player, rent);
       owner.cash += rent;
     } else {
+      const total = getAvailableFunds(player);
       player.cash = 0;
       player.deposit = 0;
       owner.cash += total;
       player.isBankrupt = true;
-      // 破产玩家财产转移给债主
-      for (const tile of state.map.tiles) {
-        if (tile.ownerId === player.id) {
-          tile.ownerId = owner.id;
-          owner.properties.push(tile.index);
-        }
-      }
-      player.properties = [];
+      transferPropertiesTo(state, player, owner);
       state.logs.push({
         timestamp: Date.now(),
         type: 'player:bankrupt',
@@ -1046,7 +1166,8 @@ function applyRentPayment(
 
 /**
  * 让玩家支付一笔费用（现金优先，不足扣存款）。
- * 若资金不足则破产。持有免费卡时可自动免除一次。
+ * 若资金不足则先强制清算；清算后仍不足则破产。
+ * 持有免费卡时可自动免除一次。
  */
 export function payMoney(state: GameState, player: Player, amount: number, reason: string): void {
   if (amount <= 0) return;
@@ -1065,18 +1186,17 @@ export function payMoney(state: GameState, player: Player, amount: number, reaso
     return;
   }
 
-  if (player.cash >= amount) {
-    player.cash -= amount;
+  if (getAvailableFunds(player) >= amount) {
+    deductFunds(player, amount);
   } else {
-    const total = player.cash + player.deposit;
-    if (total >= amount) {
-      const fromDeposit = amount - player.cash;
-      player.cash = 0;
-      player.deposit -= fromDeposit;
+    const { covered } = tryLiquidate(state, player, amount);
+    if (covered) {
+      deductFunds(player, amount);
     } else {
       player.cash = 0;
       player.deposit = 0;
       player.isBankrupt = true;
+      clearPlayerProperties(state, player);
       state.logs.push({
         timestamp: Date.now(),
         type: 'player:bankrupt',
@@ -1097,7 +1217,7 @@ export function payMoney(state: GameState, player: Player, amount: number, reaso
 
 /**
  * 将资金从一名玩家转移给另一名玩家。
- * 付款方现金不足时自动使用存款；仍不足则破产。
+ * 付款方现金不足时自动使用存款；仍不足则强制清算；清算后仍不足则破产。
  */
 export function transferMoney(
   state: GameState,
@@ -1108,21 +1228,21 @@ export function transferMoney(
 ): void {
   if (amount <= 0) return;
   from = resolveBlamePayer(state, from);
-  if (from.cash >= amount) {
-    from.cash -= amount;
+  if (getAvailableFunds(from) >= amount) {
+    deductFunds(from, amount);
     to.cash += amount;
   } else {
-    const total = from.cash + from.deposit;
-    if (total >= amount) {
-      const fromDeposit = amount - from.cash;
-      from.cash = 0;
-      from.deposit -= fromDeposit;
+    const { covered } = tryLiquidate(state, from, amount);
+    if (covered) {
+      deductFunds(from, amount);
       to.cash += amount;
     } else {
+      const total = getAvailableFunds(from);
       from.cash = 0;
       from.deposit = 0;
       to.cash += total;
       from.isBankrupt = true;
+      transferPropertiesTo(state, from, to);
       state.logs.push({
         timestamp: Date.now(),
         type: 'player:bankrupt',
@@ -1184,16 +1304,20 @@ function applyEventEffects(state: GameState, player: Player, effects: EventEffec
         break;
       }
       case 'status': {
+        const days =
+          effect.status === 'hospital' || effect.status === 'jail'
+            ? adjustStatusDaysBySpirit(player, effect.status, effect.days)
+            : effect.days;
         player.statusEffects.push({
           type: effect.status,
-          remainingDays: effect.days,
+          remainingDays: days,
           data: { reason: effect.reason },
         });
         state.logs.push({
           timestamp: Date.now(),
           type: 'status:added',
           actorId: player.id,
-          message: `${player.username} 获得状态: ${effect.status}，持续 ${effect.days} 天`,
+          message: `${player.username} 获得状态: ${effect.status}，持续 ${days} 天`,
         });
         state.logs.push({
           timestamp: Date.now(),
@@ -1398,14 +1522,19 @@ function applyEventEffects(state: GameState, player: Player, effects: EventEffec
         const owned = state.map.tiles.filter((t) => t.type === 'property' && t.ownerId && (t.level > 0 || t.buildingType));
         if (owned.length > 0) {
           const target = owned[Math.floor(Math.random() * owned.length)];
-          target.level = Math.max(0, target.level - 1);
-          if (target.level === 0) target.buildingType = 'house';
-          state.logs.push({
-            timestamp: Date.now(),
-            type: 'event:destroyBuilding',
-            targetId: String(target.index),
-            message: `${target.name} 受损，等级下降 1 级`,
-          });
+          const owner = state.players.find((p) => p.id === target.ownerId);
+          if (owner && tryBlockBuildingDestruction(state, owner, '随机建筑受损')) {
+            // 土地公守护成功，跳过破坏
+          } else {
+            target.level = Math.max(0, target.level - 1);
+            if (target.level === 0) target.buildingType = 'house';
+            state.logs.push({
+              timestamp: Date.now(),
+              type: 'event:destroyBuilding',
+              targetId: String(target.index),
+              message: `${target.name} 受损，等级下降 1 级`,
+            });
+          }
         }
         break;
       }
@@ -1441,7 +1570,11 @@ export function buyProperty(state: GameState): { success: boolean; message?: str
     return { success: false, message: '该地块已有主人' };
   }
   const price = Math.floor(tile.basePrice * state.priceIndex);
-  if (player.cash < price) {
+  const fortune = applyFortuneCost(state, player, price, 'buy');
+  if (fortune.failed) {
+    return { success: false, message: '衰神作祟，购买失败' };
+  }
+  if (player.cash < fortune.cost) {
     state.logs.push({
       timestamp: Date.now(),
       type: 'action:failed',
@@ -1451,18 +1584,19 @@ export function buyProperty(state: GameState): { success: boolean; message?: str
     return { success: false, message: '现金不足' };
   }
 
-  player.cash -= price;
+  player.cash -= fortune.cost;
   tile.ownerId = player.id;
   // 小块与大块土地默认均为住宅，大块土地后续可通过改建卡建造特殊建筑
   tile.buildingType = 'house';
   tile.level = 0;
   setTileLease(state, tile);
   player.properties.push(tileIndex);
+  const discountText = fortune.discountReason ? `（${fortune.discountReason}）` : '';
   state.logs.push({
     timestamp: Date.now(),
     type: 'player:buy',
     actorId: player.id,
-    message: `${player.username} 购买 ${tile.name}，花费 $${price}`,
+    message: `${player.username} 购买 ${tile.name}，花费 $${fortune.cost}${discountText}`,
   });
   return { success: true };
 }
@@ -1506,8 +1640,12 @@ export function upgradeProperty(state: GameState): { success: boolean; message?:
     });
     return { success: false, message: '已达到最高等级' };
   }
-  const cost = Math.floor(tile.basePrice * (tile.level + 1) * 0.5 * state.priceIndex);
-  if (player.cash < cost) {
+  const price = Math.floor(tile.basePrice * (tile.level + 1) * 0.5 * state.priceIndex);
+  const fortune = applyFortuneCost(state, player, price, 'upgrade');
+  if (fortune.failed) {
+    return { success: false, message: '衰神作祟，升级失败' };
+  }
+  if (player.cash < fortune.cost) {
     state.logs.push({
       timestamp: Date.now(),
       type: 'action:failed',
@@ -1517,13 +1655,14 @@ export function upgradeProperty(state: GameState): { success: boolean; message?:
     return { success: false, message: '现金不足' };
   }
 
-  player.cash -= cost;
+  player.cash -= fortune.cost;
   tile.level += 1;
+  const discountText = fortune.discountReason ? `（${fortune.discountReason}）` : '';
   state.logs.push({
     timestamp: Date.now(),
     type: 'player:upgrade',
     actorId: player.id,
-    message: `${player.username} 升级 ${tile.name} 到 ${tile.level} 级，花费 $${cost}`,
+    message: `${player.username} 升级 ${tile.name} 到 ${tile.level} 级，花费 $${fortune.cost}${discountText}`,
   });
   return { success: true };
 }
@@ -2113,4 +2252,34 @@ export function canUseCard(state: GameState, playerId: string): boolean {
 
 export function canUseItem(state: GameState, playerId: string): boolean {
   return (state.status === 'acting' || state.status === 'rolling') && getCurrentPlayer(state).id === playerId;
+}
+
+const MINI_GAME_NAMES: Record<MiniGameType, string> = {
+  balloon: '七彩气球',
+  luckyDrop: '喜从天降',
+  penguinDig: '企鹅挖宝',
+};
+
+export function applyMiniGameResult(
+  state: GameState,
+  playerId: string,
+  result: { coupons: number },
+): { success: boolean; message?: string } {
+  if (state.status !== 'minigame') return { success: false, message: '当前不在小游戏阶段' };
+  const player = getCurrentPlayer(state);
+  if (player.id !== playerId) return { success: false, message: '不是你的小游戏' };
+  if (state.pendingMiniGame === undefined) return { success: false, message: '没有待处理的小游戏' };
+
+  const coupons = Math.max(0, Math.floor(result.coupons || 0));
+  player.coupons = (player.coupons ?? 0) + coupons;
+  const type = state.pendingMiniGame;
+  state.pendingMiniGame = undefined;
+  state.status = 'acting';
+  state.logs.push({
+    timestamp: Date.now(),
+    type: 'minigame:end',
+    actorId: player.id,
+    message: `${player.username} 完成了${MINI_GAME_NAMES[type]}小游戏，获得 ${coupons} 张点券`,
+  });
+  return { success: true };
 }

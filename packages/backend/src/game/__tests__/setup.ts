@@ -70,9 +70,23 @@ export function giveItem(player: Player, itemId: string, quantity = 1): void {
   }
 }
 
-export function giveStock(state: GameState, player: Player, stockId: string, quantity: number): void {
+export function giveStock(
+  state: GameState,
+  player: Player,
+  stockId: string,
+  quantity: number,
+  costBasis?: number
+): void {
   const stock = state.stocks.find((s) => s.id === stockId)!;
-  player.stockHoldings[stockId] = (player.stockHoldings[stockId] ?? 0) + quantity;
+  const prevHolding = player.stockHoldings[stockId] ?? 0;
+  const prevCost = player.stockCostBasis[stockId] ?? 0;
+  const newHolding = prevHolding + quantity;
+  const newCost =
+    costBasis !== undefined
+      ? (prevCost * prevHolding + costBasis * quantity) / newHolding
+      : prevCost || stock.price;
+  player.stockHoldings[stockId] = newHolding;
+  player.stockCostBasis[stockId] = Math.floor(newCost);
   stock.availableShares -= quantity;
 }
 

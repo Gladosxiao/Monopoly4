@@ -140,27 +140,34 @@ describe('game end by bankruptcy', () => {
 });
 
 describe('property transfer after bankruptcy', () => {
-  it('破产玩家所有地产转移给债主', () => {
+  it('三次法拍不足后破产，剩余地产转移给债主', () => {
     const state = makeTestState();
-    setOwner(state, 1, 'p1', 'house', 2);
-    setOwner(state, 3, 'p1', 'house', 3);
-    setOwner(state, 21, 'p1', 'mall', 2);
+    setOwner(state, 1, 'p1', 'house', 0);
+    setOwner(state, 3, 'p1', 'house', 0);
+    setOwner(state, 21, 'p1', 'house', 0);
+    setOwner(state, 23, 'p1', 'house', 0);
+    // 让地块价值极低，三次法拍也无法覆盖高租金
+    for (const idx of [1, 3, 21, 23]) {
+      state.map.tiles[idx].basePrice = 1000;
+    }
     state.players[0].cash = 0;
     state.players[0].deposit = 0;
     state.currentPlayerIndex = 0;
     state.pendingTileIndex = 5;
     setOwner(state, 5, 'p2', 'house', 0);
+    state.map.tiles[5].baseRent = 50000;
 
     handleTileEffect(state);
 
     expect(state.players[0].isBankrupt).toBe(true);
-    for (const idx of [1, 3, 5, 21]) {
-      expect(state.map.tiles[idx].ownerId).toBe('p2');
-    }
-    expect(state.players[1].properties).toContain(1);
-    expect(state.players[1].properties).toContain(3);
+    // 已法拍的地块回归未拥有状态
+    expect(state.map.tiles[1].ownerId).toBeUndefined();
+    expect(state.map.tiles[3].ownerId).toBeUndefined();
+    expect(state.map.tiles[21].ownerId).toBeUndefined();
+    // 剩余未法拍地产转移给债主
+    expect(state.map.tiles[23].ownerId).toBe('p2');
     expect(state.players[1].properties).toContain(5);
-    expect(state.players[1].properties).toContain(21);
+    expect(state.players[1].properties).toContain(23);
     expect(state.players[0].properties).toEqual([]);
   });
 });
