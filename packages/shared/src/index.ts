@@ -26,8 +26,16 @@ export interface Character {
 export const CHARACTERS: Character[] = [
   { id: 'sun', name: '孙小美', origin: '中国', color: '#ff6b6b' },
   { id: 'atu', name: '阿土伯', origin: '中国', color: '#4ecdc4' },
-  { id: 'qian', name: '钱夫人', origin: '中国', color: '#ffe66d' },
+  { id: 'qian', name: '钱夫人', origin: '中国', color: '#f1c40f' },
   { id: 'gongben', name: '宫本宝藏', origin: '日本', color: '#1a535c' },
+  { id: 'john', name: '约翰乔', origin: '美国', color: '#3498db' },
+  { id: 'salon', name: '沙隆巴斯', origin: '阿拉伯', color: '#9b59b6' },
+  { id: 'nin', name: '忍太郎', origin: '日本', color: '#c0392b' },
+  { id: 'sara', name: '莎拉公主', origin: '英国', color: '#ff9ff3' },
+  { id: 'tang', name: '糖糖', origin: '中国', color: '#ff6b9d' },
+  { id: 'wumi', name: '乌咪', origin: '印第安', color: '#27ae60' },
+  { id: 'danny', name: '小丹尼', origin: '澳大利亚', color: '#f39c12' },
+  { id: 'beibei', name: '金贝贝', origin: '中国', color: '#1abc9c' },
 ];
 
 // ==================== 房间 ====================

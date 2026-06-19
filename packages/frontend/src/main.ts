@@ -240,6 +240,7 @@ async function navigateToRoom(roomId: string, error?: string): Promise<void> {
   CHARACTERS.forEach((char) => {
     const btn = document.createElement('button');
     btn.className = 'char-btn';
+    btn.dataset.charId = char.id;
     btn.textContent = char.name;
     btn.style.background = char.color;
     btn.addEventListener('click', () => {
@@ -281,6 +282,17 @@ function renderRoomPlayers(container: HTMLElement, room: Room): void {
       <span>${p.isHost ? '房主' : ''} ${p.isReady ? '已准备' : '未准备'}</span>
     `;
     list.appendChild(li);
+  });
+
+  const myPlayer = room.players.find((p) => p.userId === currentUser?.id);
+  const takenChars = new Set(room.players.map((p) => p.characterId));
+  container.querySelectorAll<HTMLButtonElement>('.char-btn').forEach((btn) => {
+    const charId = btn.dataset.charId!;
+    const isMine = myPlayer?.characterId === charId;
+    const isTaken = takenChars.has(charId) && !isMine;
+    btn.disabled = isTaken;
+    btn.classList.toggle('selected', isMine);
+    btn.title = isTaken ? '已被其他玩家选择' : charId;
   });
 
   const isHost = room.hostId === currentUser?.id;
