@@ -192,6 +192,9 @@ interface Tile {
   purchasedAt?: number;   // 购买时的天数（用于土地权限到期计算）
   expiresAt?: number;     // 土地到期天数（根据 landLease 计算，perpetual 时无此字段）
   traps: Trap[];          // 该地块上的陷阱（路障、地雷、定时炸弹）
+  couponValue?: number;   // 仅 coupon 类型，点券数值
+  companyId?: string;     // 仅 company 类型，对应公司 ID
+  miniGameType?: MiniGameType; // 仅 miniGame 格，小游戏类型（七彩气球/喜从天降/企鹅挖宝）
   // 派生字段（由服务端计算）
   currentRent?: number;   // 当前过路费（考虑等级、建筑类型、连锁、物价指数）
 }
@@ -298,9 +301,11 @@ interface Spirit {
 ### 游戏状态 (GameState)
 
 ```typescript
+type GamePhase = 'waiting' | 'rolling' | 'moving' | 'acting' | 'minigame' | 'ended';
+
 interface GameState {
   roomId: string;
-  status: 'waiting' | 'playing' | 'ended';
+  status: GamePhase;
   config: GameConfig;
   map: GameMap;
   players: Player[];
@@ -314,6 +319,9 @@ interface GameState {
   companies?: Company[];      // 公司列表（扩展）
   winnerId?: string;          // 获胜者 ID
   logs: GameLog[];            // 游戏事件日志
+  pendingMiniGame?: MiniGameType; // 待处理的小游戏，非空时 status 为 'minigame'
+  lastRoll?: number;          // 最后一次掷骰点数
+  selectedDiceCount?: number; // 最后一次选择的骰子数
 }
 
 interface GameLog {

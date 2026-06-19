@@ -1,177 +1,119 @@
 # AGENTS.md
 
-> 本文件供 AI 编码代理阅读。当前仓库**没有可运行的源代码**，仅包含文档与许可证。请不要对项目做任何框架、构建工具或运行环境的假设。
+> 本文件供 AI 编码代理阅读，定义项目规范与工作流程。
 >
 > **沟通语言**：与本仓库交互时，AI 代理必须使用**中文**回复用户，并在思考过程中尽量使用中文。
 
+## 工作流程铁律
+
+1. **每次修改必须提交并推送**：任何代码/文档改动完成后，立即 `git add <files>` → `git commit -m "..."` → `git push`，不得堆积未推送的提交。
+2. **使用 git worktree 隔离工作**：开发新功能或修复时，使用 `git worktree add` 创建独立工作目录，避免直接操作 `main` 分支。主工作区保持干净（仅有 AGENTS.md 的修改可在主工作区完成）。
+3. **保持与远程同步**：开始工作前 `git fetch` / `git pull`，确保基于最新代码。
+4. **提交信息格式**：遵循 Conventional Commits：`feat|fix|chore|docs|refactor|test(scope): 描述`。
+
 ## 项目概览
 
-- **项目名称/主题**：大富翁4（Monopoly 4）。
-- **项目目标**：在 **HTML / Web** 端复刻《大富翁4》，支持**多人在线游戏**，部署到 **Kimi 的网站**；仅**登录用户**可进入游戏。
-- **当前状态**：仓库处于极早期阶段，`git HEAD` 中只追踪了 `LICENSE`；源码、资源、配置文件均未提交。
-- **仓库内容**：
-  - `LICENSE`：MIT 许可证，版权所有者为 Sam Shaw（2026）。
-  - `doc/大富翁4核心玩法规则说明.doc`：Microsoft Word `.doc` 文档，使用简体中文撰写，包含《大富翁4》的核心玩法规则说明（共约 4 页）。
-  - `doc/大富翁4說明書[all-rights-available].pdf`：PDF 版说明书，由 Canon iR-ADV C3720 扫描生成（PDF 1.6，约 7.4 MB），页面内容为图像，未经过 OCR，无法直接复制其中的繁体中文文字。
-  - `1`：一个大小为 0 的空文件，目前未在 git 中追踪，可能是占位符或误创建文件。
-- **自然语言**：项目文档主要使用**中文**（简体 `.doc`、繁体 PDF 封面/内容），代码尚未出现。
-
-## 沟通语言
-
-- **回复语言**：所有面向用户的回复必须使用**中文**。
-- **思考语言**：内部推理、分析、计划过程应尽量使用中文；技术术语、代码、文件路径、命令等保持原样。
-- **代码与注释**：项目面向中文用户，代码注释与文档优先使用中文；变量名、函数名、类名等技术标识符保持英文。
-
-## 多代理协作
-
-- 本项目可能由多个 AI 代理同时或接力操作。
-- 各代理应通过 **Git 分支 / git worktree（gittree）** 机制隔离工作，避免直接在 `main` 分支上互相覆盖。
-- 每个代理在开始新任务前，建议：
-  1. 确认当前所在分支或 worktree；
-  2. 拉取最新变更（`git fetch` / `git pull`）；
-  3. 在独立分支或 worktree 中完成任务；
-  4. 通过 Pull Request 或显式合并请求将结果合并回主分支。
-- 如需使用 git worktree，可参考：
-  ```bash
-  # 基于 main 创建新 worktree
-  git worktree add ../Monopoly4-feature-name feature-branch-name
-  cd ../Monopoly4-feature-name
-  ```
-- 代理之间应通过 `AGENTS.md`、提交信息、分支名、PR 描述保持信息同步。
+- **项目名称/主题**：大富翁4（Monopoly 4）Web 复刻版，支持**多人在线游戏**。
+- **项目目标**：在浏览器中完整复刻《大富翁4》，部署到 Kimi 的网站；仅登录用户可进入游戏。
+- **当前状态**：项目已有完整可运行的前后端源码与配套测试，持续迭代中。
+- **技术栈**：Monorepo（pnpm workspace）+ Vite + TypeScript + Node.js/Express + Socket.IO + Vitest。
 
 ## 仓库结构
 
 ```
 .
-├── .git/                                       # Git 版本控制目录
-├── AGENTS.md                                   # 本文件
-├── LICENSE                                     # MIT 许可证（已追踪）
-├── 1                                           # 空文件（未追踪）
-└── doc/
-    ├── 大富翁4核心玩法规则说明.doc              # 核心玩法规则（简体中文 Word）
-    └── 大富翁4說明書[all-rights-available].pdf  # 扫描版说明书（繁体中文 PDF）
+├── AGENTS.md                                    # 本文件
+├── LICENSE                                      # MIT 许可证
+├── package.json                                 # 根 monorepo 配置
+├── packages/
+│   ├── shared/                                  # 共享类型、数据配置（卡片/道具/神明等）
+│   │   └── src/
+│   │       ├── index.ts                         # 核心 TypeScript 类型
+│   │       └── data/                            # 卡片、道具、神明、公司等配置
+│   ├── backend/                                 # Node.js + Express + Socket.IO 服务端
+│   │   └── src/
+│   │       ├── game/                            # 核心游戏逻辑
+│   │       │   ├── engine.ts                    # 主引擎（掷骰/移动/买地/过路费/破产等）
+│   │       │   ├── spiritEffects.ts             # 神明效果（福神/衰神/天使/恶魔/土地公）
+│   │       │   ├── cardSystem/                  # 卡片系统（30 张效果）
+│   │       │   ├── itemSystem/                  # 道具系统（13 种效果）
+│   │       │   ├── eventSystem/                 # 命运/新闻事件系统
+│   │       │   ├── financialSystem/             # 股票/公司/保险系统
+│   │       │   ├── npcSystem/                   # NPC 系统
+│   │       │   ├── testMode/                    # 测试模式
+│   │       │   └── __tests__/                   # 单元测试
+│   │       ├── socket/                          # Socket.IO 事件处理
+│   │       ├── auth/                            # 用户认证
+│   │       └── routes/                          # REST API 路由
+│   ├── frontend/                                # Vite + TypeScript 前端
+│   │   └── src/
+│   │       ├── main.ts                          # 入口（渲染/交互）
+│   │       ├── board.ts                         # 棋盘渲染
+│   │       ├── socket.ts                        # 客户端 Socket 通信
+│   │       └── style.css                        # 样式
+│   └── map-generator/                           # 地图生成器
+│       └── src/
+│           ├── generator.ts                     # 多模板地图生成
+│           ├── loader.ts                        # 地图加载器
+│           ├── coords.ts                        # 2.5D 坐标工具
+│           └── visualizer.ts                    # SVG/HTML 渲染
+└── doc/                                         # 原始规则文档（未追踪）
 ```
-
-## 技术栈与运行时架构
-
-- **目标平台**：Web 浏览器（桌面端 + 移动端适配）。
-- **前端技术栈**（必须以前端为主）：
-  - 基础：HTML5、CSS3、JavaScript（推荐 TypeScript）；
-  - 框架 / 库：可选 React / Vue / 纯原生方案，优先轻量、易部署；
-  - 渲染：Canvas 2D / SVG / DOM，根据性能与复杂度选择；
-  - 样式：Tailwind CSS、CSS Modules 或原生 CSS；
-  - 构建工具：Vite、Webpack 或原生 ES Modules（无构建）。
-- **多人与登录**：需要后端或 BaaS 支持，可选方案：
-  - 自建后端：Node.js + Express / Fastify + WebSocket（Socket.IO）+ 数据库（PostgreSQL / MongoDB / SQLite）；
-  - BaaS：Firebase Authentication + Firestore / Supabase Auth + Realtime；
-  - 会话同步：WebSocket 用于实时状态广播，REST API 用于房间管理、用户认证。
-- 未检测到任何常见的项目配置文件，例如：
-  - `pyproject.toml`、`setup.py`、`requirements.txt`
-  - `package.json`、`yarn.lock`、`pnpm-lock.yaml`
-  - `Cargo.toml`、`go.mod`、`pom.xml`、`build.gradle`、`CMakeLists.txt`
-  - `Dockerfile`、`docker-compose.yml`、`Makefile`
-- 在明确具体技术栈之前，不要引入框架或构建工具；变更技术栈需经维护者确认。
-
-## 核心产品需求
-
-1. **Web 复刻**
-   - 游戏运行在浏览器中，使用 HTML/CSS/JS（TS）实现。
-   - 棋盘、角色、卡片、建筑等视觉元素使用前端技术渲染。
-   - 支持桌面与移动浏览器的基本适配。
-2. **多人功能**
-   - 支持多人在线同局游戏（2～4 人）。
-   - 提供房间系统：创建房间、加入房间、邀请好友、观战或 AI 补位。
-   - 实时同步：玩家掷骰、移动、购买、升级、交易、破产等状态需同步到所有客户端。
-3. **登录限制**
-   - 仅登录用户可创建或加入游戏。
-   - 未登录用户只能浏览登录页 / 首页，无法进入房间或进行游戏。
-   - 账号体系可采用邮箱、手机号、OAuth（如 Kimi / 微信 / GitHub）等，需与维护者确认。
-4. **部署目标**
-   - 最终部署到 **Kimi 的网站**（具体域名 / 路径需与维护者确认）。
-   - 构建产物需兼容目标服务器的静态托管或 Node 运行时要求。
-
-## 玩法规则摘要（来自 `doc/大富翁4核心玩法规则说明.doc`）
-
-> 以下仅用于帮助理解项目主题，不应被视为代码需求文档。
-
-1. **开局设置**
-   - 游戏人数：2～4 人；玩家可选择多个角色，不足人数由电脑 AI 补齐。
-   - 总资金：10000～300000，所有角色初始资金相同。
-   - 行进方式：步行（1 颗骰子）、机车（1–2 颗骰子）、汽车（1–3 颗骰子）。
-   - 土地权限：1 个月、3 个月、6 个月、1 年、2 年、无期限。
-   - 游戏时间：1 个月、3 个月、6 个月、1 年、2 年、无期限。
-   - 胜利条件：60000、100000、200000、1000000、2000000、无限（无限时以破产判定胜负）。
-2. **角色属性**：现金、储蓄、总资产。
-3. **土地类型**
-   - 独立路段大块土地：可建造酒店、公园、研究所等特殊设施。
-   - 连接式路段小块土地：同一路段拥有越多土地，对手进入时过路费越高。
-   - 系统类土地：无法购买，分无触发事件格与有触发事件格。
-4. **土地购买与升级**
-   - 角色到达空地可支付现金购买；再次到达自己土地可升级，每块土地最多 5 次。
-   - 现金不足时无法购买或升级。
-5. **过路费**：进入对手土地时支付，金额根据土地级别与连锁土地数量判定。
-6. **破产与获胜**：现金 + 储蓄 < 0 时破产；最后未破产者获胜。
-7. **行走**：玩家点击“GO”按钮掷骰子，依点数移动。
 
 ## 构建与测试命令
 
-- 根目录构建：`npm run build`（依次构建 shared、frontend、backend）。
-- 后端单元测试：`npm run test -w packages/backend`（使用 Vitest，测试文件位于 `packages/backend/src/game/*.test.ts`）。
-- 开发模式：`npm run dev`（同时启动 backend 与 frontend）。
+- 安装依赖：`pnpm install`
+- 根目录构建：`npm run build`（依次构建 shared、frontend、backend）
+- 开发模式：`npm run dev`（同时启动 backend 与 frontend）
+- 后端测试：`npm run test -w packages/backend`（Vitest，测试文件位于 `packages/backend/src/game/*.test.ts`）
+
+**每次修改后务必运行测试**确保不破坏现有功能。
+
+## 测试策略
+
+- **测试运行器**：Vitest
+- **测试文件位置**：`packages/backend/src/game/__tests__/`
+- **已覆盖的测试文件**（345+ 用例）：
+  - `engine.test.ts`：核心引擎规则（过路费、神明租金、卡片效果、状态递减等）
+  - `spirits.test.ts`：神明系统（福神/衰神/天使/恶魔/土地公完整效果）
+  - `minigames.test.ts`：小游戏系统（七彩气球/喜从天降/企鹅挖宝）
+  - `bankruptcy.test.ts`：破产法拍（股票清算+土地法拍）
+  - `financial.test.ts`：股票交易、加权成本、董事长、分红、公司特效、保险理赔
+  - `e2e.test.ts`：端到端集成测试
+  - `setup.ts`：测试辅助工具与工厂函数
+  - `socketIntegration.test.ts`：Socket 事件集成测试
 
 ## 代码组织
 
 - `packages/shared/`：前后端共享类型、地图数据、卡片/道具/神明配置。
 - `packages/backend/`：Node.js + Express + Socket.IO 服务端，核心游戏逻辑在 `src/game/engine.ts`。
 - `packages/frontend/`：Vite + TypeScript 前端，棋盘渲染与交互。
-- 当前已实现可运行的前后端源码与测试。
+- `packages/map-generator/`：地图生成器，多模板/2.5D 坐标/SVG 渲染。
 
-## 开发规范与代码风格
+## 开发规范
 
-- 由于尚无代码，未定义代码风格、Linter、Formatter 或提交规范。
-- 后续引入代码时，建议：
-  - 选择并配置统一的格式化工具（如 Prettier、Black、rustfmt 等）。
-  - 配置 Lint 工具并在提交前运行。
-  - 使用中文或英文注释需与项目文档语言保持一致；如面向中文用户，建议优先使用中文注释与文档。
+- 代码注释与文档优先使用中文；变量名、函数名、类名等技术标识符保持英文。
+- 统一使用 Prettier 格式化（`pnpm exec prettier --write .`）。
+- 代码提交前必须通过 `npm run build` 编译检查。
 
-## 测试策略
+## 多代理协作
 
-- 已添加 Vitest 作为后端测试运行器。
-- 已覆盖的单元测试（`packages/backend/src/game/engine.test.ts`）：
-  - 住宅过路费公式（等级、连锁加成、物价指数）。
-  - 连锁店联合收费公式。
-  - 商场/旅馆/加油站/公园特殊建筑租金。
-  - 小财神/大财神/小穷神/大穷神对租金的影响。
-  - 涨价卡/查封卡/同盟卡/免费卡/改建卡/请神符/送神符效果。
-  - 状态效果（路段效果、神明）的天数递减。
-- 建议继续补充：
-  - 完整一局游戏的胜负判定集成测试。
-  - 规则一致性校验：对照 `doc/大富翁4核心玩法规则说明.doc` 中的规则编写验收测试。
-
-## 部署流程
-
-- **目标环境**：Kimi 的网站（具体域名 / 子路径 / 部署方式需与维护者确认）。
-- **前端部署**：构建静态产物后上传至目标服务器或 CDN；若使用 SSR / API，则需部署对应服务端。
-- **当前无部署流程**：尚未配置 CI/CD、GitHub Actions、GitLab CI 或其他持续集成服务。
-- 后续建议：
-  - 添加自动化构建脚本（如 `npm run build`）；
-  - 添加部署脚本或 GitHub Actions 工作流；
-  - 区分开发环境、预发布环境与生产环境。
+- 多个 AI 代理通过 **git worktree** 隔离工作，避免直接在 `main` 分支上互相覆盖。
+- 每个代理在开始新任务前：
+  1. 确认当前所在 worktree；
+  2. `git fetch origin && git pull` 拉取最新变更；
+  3. 在独立 worktree 中完成任务；
+  4. 合并回 `main` 并通过 CI 后推送。
+- git worktree 使用示例：
+  ```bash
+  # 基于 main 创建新 worktree
+  git worktree add ../Monopoly4-feature-name feature-branch-name
+  cd ../Monopoly4-feature-name
+  ```
+- 代理之间通过 `AGENTS.md`、提交信息、分支名保持信息同步。
 
 ## 安全与合规
 
-- **许可证**：MIT，允许自由使用、修改、分发，但需保留版权声明。
-- **文档来源**：`doc/大富翁4說明書[all-rights-available].pdf` 文件名中包含 `[all-rights-available]`，但仍需注意原游戏《大富翁4》的知识产权归属；本仓库目前仅存放规则说明与个人整理的文档，不应包含受版权保护的游戏资源（图像、音频、二进制等）。
-- **无敏感信息**：未检测到 `.env`、密钥、令牌或个人隐私数据。
-- **`.git` 状态**：`doc/` 与 `1` 尚未被 git 追踪；任何对它们的修改都不会自动进入版本控制，需要手动 `git add`。
-
-## 给 AI 代理的注意事项
-
-1. **必须使用中文回复用户**，思考过程也尽量使用中文。
-2. 本仓库的最终目标是**在 HTML / Web 端复刻《大富翁4》**，支持**多人在线**、**登录后才能游玩**，并部署到 **Kimi 的网站**。
-3. 技术栈必须以前端为主（HTML/CSS/JS 或 TS），多人与登录功能需要配套后端或 BaaS；新增框架前务必与维护者确认。
-4. 当前仍处于极早期，不要假设已经是一个可运行的游戏项目。
-5. 多个代理协作时，使用 **Git 分支或 git worktree（gittree）** 隔离工作，避免直接修改 `main` 分支。
-6. 如需解析 PDF 说明书，应先进行 OCR（如使用 Tesseract、PDF 在线 OCR 服务等）。
-7. 如需读取 `.doc` 文件，可使用 macOS 的 `textutil -convert txt` 或 `catdoc` 等工具；当前已确认该文档可被 `textutil` 正确转换为纯文本。
-8. 保持 `LICENSE` 完整，新增代码时继续采用 MIT 许可证（除非维护者明确变更）。
+- **许可证**：MIT，版权所有者为 Sam Shaw（2026）。
+- 本项目仅存放规则说明与个人整理的文档，不包含受版权保护的游戏资源（图像、音频、二进制等）。
+- 保持 `LICENSE` 完整，新增代码时继续采用 MIT 许可证。
