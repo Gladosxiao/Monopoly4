@@ -340,9 +340,22 @@ const socket = io('/game', {
 }
 ```
 
+## 环境变量
+
+| 变量 | 说明 | 默认值 |
+|---|---|---|
+| `JWT_SECRET` | JWT 签名密钥，生产环境必须设置，否则使用弱默认密钥 | `monopoly4-dev-secret` |
+| `ALLOWED_ORIGINS` | 允许的 CORS 来源，多个用逗号分隔；未设置时允许所有来源 | `*` |
+| `ENABLE_TEST_MODE` | 是否启用测试模式 Socket 事件 | `false` |
+
 ## 测试模式事件
 
-> 仅在测试模式启用时生效。
+> 需要同时满足以下条件才会生效：
+> 1. 服务端设置环境变量 `ENABLE_TEST_MODE=true`；
+> 2. 发起者必须是目标房间的房主；
+> 3. 前端仅在开发环境（`import.meta.env.DEV`）下显示测试面板。
+>
+> 不满足条件时服务端会返回 `error` 事件，消息为“测试模式未启用”或“只有房主可以使用测试指令”。
 
 ### Client → Server
 
@@ -534,7 +547,9 @@ const socket = io('/game', {
 停止 AI 自动行动。
 
 ```json
-{}
+{
+  "roomId": "string"
+}
 ```
 
 #### `test:aiStep`
@@ -599,3 +614,9 @@ AI 手动执行一步。
 | `现金不足` | 现金不足 |
 | `点券不足` | 点券不足 |
 | `破产法拍次数已达上限` | 破产法拍 3 次 |
+| `测试模式未启用` | 服务端未开启 ENABLE_TEST_MODE |
+| `只有房主可以使用测试指令` | 非房主调用测试事件 |
+| `游戏进行中不能离开房间` | room:leave 在游戏非等待状态时调用 |
+| `房间已经开始或结束` | game:start 在房间非 waiting 状态时调用 |
+| `目标地块不存在` | game:rebuild 传入越界 tileIndex |
+| `购买数量必须为正整数` / `出售数量必须为正整数` | game:buyItem / game:sellItem 传入非法 quantity |

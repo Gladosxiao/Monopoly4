@@ -12,6 +12,16 @@
   }
   ```
 
+## 环境变量
+
+| 变量 | 说明 | 默认值 | 安全建议 |
+|---|---|---|---|
+| `JWT_SECRET` | JWT 签名密钥 | `monopoly4-dev-secret` | 生产环境必须设置为强随机字符串（≥32 字节） |
+| `USERS_CONFIG_PATH` | 固定用户配置文件路径 | `packages/backend/users.config.json` | 避免提交真实密码到仓库 |
+| `DB_PATH` | SQLite 数据库路径 | `packages/backend/data.sqlite` | 生产环境使用持久化存储 |
+| `ALLOWED_ORIGINS` | 允许的 CORS 来源，多个用逗号分隔 | `*` | 生产环境限制为前端域名 |
+| `ENABLE_TEST_MODE` | 是否启用 Socket 测试模式事件 | `false` | 生产环境必须保持 `false` |
+
 ## 认证接口
 
 ### POST /api/auth/register

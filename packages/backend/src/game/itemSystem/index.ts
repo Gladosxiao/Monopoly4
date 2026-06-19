@@ -52,6 +52,9 @@ export function buyItem(
     return { success: false, message: '商店不出售该道具' };
   }
 
+  if (!Number.isInteger(quantity) || quantity <= 0) {
+    return { success: false, message: '购买数量必须为正整数' };
+  }
   const current = player.items.find((i) => i.itemId === itemId);
   const currentQty = current?.quantity ?? 0;
   if (currentQty + quantity > def.maxStack) {
@@ -126,6 +129,9 @@ export function sellItem(
 ): BuyItemResult {
   const player = state.players.find((p) => p.id === playerId);
   if (!player) return { success: false, message: '玩家不存在' };
+  if (!Number.isInteger(quantity) || quantity <= 0) {
+    return { success: false, message: '出售数量必须为正整数' };
+  }
   const idx = player.items.findIndex((i) => i.itemId === itemId);
   if (idx < 0) return { success: false, message: '未持有该道具' };
   const item = player.items[idx];

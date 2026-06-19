@@ -32,10 +32,11 @@ function hospitalize(state: GameState, player: Player, days: number, reason: str
     remainingDays: days,
     data: { reason },
   });
-  // 移动到最近的医院格
-  const hospitalIndex = findHospitalTileIndex(state);
-  if (hospitalIndex >= 0) {
-    player.position = state.map.path[hospitalIndex];
+  // 移动到最近的医院格（player.position 是 path 索引，需转换）
+  const hospitalTileIndex = findHospitalTileIndex(state);
+  if (hospitalTileIndex >= 0) {
+    const pathIndex = state.map.path.findIndex((ti) => ti === hospitalTileIndex);
+    if (pathIndex >= 0) player.position = pathIndex;
   }
   // 若已投保则自动申请理赔（骗保联动点）
   claimInsurance(state, player, reason);

@@ -53,9 +53,27 @@ import { runAITurn, startAIAuto } from '../game/testMode/aiPlayer.js';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'monopoly4-dev-secret';
 
+/** 是否启用测试模式 Socket 事件（默认关闭）。 */
+const TEST_MODE_ENABLED = process.env.ENABLE_TEST_MODE === 'true';
+
+function assertTestModeEnabled(socket: Socket): boolean {
+  if (!TEST_MODE_ENABLED) {
+    socket.emit('error', '测试模式未启用');
+    return false;
+  }
+  return true;
+}
+
+/** 校验用户是否为指定房间的房主。 */
+function isRoomHost(roomId: string, userId: string): boolean {
+  const room = rooms.get(roomId) ?? loadRoomFromDb(roomId);
+  return room ? room.hostId === userId : false;
+}
+
 export function setupSocketIO(httpServer: HttpServer): SocketIOServer<ClientToServerEvents, ServerToClientEvents> {
+  const allowedOrigins = process.env.ALLOWED_ORIGINS?.split(',').map((s) => s.trim()) ?? '*';
   const io = new SocketIOServer<ClientToServerEvents, ServerToClientEvents>(httpServer, {
-    cors: { origin: '*' },
+    cors: { origin: allowedOrigins },
   });
 
   io.use((socket: Socket, next) => {
@@ -149,6 +167,10 @@ export function setupSocketIO(httpServer: HttpServer): SocketIOServer<ClientToSe
     socket.on('room:leave', (roomId) => {
       const room = rooms.get(roomId);
       if (!room) return;
+      if (room.status !== 'waiting') {
+        socket.emit('error', '游戏进行中不能离开房间');
+        return;
+      }
       room.players = room.players.filter((p) => p.userId !== user.id);
       if (room.players.length === 0) {
         rooms.delete(roomId);
@@ -192,6 +214,10 @@ export function setupSocketIO(httpServer: HttpServer): SocketIOServer<ClientToSe
       }
       if (!room.players.every((p) => p.isReady || p.isHost)) {
         socket.emit('error', '还有玩家未准备');
+        return;
+      }
+      if (room.status !== 'waiting') {
+        socket.emit('error', '房间已经开始或结束');
         return;
       }
 
@@ -282,6 +308,10 @@ export function setupSocketIO(httpServer: HttpServer): SocketIOServer<ClientToSe
       const player = state.players[state.currentPlayerIndex];
       if (player.id !== user.id || state.status !== 'acting') {
         socket.emit('error', '现在不能改建');
+        return;
+      }
+      if (!Number.isInteger(tileIndex) || tileIndex < 0 || tileIndex >= state.map.tiles.length) {
+        socket.emit('error', '目标地块不存在');
         return;
       }
       const result = rebuildTile(state, tileIndex, buildingType);
@@ -393,7 +423,12 @@ export function setupSocketIO(httpServer: HttpServer): SocketIOServer<ClientToSe
         socket.emit('error', '现在不能购买道具');
         return;
       }
-      const result = buyItem(state, user.id, itemId, quantity ?? 1);
+      const qty = quantity ?? 1;
+      if (!Number.isInteger(qty) || qty <= 0) {
+        socket.emit('error', '购买数量必须为正整数');
+        return;
+      }
+      const result = buyItem(state, user.id, itemId, qty);
       if (!result.success) {
         socket.emit('error', result.message);
         return;
@@ -409,7 +444,12 @@ export function setupSocketIO(httpServer: HttpServer): SocketIOServer<ClientToSe
         socket.emit('error', '现在不能出售道具');
         return;
       }
-      const result = sellItem(state, user.id, itemId, quantity ?? 1);
+      const qty = quantity ?? 1;
+      if (!Number.isInteger(qty) || qty <= 0) {
+        socket.emit('error', '出售数量必须为正整数');
+        return;
+      }
+      const result = sellItem(state, user.id, itemId, qty);
       if (!result.success) {
         socket.emit('error', result.message);
         return;
@@ -538,7 +578,23 @@ export function setupSocketIO(httpServer: HttpServer): SocketIOServer<ClientToSe
       };
     }
 
-    socket.on('test:addBot', handleTest('addBot', (roomId: string) => {
+    /**
+     * 测试模式权限守卫：要求全局启用测试模式且当前用户为房间房主。
+     */
+    function requireTestMode<T extends unknown[]>(
+      handler: (roomId: string, ...args: T) => void
+    ): (roomId: string, ...args: T) => void {
+      return (roomId, ...args) => {
+        if (!assertTestModeEnabled(socket)) return;
+        if (!isRoomHost(roomId, user.id)) {
+          socket.emit('error', '只有房主可以使用测试指令');
+          return;
+        }
+        handler(roomId, ...args);
+      };
+    }
+
+    socket.on('test:addBot', handleTest('addBot', requireTestMode((roomId: string) => {
       const room = rooms.get(roomId) ?? loadRoomFromDb(roomId);
       if (!room) return;
       if (room.status !== 'waiting') return;
@@ -562,139 +618,139 @@ export function setupSocketIO(httpServer: HttpServer): SocketIOServer<ClientToSe
       });
       saveRoomToDb(room);
       io.to(roomId).emit('room:updated', room);
-    }));
+    })));
 
-    socket.on('test:getSnapshot', (roomId: string) => {
+    socket.on('test:getSnapshot', requireTestMode((roomId: string) => {
       const state = games.get(roomId);
       if (!state) return;
       socket.emit('test:update', testMode.getTestSnapshot(state));
-    });
+    }));
 
-    socket.on('test:setCash', (roomId: string, playerId: string, cash: number) => {
+    socket.on('test:setCash', requireTestMode((roomId: string, playerId: string, cash: number) => {
       const state = games.get(roomId);
       if (!state) return;
       testMode.setPlayerCash(state, playerId, cash);
       io.to(roomId).emit('game:state', state);
-    });
+    }));
 
-    socket.on('test:setDeposit', (roomId: string, playerId: string, deposit: number) => {
+    socket.on('test:setDeposit', requireTestMode((roomId: string, playerId: string, deposit: number) => {
       const state = games.get(roomId);
       if (!state) return;
       testMode.setPlayerDeposit(state, playerId, deposit);
       io.to(roomId).emit('game:state', state);
-    });
+    }));
 
-    socket.on('test:setCoupons', (roomId: string, playerId: string, coupons: number) => {
+    socket.on('test:setCoupons', requireTestMode((roomId: string, playerId: string, coupons: number) => {
       const state = games.get(roomId);
       if (!state) return;
       testMode.setPlayerCoupons(state, playerId, coupons);
       io.to(roomId).emit('game:state', state);
-    });
+    }));
 
-    socket.on('test:setLoan', (roomId: string, playerId: string, loan: number) => {
+    socket.on('test:setLoan', requireTestMode((roomId: string, playerId: string, loan: number) => {
       const state = games.get(roomId);
       if (!state) return;
       testMode.setPlayerLoan(state, playerId, loan);
       io.to(roomId).emit('game:state', state);
-    });
+    }));
 
-    socket.on('test:setPosition', (roomId: string, playerId: string, position: number) => {
+    socket.on('test:setPosition', requireTestMode((roomId: string, playerId: string, position: number) => {
       const state = games.get(roomId);
       if (!state) return;
       testMode.setPlayerPosition(state, playerId, position);
       io.to(roomId).emit('game:state', state);
-    });
+    }));
 
-    socket.on('test:setPriceIndex', (roomId: string, priceIndex: number) => {
+    socket.on('test:setPriceIndex', requireTestMode((roomId: string, priceIndex: number) => {
       const state = games.get(roomId);
       if (!state) return;
       testMode.setPriceIndex(state, priceIndex);
       io.to(roomId).emit('game:state', state);
-    });
+    }));
 
-    socket.on('test:setVehicle', (roomId: string, playerId: string, vehicle: string) => {
+    socket.on('test:setVehicle', requireTestMode((roomId: string, playerId: string, vehicle: string) => {
       const state = games.get(roomId);
       if (!state) return;
       testMode.setPlayerVehicle(state, playerId, vehicle as 'walk' | 'bike' | 'car');
       io.to(roomId).emit('game:state', state);
-    });
+    }));
 
-    socket.on('test:setSpirit', (roomId: string, playerId: string, spiritId: string) => {
+    socket.on('test:setSpirit', requireTestMode((roomId: string, playerId: string, spiritId: string) => {
       const state = games.get(roomId);
       if (!state) return;
       testMode.setPlayerSpirit(state, playerId, spiritId);
       io.to(roomId).emit('game:state', state);
-    });
+    }));
 
-    socket.on('test:giveCard', handleTest('giveCard', (roomId: string, playerId: string, cardId: string) => {
+    socket.on('test:giveCard', handleTest('giveCard', requireTestMode((roomId: string, playerId: string, cardId: string) => {
       const state = games.get(roomId);
       if (!state) return;
       testMode.giveCard(state, playerId, cardId);
       io.to(roomId).emit('game:state', state);
-    }));
+    })));
 
-    socket.on('test:giveItem', handleTest('giveItem', (roomId: string, playerId: string, itemId: string, quantity?: number) => {
+    socket.on('test:giveItem', handleTest('giveItem', requireTestMode((roomId: string, playerId: string, itemId: string, quantity?: number) => {
       const state = games.get(roomId);
       if (!state) return;
       testMode.giveItem(state, playerId, itemId, quantity);
       io.to(roomId).emit('game:state', state);
-    }));
+    })));
 
-    socket.on('test:setTileLevel', (roomId: string, tileIndex: number, level: number) => {
+    socket.on('test:setTileLevel', requireTestMode((roomId: string, tileIndex: number, level: number) => {
       const state = games.get(roomId);
       if (!state) return;
       testMode.setTileLevel(state, tileIndex, level);
       io.to(roomId).emit('game:state', state);
-    });
+    }));
 
-    socket.on('test:setTileOwner', (roomId: string, tileIndex: number, playerId: string) => {
+    socket.on('test:setTileOwner', requireTestMode((roomId: string, tileIndex: number, playerId: string) => {
       const state = games.get(roomId);
       if (!state) return;
       testMode.setTileOwner(state, tileIndex, playerId);
       io.to(roomId).emit('game:state', state);
-    });
+    }));
 
-    socket.on('test:clearEffects', (roomId: string, playerId: string) => {
+    socket.on('test:clearEffects', requireTestMode((roomId: string, playerId: string) => {
       const state = games.get(roomId);
       if (!state) return;
       testMode.clearStatusEffects(state, playerId);
       io.to(roomId).emit('game:state', state);
-    });
+    }));
 
-    socket.on('test:freeShop', (roomId: string) => {
+    socket.on('test:freeShop', requireTestMode((roomId: string) => {
       const state = games.get(roomId);
       if (!state) return;
       const player = state.players[state.currentPlayerIndex];
       const shop = testMode.openFreeShop(state, player.id);
       socket.emit('test:freeShopResult', shop);
-    });
+    }));
 
-    socket.on('test:freeBuyCard', handleTest('freeBuyCard', (roomId: string, playerId: string, cardId: string) => {
+    socket.on('test:freeBuyCard', handleTest('freeBuyCard', requireTestMode((roomId: string, playerId: string, cardId: string) => {
       const state = games.get(roomId);
       if (!state) return;
       testMode.freeBuyCard(state, playerId, cardId);
       io.to(roomId).emit('game:state', state);
-    }));
+    })));
 
-    socket.on('test:freeBuyItem', handleTest('freeBuyItem', (roomId: string, playerId: string, itemId: string, quantity?: number) => {
+    socket.on('test:freeBuyItem', handleTest('freeBuyItem', requireTestMode((roomId: string, playerId: string, itemId: string, quantity?: number) => {
       const state = games.get(roomId);
       if (!state) return;
       testMode.freeBuyItem(state, playerId, itemId, quantity);
       io.to(roomId).emit('game:state', state);
-    }));
+    })));
 
-    socket.on('test:forceEndTurn', (roomId: string) => {
+    socket.on('test:forceEndTurn', requireTestMode((roomId: string) => {
       const state = games.get(roomId);
       if (!state) return;
       testMode.forceEndTurn(state);
       io.to(roomId).emit('game:state', state);
-    });
+    }));
 
     // AI 玩家控制
     let aiStopFn: (() => void) | null = null;
     let aiBroadcastTimer: ReturnType<typeof setInterval> | null = null;
 
-    socket.on('test:aiStart', (roomId: string, intervalMs?: number) => {
+    socket.on('test:aiStart', requireTestMode((roomId: string, intervalMs?: number) => {
       const state = games.get(roomId);
       if (!state) return;
       if (aiStopFn) aiStopFn();
@@ -714,16 +770,16 @@ export function setupSocketIO(httpServer: HttpServer): SocketIOServer<ClientToSe
         stopAI();
         if (aiBroadcastTimer) { clearInterval(aiBroadcastTimer); aiBroadcastTimer = null; }
       };
-    });
+    }));
 
-    socket.on('test:aiStop', () => {
+    socket.on('test:aiStop', requireTestMode((roomId: string) => {
       if (aiStopFn) {
         aiStopFn();
         aiStopFn = null;
       }
-    });
+    }));
 
-    socket.on('test:aiStep', (roomId: string) => {
+    socket.on('test:aiStep', requireTestMode((roomId: string) => {
       const state = games.get(roomId);
       if (!state) return;
       const player = state.players[state.currentPlayerIndex];
@@ -737,7 +793,7 @@ export function setupSocketIO(httpServer: HttpServer): SocketIOServer<ClientToSe
         runAITurn(state, player.id);
       }
       io.to(roomId).emit('game:state', state);
-    });
+    }));
 
     socket.on('disconnect', () => {
       const roomId = socketRoomMap.get(socket.id);
@@ -767,7 +823,7 @@ export function setupSocketIO(httpServer: HttpServer): SocketIOServer<ClientToSe
 // REST 路由中也需要这个函数来切换准备状态
 export function toggleReady(roomId: string, userId: string, isReady: boolean): Room | null {
   const room = rooms.get(roomId) ?? loadRoomFromDb(roomId);
-  if (!room) return null;
+  if (!room || room.status !== 'waiting') return null;
   const player = room.players.find((p) => p.userId === userId);
   if (!player) return null;
   player.isReady = isReady;
@@ -777,7 +833,7 @@ export function toggleReady(roomId: string, userId: string, isReady: boolean): R
 
 export function selectCharacter(roomId: string, userId: string, characterId: string): Room | null {
   const room = rooms.get(roomId) ?? loadRoomFromDb(roomId);
-  if (!room) return null;
+  if (!room || room.status !== 'waiting') return null;
   if (room.players.some((p) => p.userId !== userId && p.characterId === characterId)) return null;
   const player = room.players.find((p) => p.userId === userId);
   if (!player) return null;
