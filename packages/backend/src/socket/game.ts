@@ -480,7 +480,25 @@ export function setupSocketIO(httpServer: HttpServer): SocketIOServer<ClientToSe
     // ===== 测试模式事件 =====
     // 仅在测试模式启用时生效
 
-    socket.on('test:addBot', (roomId: string) => {
+    /**
+     * 包装测试模式处理器，捕获异常并通过 socket error 事件返回给前端，
+     * 避免未捕获异常导致连接断开或前端卡死。
+     */
+    function handleTest<T extends unknown[]>(
+      event: string,
+      handler: (...args: T) => void
+    ): (...args: T) => void {
+      return (...args) => {
+        try {
+          handler(...args);
+        } catch (e: any) {
+          console.error(`[test:${event}] error:`, e);
+          socket.emit('error', e.message || `测试指令 ${event} 执行失败`);
+        }
+      };
+    }
+
+    socket.on('test:addBot', handleTest('addBot', (roomId: string) => {
       const room = rooms.get(roomId) ?? loadRoomFromDb(roomId);
       if (!room) return;
       if (room.status !== 'waiting') return;
@@ -504,7 +522,7 @@ export function setupSocketIO(httpServer: HttpServer): SocketIOServer<ClientToSe
       });
       saveRoomToDb(room);
       io.to(roomId).emit('room:updated', room);
-    });
+    }));
 
     socket.on('test:getSnapshot', (roomId: string) => {
       const state = games.get(roomId);
@@ -568,19 +586,19 @@ export function setupSocketIO(httpServer: HttpServer): SocketIOServer<ClientToSe
       io.to(roomId).emit('game:state', state);
     });
 
-    socket.on('test:giveCard', (roomId: string, playerId: string, cardId: string) => {
+    socket.on('test:giveCard', handleTest('giveCard', (roomId: string, playerId: string, cardId: string) => {
       const state = games.get(roomId);
       if (!state) return;
       testMode.giveCard(state, playerId, cardId);
       io.to(roomId).emit('game:state', state);
-    });
+    }));
 
-    socket.on('test:giveItem', (roomId: string, playerId: string, itemId: string, quantity?: number) => {
+    socket.on('test:giveItem', handleTest('giveItem', (roomId: string, playerId: string, itemId: string, quantity?: number) => {
       const state = games.get(roomId);
       if (!state) return;
       testMode.giveItem(state, playerId, itemId, quantity);
       io.to(roomId).emit('game:state', state);
-    });
+    }));
 
     socket.on('test:setTileLevel', (roomId: string, tileIndex: number, level: number) => {
       const state = games.get(roomId);
@@ -611,21 +629,21 @@ export function setupSocketIO(httpServer: HttpServer): SocketIOServer<ClientToSe
       socket.emit('test:freeShopResult', shop);
     });
 
-    socket.on('test:freeBuyCard', (roomId: string, cardId: string) => {
+    socket.on('test:freeBuyCard', handleTest('freeBuyCard', (roomId: string, cardId: string) => {
       const state = games.get(roomId);
       if (!state) return;
       const player = state.players[state.currentPlayerIndex];
       testMode.freeBuyCard(state, player.id, cardId);
       io.to(roomId).emit('game:state', state);
-    });
+    }));
 
-    socket.on('test:freeBuyItem', (roomId: string, itemId: string, quantity?: number) => {
+    socket.on('test:freeBuyItem', handleTest('freeBuyItem', (roomId: string, itemId: string, quantity?: number) => {
       const state = games.get(roomId);
       if (!state) return;
       const player = state.players[state.currentPlayerIndex];
       testMode.freeBuyItem(state, player.id, itemId, quantity);
       io.to(roomId).emit('game:state', state);
-    });
+    }));
 
     socket.on('test:forceEndTurn', (roomId: string) => {
       const state = games.get(roomId);

@@ -264,12 +264,7 @@ export function freeBuyItem(
   const def = ITEM_DEFINITIONS[itemId];
   if (!def) throw new Error(`道具 ${itemId} 不存在`);
 
-  // 检查是否在商店道具池中
-  const shopPool = ITEM_IDS.filter((id) => ITEM_DEFINITIONS[id].cost > 0);
-  if (!shopPool.includes(itemId)) {
-    throw new Error(`道具 ${def.name} 不在商店出售列表中`);
-  }
-
+  // 测试模式免费商店允许获取任意道具（包括研究所产物），不校验商店池
   const existing = player.items.find((i) => i.itemId === itemId);
   const currentQty = existing?.quantity ?? 0;
   if (currentQty + quantity > def.maxStack) {

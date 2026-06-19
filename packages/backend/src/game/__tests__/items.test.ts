@@ -6,6 +6,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import type { GameState } from '@monopoly4/shared';
 import { makeTestState, giveItem, setOwner } from './setup.js';
 import { useItem } from '../engine.js';
+import { freeBuyItem } from '../testMode/index.js';
 
 function prepareActingState(state: GameState, playerIndex = 0): void {
   state.currentPlayerIndex = playerIndex;
@@ -179,5 +180,19 @@ describe('道具堆叠', () => {
     giveItem(state.players[0], 'mine', 3);
     const item = state.players[0].items.find((i) => i.itemId === 'mine');
     expect(item?.quantity).toBe(3);
+  });
+});
+
+describe('测试模式免费商店', () => {
+  it('免费商店可获取研究所产物（cost=0）', () => {
+    const state = makeTestState();
+    freeBuyItem(state, 'p1', 'robot', 2);
+    const item = state.players[0].items.find((i) => i.itemId === 'robot');
+    expect(item?.quantity).toBe(2);
+  });
+
+  it('免费商店堆叠数量受 maxStack 限制', () => {
+    const state = makeTestState();
+    expect(() => freeBuyItem(state, 'p1', 'bike', 2)).toThrow();
   });
 });
