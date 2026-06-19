@@ -62,6 +62,99 @@ let currentGame: GameState | null = null;
 let currentUser: PublicUser | null = loadUser();
 let cleanupFns: Array<() => void> = [];
 
+/** 显示 Toast 通知 */
+function showToast(message: string, type: 'info' | 'error' | 'success' = 'info') {
+  let container = document.querySelector('.toast-container');
+  if (!container) {
+    container = document.createElement('div');
+    container.className = 'toast-container';
+    document.body.appendChild(container);
+  }
+  const toast = document.createElement('div');
+  toast.className = `toast ${type}`;
+  toast.textContent = message;
+  container.appendChild(toast);
+
+  setTimeout(() => {
+    toast.style.animation = 'toastOut 0.25s forwards';
+    toast.addEventListener('animationend', () => toast.remove());
+  }, 3000);
+}
+
+/** 显示一个自定义输入弹窗，替代 window.prompt */
+function showPrompt(
+  message: string,
+  options?: { choices?: { label: string; value: string }[]; defaultValue?: string }
+): Promise<string | null> {
+  return new Promise((resolve) => {
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay';
+
+    const box = document.createElement('div');
+    box.className = 'modal-box';
+
+    const title = document.createElement('h3');
+    title.textContent = '请输入';
+
+    const body = document.createElement('p');
+    body.textContent = message;
+
+    let input: HTMLInputElement | HTMLSelectElement;
+    if (options?.choices && options.choices.length > 0) {
+      input = document.createElement('select');
+      options.choices.forEach((c) => {
+        const opt = document.createElement('option');
+        opt.value = c.value;
+        opt.textContent = c.label;
+        input.appendChild(opt);
+      });
+    } else {
+      input = document.createElement('input');
+      input.type = 'text';
+      input.value = options?.defaultValue ?? '';
+      input.placeholder = '输入内容...';
+    }
+
+    const buttons = document.createElement('div');
+    buttons.className = 'modal-buttons';
+
+    const okBtn = document.createElement('button');
+    okBtn.textContent = '确定';
+
+    const cancelBtn = document.createElement('button');
+    cancelBtn.textContent = '取消';
+    cancelBtn.className = 'secondary';
+
+    buttons.appendChild(cancelBtn);
+    buttons.appendChild(okBtn);
+
+    box.appendChild(title);
+    box.appendChild(body);
+    box.appendChild(input);
+    box.appendChild(buttons);
+    overlay.appendChild(box);
+    document.body.appendChild(overlay);
+
+    input.focus();
+
+    const close = (value: string | null) => {
+      overlay.remove();
+      resolve(value);
+    };
+
+    okBtn.addEventListener('click', () => close(input.value));
+    cancelBtn.addEventListener('click', () => close(null));
+    input.addEventListener('keydown', (e) => {
+      const evt = e as KeyboardEvent;
+      if (evt.key === 'Enter') close(input.value);
+      if (evt.key === 'Escape') close(null);
+    });
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) close(null);
+    });
+  });
+}
+
 function clean() {
   cleanupFns.forEach((fn) => fn());
   cleanupFns = [];
@@ -195,7 +288,10 @@ async function navigateToLobby(error?: string): Promise<void> {
     rooms.forEach((room) => {
       const li = document.createElement('li');
       li.innerHTML = `
-        <span>${room.name} (${room.players.length}/${room.maxPlayers})</span>
+        <div class="room-meta">
+          <span class="room-name">${room.name}</span>
+          <span class="room-count">${room.players.length}/${room.maxPlayers} 人</span>
+        </div>
         <button>加入</button>
       `;
       li.querySelector('button')!.addEventListener('click', () => navigateToRoom(room.id));
@@ -290,7 +386,7 @@ async function navigateToRoom(roomId: string, error?: string): Promise<void> {
 
   cleanupFns.push(
     onError((msg) => {
-      alert(msg);
+      showToast(msg, 'error');
     })
   );
 }
@@ -302,9 +398,14 @@ function renderRoomPlayers(container: HTMLElement, room: Room): void {
     const char = CHARACTERS.find((c) => c.id === p.characterId);
     const li = document.createElement('li');
     li.innerHTML = `
-      <span style="color:${char?.color || '#fff'}">${p.username}</span>
-      <span>${char?.name || p.characterId}</span>
-      <span>${p.isHost ? '房主' : ''} ${p.isReady ? '已准备' : '未准备'}</span>
+      <div class="player-main">
+        <span class="player-name" style="color:${char?.color || 'var(--color-white)'}\">${p.username}</span>
+        <span class="player-char">${char?.name || p.characterId}</span>
+      </div>
+      <span class="player-badges">
+        ${p.isHost ? '<span class="badge host">房主</span>' : ''}
+        <span class="player-ready ${p.isReady ? 'ready' : ''}">${p.isReady ? '✅ 已准备' : '⏳ 未准备'}</span>
+      </span>
     `;
     list.appendChild(li);
   });
@@ -395,7 +496,7 @@ async function navigateToGame(roomId: string): Promise<void> {
   cleanupFns.push(onGameState(renderGame));
   cleanupFns.push(
     onError((msg) => {
-      alert(msg);
+      showToast(msg, 'error');
     })
   );
 
@@ -418,11 +519,11 @@ function renderPlayersInfo(container: HTMLElement, state: GameState): void {
     div.innerHTML = `
       <strong style="color:${p.color}">${p.username}</strong>
       ${isCurrent ? ' ← 当前回合' : ''}
-      <div>现金: $${p.cash} | 存款: $${p.deposit} | 贷款: $${p.loan} | 点券: ${p.coupons}</div>
-      <div>地产: ${p.properties.length} 处 | 保险: ${p.insuranceDays} 天</div>
-      <div>卡片: ${cardNames || '无'} (${p.cards.length}/15)</div>
-      <div>道具: ${itemNames || '无'}</div>
-      ${p.spirit ? `<div>神明: ${p.spirit.spiritId}</div>` : ''}
+      <div class="info-section">现金: $${p.cash} | 存款: $${p.deposit} | 贷款: $${p.loan} | 点券: ${p.coupons}</div>
+      <div class="info-section">地产: ${p.properties.length} 处 | 保险: ${p.insuranceDays} 天</div>
+      <div class="info-section">卡片: ${cardNames || '无'} (${p.cards.length}/15)</div>
+      <div class="info-section">道具: ${itemNames || '无'}</div>
+      ${p.spirit ? `<div class="info-section">神明: ${p.spirit.spiritId}</div>` : ''}
       ${p.isBankrupt ? '<div class="bankrupt">已破产</div>' : ''}
     `;
     el.appendChild(div);
@@ -463,11 +564,11 @@ function renderActions(container: HTMLElement, state: GameState): void {
       } else if (tile.type === 'shop') {
         const shopCardBtn = document.createElement('button');
         shopCardBtn.textContent = '购买卡片';
-        shopCardBtn.addEventListener('click', () => {
-          const lines = Object.values(CARD_DEFINITIONS)
+        shopCardBtn.addEventListener('click', async () => {
+          const cardChoices = Object.values(CARD_DEFINITIONS)
             .filter((c) => c.cost > 0)
-            .map((c, i) => `${i + 1}. ${c.name} (${c.cost}点)`);
-          const choice = window.prompt(`选择要购买的卡片：\n${lines.join('\n')}`);
+            .map((c, i) => ({ value: String(i + 1), label: `${i + 1}. ${c.name} (${c.cost}点)` }));
+          const choice = await showPrompt('选择要购买的卡片：', { choices: cardChoices });
           const idx = parseInt(choice || '', 10) - 1;
           const card = Object.values(CARD_DEFINITIONS).filter((c) => c.cost > 0)[idx];
           if (card) buyCard(state.roomId, card.id);
@@ -476,11 +577,11 @@ function renderActions(container: HTMLElement, state: GameState): void {
 
         const shopItemBtn = document.createElement('button');
         shopItemBtn.textContent = '购买道具';
-        shopItemBtn.addEventListener('click', () => {
-          const lines = Object.values(ITEM_DEFINITIONS)
+        shopItemBtn.addEventListener('click', async () => {
+          const itemChoices = Object.values(ITEM_DEFINITIONS)
             .filter((i) => i.cost > 0)
-            .map((it, i) => `${i + 1}. ${it.name} (${it.cost}点)`);
-          const choice = window.prompt(`选择要购买的道具：\n${lines.join('\n')}`);
+            .map((it, i) => ({ value: String(i + 1), label: `${i + 1}. ${it.name} (${it.cost}点)` }));
+          const choice = await showPrompt('选择要购买的道具：', { choices: itemChoices });
           const idx = parseInt(choice || '', 10) - 1;
           const item = Object.values(ITEM_DEFINITIONS).filter((i) => i.cost > 0)[idx];
           if (item) buyItem(state.roomId, item.id);
@@ -500,7 +601,7 @@ function renderActions(container: HTMLElement, state: GameState): void {
         // 改建按钮
         const rebuildBtn = document.createElement('button');
         rebuildBtn.textContent = '改建';
-        rebuildBtn.addEventListener('click', () => {
+        rebuildBtn.addEventListener('click', async () => {
           const options = tile.size === 'small'
             ? [
                 { value: 'house', label: '住宅' },
@@ -513,9 +614,9 @@ function renderActions(container: HTMLElement, state: GameState): void {
                 { value: 'gasStation', label: '加油站' },
                 { value: 'lab', label: '研究所' },
               ];
-          const choice = window.prompt(
-            `选择建筑类型：\n${options.map((o, i) => `${i + 1}. ${o.label}`).join('\n')}`
-          );
+          const choice = await showPrompt('选择建筑类型：', {
+            choices: options.map((o, i) => ({ value: String(i + 1), label: `${i + 1}. ${o.label}` })),
+          });
           const idx = parseInt(choice || '', 10) - 1;
           if (idx >= 0 && idx < options.length) {
             rebuildTile(state.roomId, tileIndex, options[idx].value as any);
@@ -528,8 +629,8 @@ function renderActions(container: HTMLElement, state: GameState): void {
       if (tile.type === 'start') {
         const loanBtn = document.createElement('button');
         loanBtn.textContent = '银行贷款';
-        loanBtn.addEventListener('click', () => {
-          const input = window.prompt('输入贷款金额：');
+        loanBtn.addEventListener('click', async () => {
+          const input = await showPrompt('输入贷款金额：');
           const amount = parseInt(input || '', 10);
           if (amount > 0) takeLoan(state.roomId, amount);
         });
@@ -538,8 +639,8 @@ function renderActions(container: HTMLElement, state: GameState): void {
       if (currentPlayer.loan > 0) {
         const repayBtn = document.createElement('button');
         repayBtn.textContent = '偿还贷款';
-        repayBtn.addEventListener('click', () => {
-          const input = window.prompt(`输入还款金额（最大 $${Math.min(currentPlayer.cash, currentPlayer.loan)}）：`);
+        repayBtn.addEventListener('click', async () => {
+          const input = await showPrompt(`输入还款金额（最大 $${Math.min(currentPlayer.cash, currentPlayer.loan)}）：`);
           const amount = parseInt(input || '', 10);
           if (amount > 0) repayLoan(state.roomId, amount);
         });
@@ -550,8 +651,8 @@ function renderActions(container: HTMLElement, state: GameState): void {
       if (tile.type === 'lottery') {
         const lotteryBtn = document.createElement('button');
         lotteryBtn.textContent = '投注乐透 ($1000)';
-        lotteryBtn.addEventListener('click', () => {
-          const input = window.prompt('选择 0-9 的号码：');
+        lotteryBtn.addEventListener('click', async () => {
+          const input = await showPrompt('选择 0-9 的号码：');
           const number = parseInt(input || '', 10);
           if (!Number.isNaN(number)) placeLotteryBet(state.roomId, number);
         });
@@ -562,16 +663,22 @@ function renderActions(container: HTMLElement, state: GameState): void {
       if (tile.type === 'magic') {
         const magicBtn = document.createElement('button');
         magicBtn.textContent = '魔法屋施法';
-        magicBtn.addEventListener('click', () => {
+        magicBtn.addEventListener('click', async () => {
           const targets = state.players.filter((p) => !p.isBankrupt);
-          const targetLines = targets.map((p, i) => `${i + 1}. ${p.username}`).join('\n');
-          const targetChoice = window.prompt(`选择目标：\n${targetLines}`);
+          const targetChoice = await showPrompt('选择目标：', {
+            choices: targets.map((p, i) => ({ value: String(i + 1), label: `${i + 1}. ${p.username}` })),
+          });
           const targetIdx = parseInt(targetChoice || '', 10) - 1;
           const target = targets[targetIdx];
           if (!target) return;
-          const spellChoice = window.prompt(
-            '选择法术：\n1. 交换现金\n2. 送走神明\n3. 抢夺卡片\n4. 关进监狱3天'
-          );
+          const spellChoice = await showPrompt('选择法术：', {
+            choices: [
+              { value: '1', label: '1. 交换现金' },
+              { value: '2', label: '2. 送走神明' },
+              { value: '3', label: '3. 抢夺卡片' },
+              { value: '4', label: '4. 关进监狱3天' },
+            ],
+          });
           const spellIdx = parseInt(spellChoice || '', 10);
           const spells: ('swapCash' | 'dismissSpirit' | 'stealCard' | 'jail')[] = [
             'swapCash',
@@ -589,16 +696,16 @@ function renderActions(container: HTMLElement, state: GameState): void {
       if (currentPlayer.cards.length > 0) {
         const cardBtn = document.createElement('button');
         cardBtn.textContent = `使用卡片 (${currentPlayer.cards.length})`;
-        cardBtn.addEventListener('click', () => {
-          const lines = currentPlayer.cards.map((c, i) => {
+        cardBtn.addEventListener('click', async () => {
+          const cardChoices = currentPlayer.cards.map((c, i) => {
             const def = CARD_DEFINITIONS[c.cardId];
-            return `${i + 1}. ${def?.name ?? c.cardId}`;
+            return { value: String(i + 1), label: `${i + 1}. ${def?.name ?? c.cardId}` };
           });
-          const choice = window.prompt(`选择卡片：\n${lines.join('\n')}`);
+          const choice = await showPrompt('选择卡片：', { choices: cardChoices });
           const idx = parseInt(choice || '', 10) - 1;
           const card = currentPlayer.cards[idx];
           if (!card) return;
-          const target = promptCardTarget(state, card.cardId);
+          const target = await promptCardTarget(state, card.cardId);
           useCard(state.roomId, card.instanceId, target);
         });
         el.appendChild(cardBtn);
@@ -608,16 +715,16 @@ function renderActions(container: HTMLElement, state: GameState): void {
       if (currentPlayer.items.length > 0) {
         const itemBtn = document.createElement('button');
         itemBtn.textContent = `使用道具 (${currentPlayer.items.reduce((s, i) => s + i.quantity, 0)})`;
-        itemBtn.addEventListener('click', () => {
-          const lines = currentPlayer.items.map((it, i) => {
+        itemBtn.addEventListener('click', async () => {
+          const itemChoices = currentPlayer.items.map((it, i) => {
             const def = ITEM_DEFINITIONS[it.itemId];
-            return `${i + 1}. ${def?.name ?? it.itemId} ×${it.quantity}`;
+            return { value: String(i + 1), label: `${i + 1}. ${def?.name ?? it.itemId} ×${it.quantity}` };
           });
-          const choice = window.prompt(`选择道具：\n${lines.join('\n')}`);
+          const choice = await showPrompt('选择道具：', { choices: itemChoices });
           const idx = parseInt(choice || '', 10) - 1;
           const item = currentPlayer.items[idx];
           if (!item) return;
-          const target = promptItemTarget(state, item.itemId);
+          const target = await promptItemTarget(state, item.itemId);
           useItem(state.roomId, item.itemId, target);
         });
         el.appendChild(itemBtn);
@@ -669,10 +776,12 @@ function renderStockMarket(container: HTMLElement, state: GameState): void {
       ? state.players.find((p) => p.id === company.chairmanPlayerId)?.username
       : '无';
     const tr = document.createElement('tr');
+    const fluctuationClass = stock.fluctuation >= 0 ? 'stock-up' : 'stock-down';
+    const fluctuationSign = stock.fluctuation >= 0 ? '+' : '';
     tr.innerHTML = `
       <td>${stock.name}<br><small>董事长：${chairman}</small></td>
       <td>$${stock.price}</td>
-      <td>${stock.fluctuation >= 0 ? '+' : ''}${stock.fluctuation}%</td>
+      <td class="${fluctuationClass}">${fluctuationSign}${stock.fluctuation}%</td>
       <td>${holding}</td>
       <td></td>
     `;
@@ -707,34 +816,40 @@ function renderLogs(container: HTMLElement, state: GameState): void {
   });
 }
 
-function promptCardTarget(state: GameState, cardId: string): CardUseTarget {
+async function promptCardTarget(state: GameState, cardId: string): Promise<CardUseTarget> {
   const target: CardUseTarget = {};
   if (cardId === 'rebuild') {
-    target.targetTileIndex = parseInt(window.prompt('输入改建地块索引：') || '', 10);
-    target.buildingType = window.prompt(
-      '输入建筑类型（house/chainStore/park/mall/hotel/gasStation/lab）：'
-    ) as BuildingType | undefined;
+    const tileInput = await showPrompt('输入改建地块索引：');
+    target.targetTileIndex = parseInt(tileInput || '', 10);
+    const typeInput = await showPrompt('输入建筑类型（house/chainStore/park/mall/hotel/gasStation/lab）：');
+    target.buildingType = typeInput as BuildingType | undefined;
   } else if (cardId === 'priceRise' || cardId === 'seal' || cardId === 'angel' || cardId === 'devil') {
-    target.targetGroup = parseInt(window.prompt('输入目标路段 group 编号：') || '', 10);
+    const groupInput = await showPrompt('输入目标路段 group 编号：');
+    target.targetGroup = parseInt(groupInput || '', 10);
   } else if (cardId === 'alliance' || cardId === 'turnAround' || cardId === 'stay' || cardId === 'turtle' || cardId === 'sleepwalk' || cardId === 'frame' || cardId === 'snatch' || cardId === 'equalPoverty') {
-    const lines = state.players.map((p, i) => `${i + 1}. ${p.username}`);
-    const choice = window.prompt(`选择目标玩家：\n${lines.join('\n')}`);
+    const choice = await showPrompt('选择目标玩家：', {
+      choices: state.players.map((p, i) => ({ value: String(i + 1), label: `${i + 1}. ${p.username}` })),
+    });
     const idx = parseInt(choice || '', 10) - 1;
     target.targetPlayerId = state.players[idx]?.id;
   } else if (cardId === 'swapLand' || cardId === 'auction' || cardId === 'monster' || cardId === 'demolish' || cardId === 'swapHouse') {
-    target.targetTileIndex = parseInt(window.prompt('输入目标地块索引：') || '', 10);
+    const tileInput = await showPrompt('输入目标地块索引：');
+    target.targetTileIndex = parseInt(tileInput || '', 10);
   } else if (cardId === 'summonSpirit') {
-    target.targetPlayerId = window.prompt('输入神明 ID（如 smallWealthGod）：') || undefined;
+    const spiritInput = await showPrompt('输入神明 ID（如 smallWealthGod）：');
+    target.targetPlayerId = spiritInput || undefined;
   }
   return target;
 }
 
-function promptItemTarget(state: GameState, itemId: string): ItemUseTarget {
+async function promptItemTarget(state: GameState, itemId: string): Promise<ItemUseTarget> {
   const target: ItemUseTarget = {};
   if (itemId === 'remoteDice') {
-    target.diceValue = parseInt(window.prompt('输入要控制的骰子点数 1-6：') || '', 10);
+    const diceInput = await showPrompt('输入要控制的骰子点数 1-6：');
+    target.diceValue = parseInt(diceInput || '', 10);
   } else if (itemId === 'barrier' || itemId === 'mine' || itemId === 'timeBomb' || itemId === 'missile') {
-    target.targetTileIndex = parseInt(window.prompt('输入目标地块索引：') || '', 10);
+    const tileInput = await showPrompt('输入目标地块索引：');
+    target.targetTileIndex = parseInt(tileInput || '', 10);
   }
   return target;
 }
