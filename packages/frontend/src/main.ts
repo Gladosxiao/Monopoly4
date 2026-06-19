@@ -184,25 +184,56 @@ function navigateToLogin(error?: string): void {
   const username = container.querySelector<HTMLInputElement>('#username')!;
   const password = container.querySelector<HTMLInputElement>('#password')!;
 
+  function translateAuthError(message: string): string {
+    const map: Record<string, string> = {
+      'Invalid credentials': '用户名或密码错误，请检查或先注册',
+      'Username already exists': '用户名已被注册，请更换或直接登录',
+      'Invalid username or password': '用户名至少 3 位，密码至少 6 位',
+      'Missing refresh token': '登录状态已失效，请重新登录',
+      'Invalid refresh token': '登录状态已过期，请重新登录',
+      'User not found': '用户不存在，请重新登录',
+      'Unauthorized': '未登录或登录已过期',
+      '登录已过期，请重新登录': '登录已过期，请重新登录',
+    };
+    return map[message] || message;
+  }
+
+  function clearErrorOnInput(): void {
+    const errorEl = container.querySelector('.error');
+    if (errorEl) errorEl.textContent = '';
+  }
+  username.addEventListener('input', clearErrorOnInput);
+  password.addEventListener('input', clearErrorOnInput);
+
   container.querySelector('#btn-login')!.addEventListener('click', async () => {
+    if (!username.value || !password.value) {
+      const errorEl = container.querySelector('.error');
+      if (errorEl) errorEl.textContent = '请输入用户名和密码';
+      return;
+    }
     try {
       const res = await login(username.value, password.value);
       saveAuth(res);
       currentUser = res.user;
       navigateToLobby();
     } catch (e: any) {
-      navigateToLogin(e.message);
+      navigateToLogin(translateAuthError(e.message));
     }
   });
 
   container.querySelector('#btn-register')!.addEventListener('click', async () => {
+    if (username.value.length < 3 || password.value.length < 6) {
+      const errorEl = container.querySelector('.error');
+      if (errorEl) errorEl.textContent = '用户名至少 3 位，密码至少 6 位';
+      return;
+    }
     try {
       const res = await register(username.value, password.value);
       saveAuth(res);
       currentUser = res.user;
       navigateToLobby();
     } catch (e: any) {
-      navigateToLogin(e.message);
+      navigateToLogin(translateAuthError(e.message));
     }
   });
 }
