@@ -12,7 +12,7 @@ import type {
   BuildingType,
 } from '@monopoly4/shared';
 import { CARD_DEFINITIONS, CARD_IDS, ITEM_DEFINITIONS, getSpiritDefinition } from '@monopoly4/shared';
-import { getCurrentPlayer, payMoney, transferMoney } from '../engine.js';
+import { getCurrentPlayer, payMoney, transferMoney, rebuildTile } from '../engine.js';
 
 export interface CardContext {
   targetPlayerId?: string;
@@ -120,6 +120,8 @@ const buyLand: CardEffect = (state, caster) => {
   }
   caster.cash -= price;
   tile.ownerId = caster.id;
+  tile.buildingType = 'house';
+  tile.level = 0;
   caster.properties.push(tileIndex);
   log(state, 'card:buyLand', caster.id, `${caster.username} 使用购地卡买下 ${tile.name}，花费 $${price}`);
   return { success: true };
@@ -168,6 +170,9 @@ const auction: CardEffect = (state, caster, ctx) => {
   const owner = findPlayer(state, tile.ownerId);
   if (!owner) return { success: false, message: '土地所有者不存在' };
   const price = Math.floor(tile.basePrice * (1 + tile.level * 0.5) * state.priceIndex);
+  if (caster.cash < price) {
+    return { success: false, message: '现金不足，无法拍卖' };
+  }
   caster.cash -= price;
   owner.cash += price;
   tile.ownerId = caster.id;
@@ -187,12 +192,15 @@ const angel: CardEffect = (state, caster, ctx) => {
   const group = ctx.targetGroup;
   if (group === undefined) return { success: false, message: '需要指定路段' };
   let count = 0;
-  state.map.tiles.forEach((tile) => {
-    if (tile.group === group && tile.type === 'property' && tile.ownerId && tile.level < 5) {
+  for (const tile of state.map.tiles) {
+    if (tile.group === group && tile.type === 'property' && tile.ownerId) {
+      const bt = tile.buildingType ?? 'house';
+      if (bt === 'chainStore' || bt === 'park' || bt === 'gasStation' || bt === 'lab') continue;
+      if (tile.level >= 5) continue;
       tile.level += 1;
       count += 1;
     }
-  });
+  }
   log(state, 'card:angel', caster.id, `${caster.username} 使用天使卡，路段 ${group} 的 ${count} 处建筑各升一级`);
   return { success: true };
 };
@@ -216,30 +224,11 @@ const monster: CardEffect = (state, caster, ctx) => {
   if (!tile || tile.type !== 'property' || !tile.ownerId || tile.level <= 0) {
     return { success: false, message: '需要选择有建筑的土地' };
   }
-  tile.level -= 1;
-  log(state, 'card:monster', caster.id, `${caster.username} 使用怪兽卡，${tile.name} 的建筑被摧毁一级`);
+  tile.level = 0;
+  tile.buildingType = 'house';
+  log(state, 'card:monster', caster.id, `${caster.username} 使用怪兽卡，${tile.name} 的建筑被彻底摧毁`);
   return { success: true };
 };
-
-function rebuildTile(state: GameState, player: Player, tileIndex: number, buildingType: BuildingType): { success: boolean; message?: string } {
-  const tile = state.map.tiles[tileIndex];
-  if (tile.type !== 'property' || tile.ownerId !== player.id) {
-    return { success: false, message: '只能改建自己的土地' };
-  }
-  if (tile.size === 'small') {
-    if (buildingType !== 'house' && buildingType !== 'chainStore') {
-      return { success: false, message: '小块土地只能改建为住宅或连锁店' };
-    }
-  } else if (tile.size === 'large') {
-    if (!['park', 'mall', 'hotel', 'gasStation', 'lab'].includes(buildingType)) {
-      return { success: false, message: '大块土地只能改建为特殊建筑' };
-    }
-  }
-  const oldType = tile.buildingType ?? 'house';
-  tile.buildingType = buildingType;
-  tile.level = buildingType === 'chainStore' ? 1 : oldType === 'chainStore' ? 0 : tile.level;
-  return { success: true };
-}
 
 const rebuild: CardEffect = (state, caster, ctx) => {
   const tileIndex = ctx.targetTileIndex;
@@ -247,7 +236,7 @@ const rebuild: CardEffect = (state, caster, ctx) => {
   if (tileIndex === undefined || !buildingType) {
     return { success: false, message: '请选择改建目标与建筑类型' };
   }
-  const result = rebuildTile(state, caster, tileIndex, buildingType);
+  const result = rebuildTile(state, tileIndex, buildingType);
   if (!result.success) return result;
   const tile = state.map.tiles[tileIndex];
   log(state, 'card:rebuild', caster.id, `${caster.username} 使用改建卡，将 ${tile.name} 改建`);
@@ -259,13 +248,19 @@ const demolish: CardEffect = (state, caster, ctx) => {
   if (!tile || tile.type !== 'property') {
     return { success: false, message: '需要选择土地' };
   }
-  // 优先拆建筑一级；无建筑时可清除陷阱（TODO：接入 TrapSystem 后扩展）
-  if (tile.level > 0) {
-    tile.level -= 1;
-    log(state, 'card:demolish', caster.id, `${caster.username} 使用拆除卡，${tile.name} 降一级`);
+  // 优先清除陷阱
+  if (tile.traps && tile.traps.length > 0) {
+    tile.traps.shift();
+    log(state, 'card:demolish', caster.id, `${caster.username} 使用拆除卡清除了 ${tile.name} 上的陷阱`);
     return { success: true };
   }
-  return { success: false, message: '该地块没有可拆除的建筑' };
+  // 降级建筑
+  if (tile.level > 0) {
+    tile.level -= 1;
+    log(state, 'card:demolish', caster.id, `${caster.username} 使用拆除卡拆除了 ${tile.name} 一级`);
+    return { success: true };
+  }
+  return { success: false, message: '该地块没有可拆除的建筑或陷阱' };
 };
 
 // ===== 扩展卡片占位 =====
@@ -419,6 +414,10 @@ export const CARD_EFFECT_REGISTRY: Record<string, CardEffect> = {
     const hadBomb = caster.statusEffects.some((e) => e.type === 'bomb');
     caster.spirit = undefined;
     caster.statusEffects = caster.statusEffects.filter((e) => e.type !== 'bomb');
+    if (hadSpirit) {
+      const spiritName = getSpiritDefinition(hadSpirit.spiritId)?.name ?? hadSpirit.spiritId;
+      log(state, 'spirit:dismissed', caster.id, `${caster.username} 送走神明: ${spiritName}`);
+    }
     if (hadSpirit || hadBomb) {
       log(state, 'card:dismissSpirit', caster.id, `${caster.username} 使用送神符`);
       return { success: true };
@@ -431,6 +430,7 @@ export const CARD_EFFECT_REGISTRY: Record<string, CardEffect> = {
     const spiritDef = getSpiritDefinition(spiritId);
     if (!spiritDef) return { success: false, message: '未知神明' };
     caster.spirit = { spiritId, remainingDays: spiritDef.duration };
+    log(state, 'spirit:attached', caster.id, `${caster.username} 获得神明附身: ${spiritDef.name}，持续 ${spiritDef.duration} 天`);
     log(state, 'card:summonSpirit', caster.id, `${caster.username} 使用请神符召唤 ${spiritDef.name}`);
     return { success: true };
   },

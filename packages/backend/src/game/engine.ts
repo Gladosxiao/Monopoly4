@@ -7,9 +7,9 @@
  * - 土地购买、升级、改建
  * - 过路费计算（住宅 / 连锁店 / 特殊建筑 / 神明 / 卡片 / 路段效果）
  * - 卡片与道具的使用入口
- * - 命运/新闻/公司事件结算
- * - 股票、保险等金融系统入口
  * - 回合结束与状态效果递减
+ *
+ * 详细设计见：docs/design/09-rent-system.md
  */
 
 import {
@@ -24,14 +24,18 @@ import {
   type RoadEffect,
   type CardUseTarget,
   type ItemUseTarget,
-  type VehicleType,
   SIMPLE_MAP,
   CHARACTERS,
   DEFAULT_COMPANIES,
   DEFAULT_STOCKS,
   CARD_IDS,
+  CARD_DEFINITIONS,
   getSpiritDefinition,
 } from '@monopoly4/shared';
+import { useCard as useCardSystem, type CardContext } from './cardSystem/index.js';
+import { buyCard as buyCardFromSystem, sellCard as sellCardFromSystem } from './cardSystem/index.js';
+import { useItem as useItemSystem, type ItemContext } from './itemSystem/index.js';
+import { buyItem as buyItemFromSystem, sellItem as sellItemFromSystem } from './itemSystem/index.js';
 import { triggerFateEvent, triggerNewsEvent, type EventEffect, type EventOutcome } from './eventSystem/index.js';
 import {
   tradeStock as tradeStockImpl,
@@ -45,14 +49,7 @@ import {
   applyCompanyProfit,
   claimInsurance,
 } from './financialSystem/index.js';
-import { useCard as useCardSystem, type CardContext } from './cardSystem/index.js';
-import { buyCard as buyCardFromSystem, sellCard as sellCardFromSystem } from './cardSystem/index.js';
-import { useItem as useItemSystem, type ItemContext } from './itemSystem/index.js';
-import { buyItem as buyItemFromSystem, sellItem as sellItemFromSystem } from './itemSystem/index.js';
 
-function generateId(): string {
-  return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
-}
 
 /**
  * 根据房间配置创建一局新游戏。
@@ -109,8 +106,12 @@ export function createGame(roomId: string, config: GameConfig, roomPlayers: Room
   };
 }
 
-export function getMaxDiceCount(vehicle: VehicleType): number {
-  switch (vehicle) {
+export function getDiceCount(player: Player): number {
+  return getMaxDiceCount(player);
+}
+
+export function getMaxDiceCount(player: Player): number {
+  switch (player.vehicle) {
     case 'bike':
       return 2;
     case 'car':
@@ -120,25 +121,18 @@ export function getMaxDiceCount(vehicle: VehicleType): number {
   }
 }
 
-/**
- * 兼容旧接口的别名。
- */
-export function getDiceCount(moveMode: VehicleType): number {
-  return getMaxDiceCount(moveMode);
-}
-
 /** 根据当前载具获取可选骰子数范围 */
-export function getAllowedDiceCounts(vehicle: VehicleType): number[] {
-  const max = getMaxDiceCount(vehicle);
+export function getAllowedDiceCounts(player: Player): number[] {
+  const max = getMaxDiceCount(player);
   return Array.from({ length: max }, (_, i) => i + 1);
 }
 
-export function rollDice(count: number): number {
-  let sum = 0;
+export function rollDice(count: number): number[] {
+  const dice: number[] = [];
   for (let i = 0; i < count; i++) {
-    sum += Math.floor(Math.random() * 6) + 1;
+    dice.push(Math.floor(Math.random() * 6) + 1);
   }
-  return sum;
+  return dice;
 }
 
 /**
@@ -150,18 +144,50 @@ export function roll(
   diceCount?: number
 ): { success: boolean; steps?: number; message?: string } {
   const player = getCurrentPlayer(state);
-  const max = getMaxDiceCount(player.vehicle);
+
+  // 停留卡：本回合不移动
+  if (hasStatusEffect(player, 'stay')) {
+    removeStatusEffect(player, 'stay');
+    state.logs.push({
+      timestamp: Date.now(),
+      type: 'player:stay',
+      actorId: player.id,
+      message: `${player.username} 受停留卡影响，本回合停留原地`,
+    });
+    state.logs.push({
+      timestamp: Date.now(),
+      type: 'status:triggered',
+      actorId: player.id,
+      message: `${player.username} 的停留卡生效，跳过本次移动`,
+    });
+    return { success: true, steps: 0 };
+  }
+
+  const max = getMaxDiceCount(player);
   const count = diceCount ?? max;
   if (count < 1 || count > max) {
     return { success: false, message: `当前载具最多可投 ${max} 颗骰子` };
   }
+
   state.selectedDiceCount = count;
-  const steps = rollDice(count);
+
+  const isRemote = player.nextDiceOverride !== undefined;
+  let steps: number;
+  let dice: number[];
+  if (isRemote) {
+    steps = player.nextDiceOverride!;
+    dice = [steps];
+    delete player.nextDiceOverride;
+  } else {
+    dice = rollDice(count);
+    steps = dice.reduce((sum, v) => sum + v, 0);
+  }
+
   state.logs.push({
     timestamp: Date.now(),
     type: 'player:roll',
     actorId: player.id,
-    message: `${player.username} 使用 ${count} 颗骰子，掷出 ${steps} 点`,
+    message: `${player.username} 掷出 ${count} 颗骰子，点数: [${dice.join(', ')}]，总计 ${steps} 点${isRemote ? '（遥控骰子）' : ''}`,
   });
   return { success: true, steps };
 }
@@ -188,6 +214,40 @@ function removeStatusEffect(player: Player, type: StatusEffect['type'], sourcePl
   player.statusEffects = player.statusEffects.filter(
     (e) => !(e.type === type && (sourcePlayerId === undefined || e.sourcePlayerId === sourcePlayerId))
   );
+}
+
+function canTakeTurn(player: Player): boolean {
+  return (
+    !hasStatusEffect(player, 'hibernation') &&
+    !hasStatusEffect(player, 'jail') &&
+    !hasStatusEffect(player, 'hospital') &&
+    !hasStatusEffect(player, 'sleepwalk')
+  );
+}
+
+function decrementSkipStatuses(state: GameState, player: Player): void {
+  const skipTypes: StatusEffect['type'][] = ['hibernation', 'jail', 'hospital', 'sleepwalk'];
+  const labels: Record<string, string> = {
+    hibernation: '冬眠',
+    jail: '入狱',
+    hospital: '住院',
+    sleepwalk: '梦游',
+  };
+  for (const type of skipTypes) {
+    const effect = player.statusEffects.find((e) => e.type === type);
+    if (!effect) continue;
+    effect.remainingDays -= 1;
+    const remaining = Math.max(0, effect.remainingDays);
+    if (effect.remainingDays <= 0) {
+      removeStatusEffect(player, type);
+    }
+    state.logs.push({
+      timestamp: Date.now(),
+      type: 'player:skipStatus',
+      actorId: player.id,
+      message: `${player.username} 因 ${labels[type]} 跳过回合，剩余 ${remaining} 天`,
+    });
+  }
 }
 
 function addRoadEffect(state: GameState, effect: RoadEffect): void {
@@ -333,12 +393,37 @@ export function calculateRent(
 
 export function movePlayer(state: GameState, steps: number): GameState {
   const player = getCurrentPlayer(state);
+
+  // 乌龟卡：步数固定为 1
+  if (hasStatusEffect(player, 'turtle')) {
+    steps = 1;
+    state.logs.push({
+      timestamp: Date.now(),
+      type: 'status:triggered',
+      actorId: player.id,
+      message: `${player.username} 的乌龟卡生效，步数固定为 1`,
+    });
+  }
+
+  // 转向卡：反向移动
+  if (player.pendingDirection === 'backward') {
+    steps = -steps;
+    delete player.pendingDirection;
+    state.logs.push({
+      timestamp: Date.now(),
+      type: 'status:triggered',
+      actorId: player.id,
+      message: `${player.username} 的转向卡生效，反向移动`,
+    });
+  }
+
   const oldPos = player.position;
   const pathLength = state.map.path.length;
-  const newPos = (oldPos + steps) % pathLength;
+  let newPos = (oldPos + steps) % pathLength;
+  if (newPos < 0) newPos += pathLength;
   player.position = newPos;
 
-  // 经过起点奖励（移动步数跨越起点时发放）
+  // 经过起点奖励（正向移动且跨越起点时发放）
   if (steps > 0 && oldPos + steps >= pathLength) {
     const salary = 10000;
     player.cash += salary;
@@ -350,7 +435,7 @@ export function movePlayer(state: GameState, steps: number): GameState {
     });
   }
 
-  state.lastRoll = steps;
+  state.lastRoll = Math.abs(steps);
   state.pendingTileIndex = newPos;
   state.status = 'acting';
 
@@ -359,7 +444,7 @@ export function movePlayer(state: GameState, steps: number): GameState {
     timestamp: Date.now(),
     type: 'player:move',
     actorId: player.id,
-    message: `${player.username} 掷出 ${steps} 点，移动到 ${tile.name}`,
+    message: `${player.username} 掷出 ${Math.abs(steps)} 点，移动到 ${tile.name}`,
   });
 
   return state;
@@ -369,8 +454,7 @@ export function movePlayer(state: GameState, steps: number): GameState {
  * 处理玩家到达当前地块后的效果。
  * - property：买地/升级/支付过路费
  * - tax：缴纳税款
- * - card：随机获得一张卡片（最多 15 张）
- * - coupon：获得点券
+ * - card/coupon30：获得点券
  * - fate/chance：触发命运事件
  * - news：触发全局新闻事件
  * - company：触发公司特效
@@ -393,11 +477,26 @@ export function handleTileEffect(state: GameState): GameState {
       if (owner && !owner.isBankrupt) {
         const { rent, hotelDays } = calculateRent(tile, owner, state, player);
         const finalRent = applyRentPayment(state, player, owner, rent);
+        if (finalRent > 0) {
+          state.logs.push({
+            timestamp: Date.now(),
+            type: 'rent:detail',
+            actorId: player.id,
+            targetId: owner.id,
+            message: `${player.username} 向 ${owner.username} 支付过路费 $${finalRent}（地块: ${tile.name}, 等级: ${tile.level}, 物价指数: ${state.priceIndex}）`,
+          });
+        }
         if (hotelDays && finalRent > 0) {
           player.statusEffects.push({
             type: 'hotelRest',
             remainingDays: hotelDays,
             sourcePlayerId: owner.id,
+          });
+          state.logs.push({
+            timestamp: Date.now(),
+            type: 'status:added',
+            actorId: player.id,
+            message: `${player.username} 获得状态: hotelRest，持续 ${hotelDays} 天`,
           });
           state.logs.push({
             timestamp: Date.now(),
@@ -413,21 +512,23 @@ export function handleTileEffect(state: GameState): GameState {
     const tax = 5000;
     payMoney(state, player, tax, '税款');
   } else if (tile.type === 'card') {
-    if (player.cards.length < 15) {
-      const cardId = CARD_IDS[Math.floor(Math.random() * CARD_IDS.length)];
-      player.cards.push({ instanceId: generateId(), cardId });
-      state.logs.push({
-        timestamp: Date.now(),
-        type: 'player:card',
-        actorId: player.id,
-        message: `${player.username} 在卡片格获得一张卡片`,
-      });
-    } else {
+    if (player.cards.length >= 15) {
       state.logs.push({
         timestamp: Date.now(),
         type: 'player:cardFull',
         actorId: player.id,
-        message: `${player.username} 的卡片背包已满，无法获得更多卡片`,
+        message: `${player.username} 经过卡片格，但卡片已满 15 张`,
+      });
+    } else {
+      const cardId = CARD_IDS[Math.floor(Math.random() * CARD_IDS.length)];
+      const def = CARD_DEFINITIONS[cardId];
+      const instanceId = `${cardId}-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+      player.cards.push({ instanceId, cardId });
+      state.logs.push({
+        timestamp: Date.now(),
+        type: 'player:card',
+        actorId: player.id,
+        message: `${player.username} 经过卡片格，获得 ${def.name}`,
       });
     }
   } else if (tile.type === 'coupon') {
@@ -670,6 +771,12 @@ function applyEventEffects(state: GameState, player: Player, effects: EventEffec
         });
         state.logs.push({
           timestamp: Date.now(),
+          type: 'status:added',
+          actorId: player.id,
+          message: `${player.username} 获得状态: ${effect.status}，持续 ${effect.days} 天`,
+        });
+        state.logs.push({
+          timestamp: Date.now(),
           type: 'event:status',
           actorId: player.id,
           message: `${player.username} ${effect.reason}，获得 ${effect.status} 状态 ${effect.days} 天`,
@@ -853,6 +960,12 @@ function applyEventEffects(state: GameState, player: Player, effects: EventEffec
         for (const p of state.players) {
           if (p.isBankrupt || p.vehicle !== effect.vehicle) continue;
           p.statusEffects.push({ type: 'stay', remainingDays: effect.days, data: { reason: effect.reason } });
+          state.logs.push({
+            timestamp: Date.now(),
+            type: 'status:added',
+            actorId: p.id,
+            message: `${p.username} 获得状态: stay，持续 ${effect.days} 天`,
+          });
         }
         state.logs.push({
           timestamp: Date.now(),
@@ -890,13 +1003,31 @@ export function buyProperty(state: GameState): { success: boolean; message?: str
   const tile = state.map.tiles[tileIndex];
 
   if (tile.type !== 'property') {
+    state.logs.push({
+      timestamp: Date.now(),
+      type: 'action:failed',
+      actorId: player.id,
+      message: `${player.username} 购买土地失败: 当前地块不可购买`,
+    });
     return { success: false, message: '当前地块不可购买' };
   }
   if (tile.ownerId) {
+    state.logs.push({
+      timestamp: Date.now(),
+      type: 'action:failed',
+      actorId: player.id,
+      message: `${player.username} 购买土地失败: 该地块已有主人`,
+    });
     return { success: false, message: '该地块已有主人' };
   }
   const price = Math.floor(tile.basePrice * state.priceIndex);
   if (player.cash < price) {
+    state.logs.push({
+      timestamp: Date.now(),
+      type: 'action:failed',
+      actorId: player.id,
+      message: `${player.username} 购买土地失败: 现金不足`,
+    });
     return { success: false, message: '现金不足' };
   }
 
@@ -925,19 +1056,43 @@ export function upgradeProperty(state: GameState): { success: boolean; message?:
   const tile = state.map.tiles[tileIndex];
 
   if (tile.type !== 'property' || tile.ownerId !== player.id) {
+    state.logs.push({
+      timestamp: Date.now(),
+      type: 'action:failed',
+      actorId: player.id,
+      message: `${player.username} 升级土地失败: 只能升级自己的土地`,
+    });
     return { success: false, message: '只能升级自己的土地' };
   }
 
   const bt = tile.buildingType ?? 'house';
   // 连锁店、公园、加油站不可升级
   if (bt === 'chainStore' || bt === 'park' || bt === 'gasStation') {
+    state.logs.push({
+      timestamp: Date.now(),
+      type: 'action:failed',
+      actorId: player.id,
+      message: `${player.username} 升级土地失败: 该建筑类型无法升级`,
+    });
     return { success: false, message: '该建筑类型无法升级' };
   }
   if (tile.level >= 5) {
+    state.logs.push({
+      timestamp: Date.now(),
+      type: 'action:failed',
+      actorId: player.id,
+      message: `${player.username} 升级土地失败: 已达到最高等级`,
+    });
     return { success: false, message: '已达到最高等级' };
   }
   const cost = Math.floor(tile.basePrice * (tile.level + 1) * 0.5 * state.priceIndex);
   if (player.cash < cost) {
+    state.logs.push({
+      timestamp: Date.now(),
+      type: 'action:failed',
+      actorId: player.id,
+      message: `${player.username} 升级土地失败: 现金不足`,
+    });
     return { success: false, message: '现金不足' };
   }
 
@@ -966,18 +1121,36 @@ export function rebuildTile(
   const tile = state.map.tiles[tileIndex];
 
   if (tile.type !== 'property' || tile.ownerId !== player.id) {
+    state.logs.push({
+      timestamp: Date.now(),
+      type: 'action:failed',
+      actorId: player.id,
+      message: `${player.username} 改建土地失败: 只能改建自己的土地`,
+    });
     return { success: false, message: '只能改建自己的土地' };
   }
 
   // 小块土地：住宅 ↔ 连锁店
   if (tile.size === 'small') {
     if (buildingType !== 'house' && buildingType !== 'chainStore') {
+      state.logs.push({
+        timestamp: Date.now(),
+        type: 'action:failed',
+        actorId: player.id,
+        message: `${player.username} 改建土地失败: 小块土地只能改建为住宅或连锁店`,
+      });
       return { success: false, message: '小块土地只能改建为住宅或连锁店' };
     }
   }
   // 大块土地：公园 / 商场 / 旅馆 / 加油站 / 研究所
   else if (tile.size === 'large') {
     if (!['park', 'mall', 'hotel', 'gasStation', 'lab'].includes(buildingType)) {
+      state.logs.push({
+        timestamp: Date.now(),
+        type: 'action:failed',
+        actorId: player.id,
+        message: `${player.username} 改建土地失败: 大块土地只能改建为特殊建筑`,
+      });
       return { success: false, message: '大块土地只能改建为特殊建筑' };
     }
   }
@@ -1091,12 +1264,36 @@ export function endTurn(state: GameState): GameState {
   // 先处理地块效果
   state = handleTileEffect(state);
 
-  // 找到下一个未破产玩家
+  // 找到下一个可以行动的玩家（未破产且未冬眠/入狱/住院/梦游）
   let nextIndex = (state.currentPlayerIndex + 1) % state.players.length;
   let loops = 0;
-  while (state.players[nextIndex].isBankrupt && loops < state.players.length) {
-    nextIndex = (nextIndex + 1) % state.players.length;
-    loops++;
+  while (loops < state.players.length) {
+    const candidate = state.players[nextIndex];
+    if (candidate.isBankrupt || !canTakeTurn(candidate)) {
+      if (!candidate.isBankrupt) {
+        decrementSkipStatuses(state, candidate);
+        const skipTypes: StatusEffect['type'][] = ['hibernation', 'jail', 'hospital', 'sleepwalk'];
+        const labels: Record<string, string> = {
+          hibernation: '冬眠',
+          jail: '入狱',
+          hospital: '住院',
+          sleepwalk: '梦游',
+        };
+        const active = skipTypes.filter((t) => hasStatusEffect(candidate, t));
+        if (active.length > 0) {
+          state.logs.push({
+            timestamp: Date.now(),
+            type: 'turn:skipped',
+            actorId: candidate.id,
+            message: `${candidate.username} 因 ${active.map((t) => labels[t]).join('、')} 跳过回合`,
+          });
+        }
+      }
+      nextIndex = (nextIndex + 1) % state.players.length;
+      loops++;
+      continue;
+    }
+    break;
   }
 
   const activePlayers = state.players.filter((p) => !p.isBankrupt);
@@ -1121,10 +1318,16 @@ export function endTurn(state: GameState): GameState {
   if (dayAdvanced) {
     state.day += 1;
     decrementEffects(state);
-    if (state.day > 30) {
+    if (state.day >= 30) {
       state.month += 1;
       state.day = 1;
+      const oldPriceIndex = state.priceIndex;
       state.priceIndex = Math.min(6, calculatePriceIndex(state));
+      state.logs.push({
+        timestamp: Date.now(),
+        type: 'month:priceIndex',
+        message: `第 ${state.month} 月开始，物价指数从 ${oldPriceIndex} 变为 ${state.priceIndex}`,
+      });
       settleMonth(state);
     } else if (state.day === 15) {
       // 每月 15 日发放分红
@@ -1143,15 +1346,33 @@ export function endTurn(state: GameState): GameState {
 function decrementEffects(state: GameState): void {
   // 玩家状态效果
   for (const player of state.players) {
-    if (player.statusEffects.length > 0) {
-      player.statusEffects = player.statusEffects
-        .map((e) => ({ ...e, remainingDays: e.remainingDays - 1 }))
-        .filter((e) => e.remainingDays > 0);
+    const remainingStatuses: typeof player.statusEffects = [];
+    for (const effect of player.statusEffects) {
+      effect.remainingDays -= 1;
+      if (effect.remainingDays <= 0) {
+        state.logs.push({
+          timestamp: Date.now(),
+          type: 'status:expired',
+          actorId: player.id,
+          message: `${player.username} 的状态 ${effect.type} 已到期`,
+        });
+      } else {
+        remainingStatuses.push(effect);
+      }
     }
+    player.statusEffects = remainingStatuses;
+
     // 神明持续天数
     if (player.spirit) {
       player.spirit.remainingDays -= 1;
       if (player.spirit.remainingDays <= 0) {
+        const spiritName = getSpiritDefinition(player.spirit.spiritId)?.name ?? player.spirit.spiritId;
+        state.logs.push({
+          timestamp: Date.now(),
+          type: 'spirit:expired',
+          actorId: player.id,
+          message: `${player.username} 的 ${spiritName} 已到期离开`,
+        });
         player.spirit = undefined;
       }
     }
@@ -1164,9 +1385,20 @@ function decrementEffects(state: GameState): void {
     }
   }
   // 路段效果
-  state.roadEffects = state.roadEffects
-    .map((e) => ({ ...e, remainingDays: e.remainingDays - 1 }))
-    .filter((e) => e.remainingDays > 0);
+  const remainingRoads: RoadEffect[] = [];
+  for (const effect of state.roadEffects) {
+    effect.remainingDays -= 1;
+    if (effect.remainingDays <= 0) {
+      state.logs.push({
+        timestamp: Date.now(),
+        type: 'roadEffect:expired',
+        message: `路段 ${effect.group} 的 ${effect.type} 效果已到期`,
+      });
+    } else {
+      remainingRoads.push(effect);
+    }
+  }
+  state.roadEffects = remainingRoads;
   // 市场状态
   if (state.marketStatus.loanFrozenDays > 0) {
     state.marketStatus.loanFrozenDays -= 1;
@@ -1289,4 +1521,8 @@ export function canRebuild(state: GameState, playerId: string): boolean {
 
 export function canUseCard(state: GameState, playerId: string): boolean {
   return state.status === 'acting' && getCurrentPlayer(state).id === playerId;
+}
+
+export function canUseItem(state: GameState, playerId: string): boolean {
+  return (state.status === 'acting' || state.status === 'rolling') && getCurrentPlayer(state).id === playerId;
 }

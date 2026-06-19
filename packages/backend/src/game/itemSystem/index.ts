@@ -77,6 +77,7 @@ export function buyItem(
 }
 
 export function canUseItem(state: GameState, playerId: string): boolean {
+  if (state.status !== 'acting' && state.status !== 'rolling') return false;
   const player = state.players.find((p) => p.id === playerId);
   if (!player) return false;
   const current = getCurrentPlayer(state);
