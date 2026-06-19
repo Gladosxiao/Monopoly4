@@ -18,6 +18,7 @@ import {
   register,
   login,
   getMe,
+  getAuthConfig,
   createRoom,
   listRooms,
   listMaps,
@@ -192,20 +193,29 @@ function clean() {
   app.innerHTML = '';
 }
 
-function navigateToLogin(error?: string): void {
+async function navigateToLogin(error?: string): Promise<void> {
   clean();
+  let allowRegistration = false;
+  try {
+    const config = await getAuthConfig();
+    allowRegistration = config.allowRegistration;
+  } catch {
+    allowRegistration = false;
+  }
+
   const container = document.createElement('div');
   container.className = 'page login-page';
   container.innerHTML = `
     <h1>大富翁4 Web</h1>
     <div class="auth-box">
-      <h2>登录 / 注册</h2>
+      <h2>登录</h2>
       ${error ? `<div class="error">${error}</div>` : ''}
+      <div class="auth-hint">测试账号：test / test123</div>
       <input type="text" id="username" placeholder="用户名" />
-      <input type="password" id="password" placeholder="密码（至少6位）" />
+      <input type="password" id="password" placeholder="密码" />
       <div class="buttons">
         <button id="btn-login">登录</button>
-        <button id="btn-register">注册</button>
+        ${allowRegistration ? '<button id="btn-register">注册</button>' : ''}
       </div>
     </div>
   `;
@@ -216,13 +226,14 @@ function navigateToLogin(error?: string): void {
 
   function translateAuthError(message: string): string {
     const map: Record<string, string> = {
-      'Invalid credentials': '用户名或密码错误，请检查或先注册',
+      'Invalid credentials': '用户名或密码错误',
       'Username already exists': '用户名已被注册，请更换或直接登录',
       'Invalid username or password': '用户名至少 3 位，密码至少 6 位',
       'Missing refresh token': '登录状态已失效，请重新登录',
       'Invalid refresh token': '登录状态已过期，请重新登录',
       'User not found': '用户不存在，请重新登录',
       'Unauthorized': '未登录或登录已过期',
+      'Registration is disabled': '当前不开放注册',
       '登录已过期，请重新登录': '登录已过期，请重新登录',
     };
     return map[message] || message;
@@ -251,21 +262,23 @@ function navigateToLogin(error?: string): void {
     }
   });
 
-  container.querySelector('#btn-register')!.addEventListener('click', async () => {
-    if (username.value.length < 3 || password.value.length < 6) {
-      const errorEl = container.querySelector('.error');
-      if (errorEl) errorEl.textContent = '用户名至少 3 位，密码至少 6 位';
-      return;
-    }
-    try {
-      const res = await register(username.value, password.value);
-      saveAuth(res);
-      currentUser = res.user;
-      navigateToLobby();
-    } catch (e: any) {
-      navigateToLogin(translateAuthError(e.message));
-    }
-  });
+  if (allowRegistration) {
+    container.querySelector('#btn-register')!.addEventListener('click', async () => {
+      if (username.value.length < 3 || password.value.length < 6) {
+        const errorEl = container.querySelector('.error');
+        if (errorEl) errorEl.textContent = '用户名至少 3 位，密码至少 6 位';
+        return;
+      }
+      try {
+        const res = await register(username.value, password.value);
+        saveAuth(res);
+        currentUser = res.user;
+        navigateToLobby();
+      } catch (e: any) {
+        navigateToLogin(translateAuthError(e.message));
+      }
+    });
+  }
 }
 
 async function navigateToLobby(error?: string): Promise<void> {
@@ -275,7 +288,7 @@ async function navigateToLobby(error?: string): Promise<void> {
       const { user } = await getMe();
       currentUser = user;
     } catch {
-      navigateToLogin();
+      await navigateToLogin();
       return;
     }
   }
@@ -303,11 +316,11 @@ async function navigateToLobby(error?: string): Promise<void> {
   `;
   app.appendChild(container);
 
-  container.querySelector('#btn-logout')!.addEventListener('click', () => {
+  container.querySelector('#btn-logout')!.addEventListener('click', async () => {
     logout();
     disconnectSocket();
     currentUser = null;
-    navigateToLogin();
+    await navigateToLogin();
   });
 
   const mapSelect = container.querySelector<HTMLSelectElement>('#map-select')!;
@@ -375,7 +388,7 @@ async function navigateToLobby(error?: string): Promise<void> {
 async function navigateToRoom(roomId: string, error?: string): Promise<void> {
   clean();
   if (!currentUser) {
-    navigateToLogin();
+    await navigateToLogin();
     return;
   }
 
@@ -515,7 +528,7 @@ function renderRoomPlayers(container: HTMLElement, room: Room): void {
 async function navigateToGame(roomId: string): Promise<void> {
   clean();
   if (!currentUser) {
-    navigateToLogin();
+    await navigateToLogin();
     return;
   }
 
@@ -1212,8 +1225,10 @@ if (new URLSearchParams(window.location.search).get('test') === '1') {
 }
 
 // 启动
-if (currentUser) {
-  navigateToLobby();
-} else {
-  navigateToLogin();
-}
+(async () => {
+  if (currentUser) {
+    navigateToLobby();
+  } else {
+    await navigateToLogin();
+  }
+})();

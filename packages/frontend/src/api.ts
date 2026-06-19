@@ -107,6 +107,10 @@ export function getMe(): Promise<{ user: PublicUser }> {
   return api<{ user: PublicUser }>('/auth/me');
 }
 
+export function getAuthConfig(): Promise<{ allowRegistration: boolean }> {
+  return api<{ allowRegistration: boolean }>('/auth/config');
+}
+
 export function listRooms(): Promise<Room[]> {
   return api<Room[]>('/rooms');
 }

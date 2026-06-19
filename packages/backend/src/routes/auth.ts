@@ -13,10 +13,15 @@ import {
 } from '../auth.js';
 import type { AuthRequest } from '../auth.js';
 import type { AuthResponse, PublicUser, RegisterRequest, LoginRequest } from '@monopoly4/shared';
+import { isRegistrationAllowed } from '../userConfig.js';
 
 const router = Router();
 
 router.post('/register', (req, res) => {
+  if (!isRegistrationAllowed()) {
+    res.status(403).json({ error: 'Registration is disabled' });
+    return;
+  }
   const { username, password } = req.body as RegisterRequest;
   if (!username || !password || username.length < 3 || password.length < 6) {
     res.status(400).json({ error: 'Invalid username or password' });
@@ -98,6 +103,10 @@ router.post('/logout', (req, res) => {
 
 router.get('/me', authMiddleware, (req: AuthRequest, res) => {
   res.json({ user: req.user });
+});
+
+router.get('/config', (_req, res) => {
+  res.json({ allowRegistration: isRegistrationAllowed() });
 });
 
 export default router;

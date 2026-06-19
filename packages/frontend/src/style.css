@@ -291,6 +291,17 @@ select:focus {
   text-align: center;
 }
 
+.auth-box .auth-hint {
+  background: rgba(46, 204, 113, 0.15);
+  border: 1px solid rgba(46, 204, 113, 0.3);
+  color: #2ecc71;
+  padding: var(--space-xs);
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-sm);
+  text-align: center;
+  margin-bottom: var(--space-sm);
+}
+
 .auth-box input {
   width: 100%;
   margin-bottom: var(--space-sm);

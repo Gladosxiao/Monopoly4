@@ -2,11 +2,12 @@
  * Auth 路由单元测试（不依赖 supertest，直接调用路由处理函数）
  */
 
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import type { Request, Response } from 'express';
 import type { AuthResponse } from '@monopoly4/shared';
 import authRoutes from './auth.js';
 import { db } from '../db.js';
+import * as userConfig from '../userConfig.js';
 
 function mockReq(body: unknown, headers: Record<string, string> = {}): Partial<Request> {
   return {
@@ -17,7 +18,7 @@ function mockReq(body: unknown, headers: Record<string, string> = {}): Partial<R
 
 interface MockResponse extends Response {
   _status: number;
-  _json: AuthResponse & { error?: string } & { user?: { username: string } };
+  _json: AuthResponse & { error?: string } & { user?: { username: string }; allowRegistration?: boolean };
 }
 
 function mockRes(): MockResponse {
@@ -37,7 +38,6 @@ function mockRes(): MockResponse {
 }
 
 function getLoginHandler() {
-  // Express Router 的 stack 中找到 login POST handler
   const route = (authRoutes as any).stack.find(
     (layer: any) => layer.route && layer.route.path === '/login' && layer.route.methods.post
   );
@@ -62,7 +62,14 @@ function getMeHandler() {
   const route = (authRoutes as any).stack.find(
     (layer: any) => layer.route && layer.route.path === '/me' && layer.route.methods.get
   );
-  return route.route.stack[1].handle; // 跳过 authMiddleware
+  return route.route.stack[1].handle;
+}
+
+function getConfigHandler() {
+  const route = (authRoutes as any).stack.find(
+    (layer: any) => layer.route && layer.route.path === '/config' && layer.route.methods.get
+  );
+  return route.route.stack[0].handle;
 }
 
 describe('Auth Routes', () => {
@@ -71,9 +78,22 @@ describe('Auth Routes', () => {
       DELETE FROM refresh_tokens;
       DELETE FROM users;
     `);
+    userConfig.resetUsersConfigCache();
+    vi.restoreAllMocks();
   });
 
-  it('注册成功后返回 accessToken 和 refreshToken', () => {
+  it('配置关闭注册时，注册接口返回 403', () => {
+    vi.spyOn(userConfig, 'isRegistrationAllowed').mockReturnValue(false);
+    const req = mockReq({ username: 'alice', password: '123456' });
+    const res = mockRes();
+    getRegisterHandler()(req, res);
+
+    expect(res._status).toBe(403);
+    expect(res._json.error).toBe('Registration is disabled');
+  });
+
+  it('配置开启注册时，注册成功后返回 accessToken 和 refreshToken', () => {
+    vi.spyOn(userConfig, 'isRegistrationAllowed').mockReturnValue(true);
     const req = mockReq({ username: 'alice', password: '123456' });
     const res = mockRes();
     getRegisterHandler()(req, res);
@@ -81,10 +101,11 @@ describe('Auth Routes', () => {
     expect(res._status).toBe(201);
     expect(res._json.accessToken).toBeDefined();
     expect(res._json.refreshToken).toBeDefined();
-    expect(res._json.user.username).toBe('alice');
+    expect(res._json.user!.username).toBe('alice');
   });
 
-  it('注册后可用相同密码登录', () => {
+  it('配置开启注册后可用相同密码登录', () => {
+    vi.spyOn(userConfig, 'isRegistrationAllowed').mockReturnValue(true);
     getRegisterHandler()(mockReq({ username: 'bob', password: '123456' }), mockRes());
 
     const req = mockReq({ username: 'bob', password: '123456' });
@@ -94,10 +115,11 @@ describe('Auth Routes', () => {
     expect(res._status).toBe(200);
     expect(res._json.accessToken).toBeDefined();
     expect(res._json.refreshToken).toBeDefined();
-    expect(res._json.user.username).toBe('bob');
+    expect(res._json.user!.username).toBe('bob');
   });
 
   it('登录时密码错误返回 401 并提示 Invalid credentials', () => {
+    vi.spyOn(userConfig, 'isRegistrationAllowed').mockReturnValue(true);
     getRegisterHandler()(mockReq({ username: 'carol', password: '123456' }), mockRes());
 
     const req = mockReq({ username: 'carol', password: 'wrongpass' });
@@ -118,6 +140,7 @@ describe('Auth Routes', () => {
   });
 
   it('刷新接口用有效 refreshToken 换取新 token', () => {
+    vi.spyOn(userConfig, 'isRegistrationAllowed').mockReturnValue(true);
     const registerRes = mockRes();
     getRegisterHandler()(mockReq({ username: 'dave', password: '123456' }), registerRes);
 
@@ -131,6 +154,7 @@ describe('Auth Routes', () => {
   });
 
   it('用 accessToken 可访问 /me', () => {
+    vi.spyOn(userConfig, 'isRegistrationAllowed').mockReturnValue(true);
     const registerRes = mockRes();
     getRegisterHandler()(mockReq({ username: 'eve', password: '123456' }), registerRes);
 
@@ -140,6 +164,14 @@ describe('Auth Routes', () => {
     getMeHandler()(req, res);
 
     expect(res._status).toBe(200);
-    expect(res._json.user.username).toBe('eve');
+    expect(res._json.user!.username).toBe('eve');
+  });
+
+  it('读取认证配置接口返回 allowRegistration', () => {
+    vi.spyOn(userConfig, 'isRegistrationAllowed').mockReturnValue(false);
+    const res = mockRes();
+    getConfigHandler()(mockReq({}), res);
+    expect(res._status).toBe(200);
+    expect(res._json.allowRegistration).toBe(false);
   });
 });

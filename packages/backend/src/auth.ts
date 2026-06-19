@@ -6,8 +6,8 @@ import type { Request, Response, NextFunction } from 'express';
 import type { PublicUser, User } from '@monopoly4/shared';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'monopoly4-dev-secret';
-const ACCESS_TOKEN_TTL = '15m';
-const REFRESH_TOKEN_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+const ACCESS_TOKEN_TTL = (process.env.JWT_ACCESS_TTL || '15m') as jwt.SignOptions['expiresIn'];
+const REFRESH_TOKEN_TTL_MS = parseInt(process.env.JWT_REFRESH_TTL_MS || '', 10) || 7 * 24 * 60 * 60 * 1000;
 
 export function hashPassword(password: string): string {
   return bcrypt.hashSync(password, 10);

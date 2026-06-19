@@ -20,6 +20,17 @@ packages/map-generator/.venv/
 packages/map-generator/output/
 __pycache__/
 
+# Secrets & environment
+.env
+.env.local
+.env.production
+packages/backend/users.config.json
+
+# Example templates are safe to commit
+!packages/backend/.env.example
+!packages/backend/users.config.example.json
+
+# TypeScript build info
 tsconfig.tsbuildinfo
 
 # Coverage reports

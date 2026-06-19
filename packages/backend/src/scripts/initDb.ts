@@ -1,4 +1,5 @@
 import { db } from '../db.js';
+import { syncUsersFromConfig } from '../userConfig.js';
 
 db.exec(`
   CREATE TABLE IF NOT EXISTS users (
@@ -46,5 +47,8 @@ db.exec(`
     ended_at INTEGER
   );
 `);
+
+// 同步配置文件中定义的固定用户（不删除已有用户）
+syncUsersFromConfig();
 
 console.log('Database initialized.');

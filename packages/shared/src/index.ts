@@ -87,6 +87,16 @@ export interface GameConfig {
   gameTime: GameTime;
   winCondition: WinCondition;
   mapId: string;
+  /** 是否启用卡片系统（默认启用） */
+  enableCards?: boolean;
+  /** 是否启用道具系统（默认启用） */
+  enableItems?: boolean;
+  /** 是否启用神明附身系统（默认启用） */
+  enableSpirits?: boolean;
+  /** 是否启用股票与公司投资系统（默认启用） */
+  enableStock?: boolean;
+  /** 是否启用 AI 补位（默认启用） */
+  enableAI?: boolean;
 }
 
 export const DEFAULT_GAME_CONFIG: GameConfig = {
@@ -96,6 +106,11 @@ export const DEFAULT_GAME_CONFIG: GameConfig = {
   gameTime: 'perpetual',
   winCondition: 'unlimited',
   mapId: 'simple',
+  enableCards: true,
+  enableItems: true,
+  enableSpirits: true,
+  enableStock: true,
+  enableAI: true,
 };
 
 // ==================== 地图 ====================

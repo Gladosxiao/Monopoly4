@@ -425,8 +425,8 @@ export function isRentExempt(
 ): boolean {
   if (tile.type !== 'property' || !tile.ownerId) return true;
 
-  // 大财神：免过路费
-  if (visitor.spirit?.spiritId === 'bigWealthGod') return true;
+  // 大财神：免过路费（仅在启用神明系统时生效）
+  if (state.config.enableSpirits !== false && visitor.spirit?.spiritId === 'bigWealthGod') return true;
 
   // 同盟：彼此不收过路费
   if (hasStatusEffect(visitor, 'alliance', owner.id) || hasStatusEffect(owner, 'alliance', visitor.id)) {
@@ -546,7 +546,9 @@ export function calculateRent(
   }
 
   // 神明影响
-  rent *= getSpiritRentMultiplier(visitor);
+  if (state.config.enableSpirits !== false) {
+    rent *= getSpiritRentMultiplier(visitor);
+  }
 
   return { rent: Math.floor(rent), hotelDays, spin };
 }
@@ -789,9 +791,11 @@ export function handleTileEffect(state: GameState): GameState {
     const outcome = triggerNewsEvent(state, player, tile);
     applyEventOutcome(state, player, outcome);
   } else if (tile.type === 'company') {
-    const company = state.companies.find((c) => c.id === tile.companyId);
-    if (company) {
-      handleCompanyArrival(state, player, company);
+    if (state.config.enableStock !== false) {
+      const company = state.companies.find((c) => c.id === tile.companyId);
+      if (company) {
+        handleCompanyArrival(state, player, company);
+      }
     }
   } else if (tile.type === 'hospital') {
     if (hasStatusEffect(player, 'hospital')) {
@@ -1755,6 +1759,7 @@ export function useCard(
   cardIdOrInstanceId: string,
   target?: CardUseTarget
 ): { success: boolean; message?: string } {
+  if (state.config.enableCards === false) return { success: false, message: '本局未启用卡片系统' };
   const ctx: CardContext = {
     targetPlayerId: target?.targetPlayerId,
     targetTileIndex: target?.targetTileIndex,
@@ -1771,6 +1776,7 @@ export function buyCard(
   playerId: string,
   cardId: string
 ): { success: boolean; message?: string } {
+  if (state.config.enableCards === false) return { success: false, message: '本局未启用卡片系统' };
   return buyCardFromSystem(state, playerId, cardId);
 }
 
@@ -1779,6 +1785,7 @@ export function sellCard(
   playerId: string,
   cardId: string
 ): { success: boolean; message?: string } {
+  if (state.config.enableCards === false) return { success: false, message: '本局未启用卡片系统' };
   return sellCardFromSystem(state, playerId, cardId);
 }
 
@@ -1788,6 +1795,7 @@ export function useItem(
   itemId: string,
   target?: ItemUseTarget
 ): { success: boolean; message?: string } {
+  if (state.config.enableItems === false) return { success: false, message: '本局未启用道具系统' };
   const ctx: ItemContext = {
     targetTileIndex: target?.targetTileIndex,
     targetPlayerId: target?.targetPlayerId,
@@ -1802,6 +1810,7 @@ export function buyItem(
   itemId: string,
   quantity = 1
 ): { success: boolean; message?: string } {
+  if (state.config.enableItems === false) return { success: false, message: '本局未启用道具系统' };
   return buyItemFromSystem(state, playerId, itemId, quantity);
 }
 
@@ -1811,6 +1820,7 @@ export function sellItem(
   itemId: string,
   quantity = 1
 ): { success: boolean; message?: string } {
+  if (state.config.enableItems === false) return { success: false, message: '本局未启用道具系统' };
   return sellItemFromSystem(state, playerId, itemId, quantity);
 }
 
@@ -2106,6 +2116,7 @@ export function tradeStock(
   stockId: string,
   quantity: number
 ): { success: boolean; message?: string } {
+  if (state.config.enableStock === false) return { success: false, message: '本局未启用股票系统' };
   const result = tradeStockImpl(state, playerId, stockId, quantity);
   if (result.success && result.message) {
     state.logs.push({
@@ -2126,6 +2137,7 @@ export function claimPlayerInsurance(
   playerId: string,
   reason = '住院理赔'
 ): { success: boolean; message?: string; payout?: number } {
+  if (state.config.enableStock === false) return { success: false, message: '本局未启用股票/保险系统' };
   const player = state.players.find((p) => p.id === playerId);
   if (!player) return { success: false, message: '玩家不存在' };
   const result = claimInsurance(state, player, reason);

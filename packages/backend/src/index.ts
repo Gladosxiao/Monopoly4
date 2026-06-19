@@ -9,8 +9,13 @@ import authRoutes from './routes/auth.js';
 import roomRoutes from './routes/rooms.js';
 import mapRoutes from './routes/maps.js';
 import { setupSocketIO } from './socket/game.js';
+import { syncUsersFromConfig } from './userConfig.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+// 同步配置文件中的固定账号；db:init 也会执行，但服务启动时再做一次兜底
+syncUsersFromConfig();
+
 const app = express();
 const httpServer = createServer(app);
 
