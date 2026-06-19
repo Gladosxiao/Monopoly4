@@ -5,7 +5,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import type { GameState } from '@monopoly4/shared';
 import { makeTestState, makeThreePlayerState, setOwner, giveCard } from './setup.js';
-import { useCard, endTurn, buyProperty } from '../engine.js';
+import { useCard, endTurn, buyProperty, payMoney } from '../engine.js';
 import { buyCard } from '../cardSystem/index.js';
 
 function prepareActingState(state: GameState, playerIndex = 0): void {
@@ -232,7 +232,7 @@ describe('防御/特殊类卡片', () => {
   });
 });
 
-describe('商店与未实现卡片', () => {
+describe('商店与剩余卡片', () => {
   it('商店购买卡片', () => {
     const state = makeTestState();
     state.players[0].position = 24; // 商店
@@ -249,15 +249,57 @@ describe('商店与未实现卡片', () => {
     expect(result.success).toBe(false);
   });
 
-  it('占位卡片返回效果未实现', () => {
+  it('查税卡收取目标 20% 现金', () => {
     const state = makeTestState();
+    state.players[1].cash = 10000;
     prepareActingState(state);
-    const blame = giveCard(state.players[0], 'blame');
-    expect(useCard(state, 'p1', blame).success).toBe(false);
+    const id = giveCard(state.players[0], 'taxAudit');
+    const result = useCard(state, 'p1', id, { targetPlayerId: 'p2' });
+    expect(result.success).toBe(true);
+    expect(state.players[1].cash).toBe(8000);
+    expect(state.players[0].cash).toBeGreaterThan(100000);
+  });
+
+  it('均富卡平均所有玩家现金', () => {
+    const state = makeTestState();
+    state.players[0].cash = 10000;
+    state.players[1].cash = 30000;
+    prepareActingState(state);
+    const id = giveCard(state.players[0], 'equalWealth');
+    const result = useCard(state, 'p1', id);
+    expect(result.success).toBe(true);
+    expect(state.players[0].cash).toBe(20000);
+    expect(state.players[1].cash).toBe(20000);
+  });
+
+  it('红卡/黑卡设置股票涨跌天数', () => {
+    const state = makeTestState();
+    const stock = state.stocks[0];
+    prepareActingState(state);
     const red = giveCard(state.players[0], 'redCard');
-    expect(useCard(state, 'p1', red).success).toBe(false);
+    expect(useCard(state, 'p1', red, { targetStockId: stock.id }).success).toBe(true);
+    expect(stock.bullDays).toBe(3);
+
     const black = giveCard(state.players[0], 'blackCard');
-    expect(useCard(state, 'p1', black).success).toBe(false);
+    expect(useCard(state, 'p1', black, { targetStockId: stock.id }).success).toBe(true);
+    expect(stock.bearDays).toBe(3);
+  });
+
+  it('嫁祸卡触发后由目标承担费用', () => {
+    const state = makeTestState();
+    state.players[0].cash = 5000;
+    state.players[1].cash = 10000;
+    prepareActingState(state);
+    const id = giveCard(state.players[0], 'blame');
+    useCard(state, 'p1', id, { targetPlayerId: 'p2' });
+
+    // 触发一次税金支付
+    state.status = 'acting';
+    state.pendingTileIndex = state.players[0].position;
+    payMoney(state, state.players[0], 3000, '测试税金');
+
+    expect(state.players[0].cash).toBe(5000);
+    expect(state.players[1].cash).toBe(7000);
   });
 });
 

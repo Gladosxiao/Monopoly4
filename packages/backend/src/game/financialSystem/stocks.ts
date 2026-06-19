@@ -150,6 +150,21 @@ export function updateStockPrices(state: GameState): void {
       stock.fluctuation = 0;
       continue;
     }
+
+    // 红卡/黑卡强制涨停/跌停
+    if (stock.bullDays && stock.bullDays > 0) {
+      stock.price = Math.max(1, Math.floor(stock.price * 1.1));
+      stock.fluctuation = 10;
+      stock.bullDays -= 1;
+      continue;
+    }
+    if (stock.bearDays && stock.bearDays > 0) {
+      stock.price = Math.max(1, Math.floor(stock.price * 0.9));
+      stock.fluctuation = -10;
+      stock.bearDays -= 1;
+      continue;
+    }
+
     const change = (Math.random() - 0.5) * 0.2; // -10% ~ +10%
     stock.price = Math.max(1, Math.floor(stock.price * (1 + change)));
     stock.fluctuation = Math.round(change * 1000) / 10;

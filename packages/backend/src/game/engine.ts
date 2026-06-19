@@ -223,6 +223,26 @@ function removeStatusEffect(player: Player, type: StatusEffect['type'], sourcePl
   );
 }
 
+/**
+ * 若玩家持有嫁祸卡效果，将付款责任转嫁给指定对手并返回该对手。
+ * 嫁祸效果一次性消耗。
+ */
+function resolveBlamePayer(state: GameState, player: Player): Player {
+  const blame = player.statusEffects.find((e) => e.type === 'blame');
+  if (!blame || !blame.sourcePlayerId) return player;
+  const target = state.players.find((p) => p.id === blame.sourcePlayerId);
+  if (!target || target.isBankrupt || target.id === player.id) return player;
+  removeStatusEffect(player, 'blame');
+  state.logs.push({
+    timestamp: Date.now(),
+    type: 'card:blameTriggered',
+    actorId: player.id,
+    targetId: target.id,
+    message: `${player.username} 的嫁祸卡生效，损失转由 ${target.username} 承担`,
+  });
+  return target;
+}
+
 function canTakeTurn(player: Player): boolean {
   return (
     !hasStatusEffect(player, 'hibernation') &&
@@ -230,6 +250,41 @@ function canTakeTurn(player: Player): boolean {
     !hasStatusEffect(player, 'hospital') &&
     !hasStatusEffect(player, 'sleepwalk')
   );
+}
+
+function saveTurnSnapshot(state: GameState): void {
+  state.turnSnapshot = {
+    day: state.day,
+    month: state.month,
+    priceIndex: state.priceIndex,
+    currentPlayerIndex: state.currentPlayerIndex,
+    players: state.players.map((p) => ({
+      id: p.id,
+      cash: p.cash,
+      deposit: p.deposit,
+      loan: p.loan,
+      coupons: p.coupons,
+      vehicle: p.vehicle,
+      position: p.position,
+      properties: [...p.properties],
+      cards: [...p.cards],
+      items: p.items.map((i) => ({ ...i })),
+      statusEffects: p.statusEffects.map((e) => ({ ...e })),
+      stockHoldings: { ...p.stockHoldings },
+      insuranceDays: p.insuranceDays,
+      isBankrupt: p.isBankrupt,
+      liquidationCount: p.liquidationCount,
+      spirit: p.spirit ? { ...p.spirit } : undefined,
+      nextDiceOverride: p.nextDiceOverride,
+      pendingDirection: p.pendingDirection,
+    })),
+    tiles: state.map.tiles.map((t) => ({
+      index: t.index,
+      ownerId: t.ownerId,
+      level: t.level,
+      buildingType: t.buildingType,
+    })),
+  };
 }
 
 function decrementSkipStatuses(state: GameState, player: Player): void {
@@ -509,6 +564,24 @@ function onPassTile(state: GameState, tileIndex: number, player: Player): boolea
     }
   }
 
+  // 工程车：经过对手土地时拆除一级
+  const engineerTruck = player.statusEffects.find((e) => e.type === 'engineerTruck');
+  if (
+    engineerTruck &&
+    tile.type === 'property' &&
+    tile.ownerId &&
+    tile.ownerId !== player.id &&
+    tile.level > 0
+  ) {
+    tile.level -= 1;
+    state.logs.push({
+      timestamp: Date.now(),
+      type: 'item:engineerTruckDestroy',
+      actorId: player.id,
+      message: `${player.username} 的工程车经过 ${tile.name}，建筑被拆除 1 级`,
+    });
+  }
+
   return false;
 }
 
@@ -708,6 +781,9 @@ function applyRentPayment(
 export function payMoney(state: GameState, player: Player, amount: number, reason: string): void {
   if (amount <= 0) return;
 
+  // 嫁祸卡：将费用转嫁给指定对手
+  player = resolveBlamePayer(state, player);
+
   // 免费卡可免除罚金/税金
   if (consumeFreePass(player)) {
     state.logs.push({
@@ -761,6 +837,7 @@ export function transferMoney(
   reason: string
 ): void {
   if (amount <= 0) return;
+  from = resolveBlamePayer(state, from);
   if (from.cash >= amount) {
     from.cash -= amount;
     to.cash += amount;
@@ -1274,6 +1351,7 @@ export function useCard(
     targetGroup: target?.targetGroup,
     buildingType: target?.buildingType,
     targetSpiritId: target?.spiritId ?? target?.targetPlayerId,
+    targetStockId: target?.targetStockId,
   };
   return useCardSystem(state, playerId, cardIdOrInstanceId, ctx);
 }
@@ -1336,6 +1414,9 @@ export function sellItem(
 export function endTurn(state: GameState): GameState {
   // 先处理地块效果
   state = handleTileEffect(state);
+
+  // 为时光机保存本回合结束时的快照
+  saveTurnSnapshot(state);
 
   // NPC 每回合结束后移动并刷新存在天数
   moveNpcs(state);

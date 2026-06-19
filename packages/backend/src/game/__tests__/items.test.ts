@@ -140,16 +140,36 @@ describe('工具道具', () => {
   });
 });
 
-describe('未实现道具', () => {
-  it('研发产物返回未实现', () => {
+describe('研发产物', () => {
+  it('机器人可免费升级自己的土地', () => {
+    const state = makeTestState();
+    setOwner(state, 1, 'p1', 'house', 1);
+    prepareActingState(state);
+    giveItem(state.players[0], 'robot');
+    const result = useItem(state, 'p1', 'robot', { targetTileIndex: 1 });
+    expect(result.success).toBe(true);
+    expect(state.map.tiles[1].level).toBe(2);
+  });
+
+  it('传送机移动到目标地块', () => {
     const state = makeTestState();
     prepareActingState(state);
-    for (const itemId of ['robot', 'timeMachine', 'teleporter', 'engineerTruck', 'nuke']) {
-      giveItem(state.players[0], itemId);
-      const result = useItem(state, 'p1', itemId);
-      expect(result.success).toBe(false);
-      expect(result.message).toContain('尚未实现');
-    }
+    giveItem(state.players[0], 'teleporter');
+    const result = useItem(state, 'p1', 'teleporter', { targetTileIndex: 10 });
+    expect(result.success).toBe(true);
+    expect(state.players[0].position).toBe(10);
+  });
+
+  it('核子飞弹使范围内玩家住院并降建筑等级', () => {
+    const state = makeTestState();
+    setOwner(state, 5, 'p2', 'house', 2);
+    state.players[1].position = 5;
+    prepareActingState(state);
+    giveItem(state.players[0], 'nuke');
+    const result = useItem(state, 'p1', 'nuke', { targetTileIndex: 5 });
+    expect(result.success).toBe(true);
+    expect(state.map.tiles[5].level).toBe(1);
+    expect(state.players[1].statusEffects.some((e) => e.type === 'hospital')).toBe(true);
   });
 });
 

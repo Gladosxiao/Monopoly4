@@ -20,6 +20,7 @@ export interface CardContext {
   targetGroup?: number;
   buildingType?: string;
   targetSpiritId?: string;
+  targetStockId?: string;
 }
 
 export interface CardEffectResult {
@@ -284,11 +285,76 @@ export const CARD_EFFECT_REGISTRY: Record<string, CardEffect> = {
   monster,
   demolish,
   // 扩展卡片占位
-  equalWealth: (state, caster) => placeholder(state, caster, {}, 'equalWealth'),
-  equalPoverty: (state, caster) => placeholder(state, caster, {}, 'equalPoverty'),
-  swapHouse: (state, caster) => placeholder(state, caster, {}, 'swapHouse'),
+  equalWealth: (state, caster) => {
+    const activePlayers = state.players.filter((p) => !p.isBankrupt);
+    const totalCash = activePlayers.reduce((sum, p) => sum + p.cash, 0);
+    const avg = Math.floor(totalCash / activePlayers.length);
+    for (const p of activePlayers) {
+      p.cash = avg;
+    }
+    log(state, 'card:equalWealth', caster.id, `${caster.username} 使用均富卡，所有玩家现金均分为 $${avg}`);
+    return { success: true };
+  },
+  equalPoverty: (state, caster, ctx) => {
+    const target = findPlayer(state, ctx.targetPlayerId);
+    if (!target || target.id === caster.id) return { success: false, message: '需要指定其他玩家' };
+    const total = caster.cash + target.cash;
+    const avg = Math.floor(total / 2);
+    caster.cash = avg;
+    target.cash = avg;
+    log(
+      state,
+      'card:equalPoverty',
+      caster.id,
+      `${caster.username} 使用均贫卡，与 ${target.username} 平分现金，各得 $${avg}`,
+      target.id
+    );
+    return { success: true };
+  },
+  swapHouse: (state, caster, ctx) => {
+    const targetIdx = ctx.targetTileIndex;
+    const casterIdx = state.pendingTileIndex ?? caster.position;
+    if (targetIdx === undefined) return { success: false, message: '需要指定目标土地' };
+    const a = findTile(state, targetIdx);
+    const b = findTile(state, casterIdx);
+    if (!a || !b || a.type !== 'property' || b.type !== 'property') {
+      return { success: false, message: '只能选择土地' };
+    }
+    const aSize = a.size ?? 'small';
+    const bSize = b.size ?? 'small';
+    if (aSize !== bSize) return { success: false, message: '只能交换同等大小的土地建筑' };
+    const tmpLevel = a.level;
+    const tmpBuilding = a.buildingType;
+    a.level = b.level;
+    a.buildingType = b.buildingType;
+    b.level = tmpLevel;
+    b.buildingType = tmpBuilding;
+    log(
+      state,
+      'card:swapHouse',
+      caster.id,
+      `${caster.username} 使用换屋卡，交换 ${a.name} 与 ${b.name} 的建筑等级`
+    );
+    return { success: true };
+  },
   rebuild,
-  taxAudit: (state, caster) => placeholder(state, caster, {}, 'taxAudit'),
+  taxAudit: (state, caster, ctx) => {
+    const target = findPlayer(state, ctx.targetPlayerId);
+    if (!target || target.id === caster.id) return { success: false, message: '需要指定其他玩家' };
+    const tax = Math.floor(target.cash * 0.2);
+    if (tax > 0) {
+      target.cash -= tax;
+      caster.cash += tax;
+    }
+    log(
+      state,
+      'card:taxAudit',
+      caster.id,
+      `${caster.username} 使用查税卡，从 ${target.username} 收取 $${tax} 税款`,
+      target.id
+    );
+    return { success: true };
+  },
   priceRise: (state, caster, ctx) => {
     const group = ctx.targetGroup;
     if (group === undefined) return { success: false, message: '需要指定路段' };
@@ -396,7 +462,13 @@ export const CARD_EFFECT_REGISTRY: Record<string, CardEffect> = {
     log(state, 'card:frame', caster.id, `${caster.username} 使用陷害卡，${target.username} 入狱 5 天`, target.id);
     return { success: true };
   },
-  blame: (state, caster, ctx) => placeholder(state, caster, ctx, 'blame'),
+  blame: (state, caster, ctx) => {
+    const target = findPlayer(state, ctx.targetPlayerId);
+    if (!target || target.id === caster.id) return { success: false, message: '需要指定其他玩家' };
+    addStatusEffect(caster, 'blame', 7, target.id);
+    log(state, 'card:blame', caster.id, `${caster.username} 使用嫁祸卡，接下来 7 天内可将一次损失转嫁给 ${target.username}`, target.id);
+    return { success: true };
+  },
   sleepwalk: (state, caster, ctx) => {
     const target = findPlayer(state, ctx.targetPlayerId);
     if (!target || target.id === caster.id) return { success: false, message: '需要指定其他玩家' };
@@ -434,8 +506,24 @@ export const CARD_EFFECT_REGISTRY: Record<string, CardEffect> = {
     log(state, 'card:summonSpirit', caster.id, `${caster.username} 使用请神符召唤 ${spiritDef.name}`);
     return { success: true };
   },
-  redCard: (state, caster) => placeholder(state, caster, {}, 'redCard'),
-  blackCard: (state, caster) => placeholder(state, caster, {}, 'blackCard'),
+  redCard: (state, caster, ctx) => {
+    const stockId = ctx.targetStockId;
+    if (!stockId) return { success: false, message: '需要指定股票' };
+    const stock = state.stocks.find((s) => s.id === stockId);
+    if (!stock) return { success: false, message: '股票不存在' };
+    stock.bullDays = Math.max(stock.bullDays ?? 0, 3);
+    log(state, 'card:redCard', caster.id, `${caster.username} 使用红卡，${stock.name} 连续涨停 3 天`);
+    return { success: true };
+  },
+  blackCard: (state, caster, ctx) => {
+    const stockId = ctx.targetStockId;
+    if (!stockId) return { success: false, message: '需要指定股票' };
+    const stock = state.stocks.find((s) => s.id === stockId);
+    if (!stock) return { success: false, message: '股票不存在' };
+    stock.bearDays = Math.max(stock.bearDays ?? 0, 3);
+    log(state, 'card:blackCard', caster.id, `${caster.username} 使用黑卡，${stock.name} 连续跌停 3 天`);
+    return { success: true };
+  },
   freePass: (state, caster) => {
     addStatusEffect(caster, 'freePass', 1, caster.id);
     log(state, 'card:freePass', caster.id, `${caster.username} 使用免费卡，可免除一次费用`);

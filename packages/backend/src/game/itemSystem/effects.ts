@@ -2,7 +2,7 @@
 // 每种道具对应一个 ItemEffect 函数：
 //   (state, user, context) => { success, message }
 
-import type { GameState, Player, Tile, Trap, ItemDefinition } from '@monopoly4/shared';
+import type { GameState, Player, Tile, Trap, ItemDefinition, TurnSnapshot } from '@monopoly4/shared';
 import { ITEM_DEFINITIONS } from '@monopoly4/shared';
 import { getCurrentPlayer, payMoney } from '../engine.js';
 
@@ -215,6 +215,113 @@ function placeholder(state: GameState, user: Player, ctx: ItemContext, itemId?: 
   return { success: false, message: `${def?.name ?? '该道具'} 效果尚未实现` };
 }
 
+// ===== 研发产物 =====
+
+const robot: ItemEffect = (state, user, ctx) => {
+  const tileIndex = ctx.targetTileIndex;
+  if (tileIndex === undefined) return { success: false, message: '需要指定目标土地' };
+  const tile = findTile(state, tileIndex);
+  if (!tile || tile.type !== 'property' || tile.ownerId !== user.id) {
+    return { success: false, message: '只能选择自己的土地' };
+  }
+  if (tile.level >= 5) return { success: false, message: '该建筑已满级' };
+  tile.level += 1;
+  log(state, 'item:robot', user.id, `${user.username} 使用机器人，${tile.name} 免费升 1 级`);
+  return { success: true };
+};
+
+const timeMachine: ItemEffect = (state, user) => {
+  const snapshot = state.turnSnapshot;
+  if (!snapshot) return { success: false, message: '没有可恢复的上回合快照' };
+
+  state.day = snapshot.day;
+  state.month = snapshot.month;
+  state.priceIndex = snapshot.priceIndex;
+  state.currentPlayerIndex = snapshot.currentPlayerIndex;
+
+  for (const sp of snapshot.players) {
+    const p = state.players.find((pl) => pl.id === sp.id);
+    if (!p) continue;
+    p.cash = sp.cash;
+    p.deposit = sp.deposit;
+    p.loan = sp.loan;
+    p.coupons = sp.coupons;
+    p.vehicle = sp.vehicle;
+    p.position = sp.position;
+    p.properties = [...sp.properties];
+    p.cards = [...sp.cards];
+    p.items = sp.items.map((i) => ({ ...i }));
+    p.statusEffects = sp.statusEffects.map((e) => ({ ...e }));
+    p.stockHoldings = { ...sp.stockHoldings };
+    p.insuranceDays = sp.insuranceDays;
+    p.isBankrupt = sp.isBankrupt;
+    p.liquidationCount = sp.liquidationCount;
+    p.spirit = sp.spirit ? { ...sp.spirit } : undefined;
+    p.nextDiceOverride = sp.nextDiceOverride;
+    p.pendingDirection = sp.pendingDirection;
+  }
+
+  for (const st of snapshot.tiles) {
+    const tile = state.map.tiles[st.index];
+    if (tile) {
+      tile.ownerId = st.ownerId;
+      tile.level = st.level;
+      tile.buildingType = st.buildingType;
+    }
+  }
+
+  log(state, 'item:timeMachine', user.id, `${user.username} 使用时光机，所有人回到上一回合状态`);
+  return { success: true };
+};
+
+const teleporter: ItemEffect = (state, user, ctx) => {
+  const tileIndex = ctx.targetTileIndex;
+  if (tileIndex === undefined) return { success: false, message: '需要指定目标地块' };
+  const tile = findTile(state, tileIndex);
+  if (!tile) return { success: false, message: '目标地块不存在' };
+  user.position = tileIndex;
+  log(state, 'item:teleporter', user.id, `${user.username} 使用传送机，移动到 ${tile.name}`);
+  return { success: true };
+};
+
+const engineerTruck: ItemEffect = (state, user) => {
+  addStatusEffect(user, 'engineerTruck', 7, user.id, { reason: '工程车' });
+  log(state, 'item:engineerTruck', user.id, `${user.username} 使用工程车，未来 7 回合经过的土地将被拆除`);
+  return { success: true };
+};
+
+const nuke: ItemEffect = (state, user, ctx) => {
+  const centerIndex = ctx.targetTileIndex;
+  if (centerIndex === undefined) return { success: false, message: '需要指定目标地块' };
+  const centerTile = findTile(state, centerIndex);
+  if (!centerTile) return { success: false, message: '目标地块不存在' };
+
+  // 简化为以目标地块为中心，影响前后各 2 格（共 5 格）
+  const path = state.map.path;
+  const centerPathIdx = path.indexOf(centerIndex);
+  const affected: number[] = [];
+  for (let i = -2; i <= 2; i++) {
+    const idx = (centerPathIdx + i + path.length) % path.length;
+    affected.push(path[idx]);
+  }
+
+  for (const tileIndex of affected) {
+    const tile = state.map.tiles[tileIndex];
+    if (tile.type === 'property' && tile.level > 0) {
+      tile.level -= 1;
+    }
+    for (const p of state.players) {
+      if (p.position === tileIndex && !p.isBankrupt) {
+        addStatusEffect(p, 'hospital', 5, user.id);
+        log(state, 'item:nukeHit', user.id, `${p.username} 被核子飞弹波及，住院 5 天`, p.id);
+      }
+    }
+  }
+
+  log(state, 'item:nuke', user.id, `${user.username} 发射核子飞弹，${centerTile.name} 周围遭到重创`);
+  return { success: true };
+};
+
 export const ITEM_EFFECT_REGISTRY: Record<string, ItemEffect> = {
   bike,
   car,
@@ -224,11 +331,11 @@ export const ITEM_EFFECT_REGISTRY: Record<string, ItemEffect> = {
   remoteDice,
   robotDoll,
   missile,
-  robot: (state, user, ctx) => placeholder(state, user, ctx, 'robot'),
-  timeMachine: (state, user, ctx) => placeholder(state, user, ctx, 'timeMachine'),
-  teleporter: (state, user, ctx) => placeholder(state, user, ctx, 'teleporter'),
-  engineerTruck: (state, user, ctx) => placeholder(state, user, ctx, 'engineerTruck'),
-  nuke: (state, user, ctx) => placeholder(state, user, ctx, 'nuke'),
+  robot,
+  timeMachine,
+  teleporter,
+  engineerTruck,
+  nuke,
 };
 
 export function getItemEffect(itemId: string): ItemEffect | undefined {

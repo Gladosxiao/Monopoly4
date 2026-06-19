@@ -152,6 +152,8 @@ export interface Stock {
   availableShares: number;
   suspendedDays: number;
   fluctuation: number; // 当日涨跌幅百分比
+  bullDays?: number; // 红卡涨停剩余天数
+  bearDays?: number; // 黑卡跌停剩余天数
 }
 
 export type CompanyType =
@@ -192,6 +194,8 @@ export type StatusEffectType =
   | 'alliance'
   | 'freePass'
   | 'innocence'
+  | 'blame'
+  | 'engineerTruck'
   | 'spirit';
 
 export interface StatusEffect {
@@ -275,12 +279,42 @@ export interface CardUseTarget {
   targetGroup?: number;
   buildingType?: BuildingType;
   spiritId?: string;
+  targetStockId?: string;
 }
 
 export interface ItemUseTarget {
   targetTileIndex?: number;
   targetPlayerId?: string;
   diceValue?: number;
+}
+
+export interface TurnSnapshot {
+  day: number;
+  month: number;
+  priceIndex: number;
+  currentPlayerIndex: number;
+  players: Pick<
+    Player,
+    | 'id'
+    | 'cash'
+    | 'deposit'
+    | 'loan'
+    | 'coupons'
+    | 'vehicle'
+    | 'position'
+    | 'properties'
+    | 'cards'
+    | 'items'
+    | 'statusEffects'
+    | 'stockHoldings'
+    | 'insuranceDays'
+    | 'isBankrupt'
+    | 'liquidationCount'
+    | 'spirit'
+    | 'nextDiceOverride'
+    | 'pendingDirection'
+  >[];
+  tiles: Pick<Tile, 'index' | 'ownerId' | 'level' | 'buildingType'>[];
 }
 
 export interface GameState {
@@ -298,6 +332,7 @@ export interface GameState {
   roadEffects: RoadEffect[];
   spirits: SpiritOnMap[];
   npcs: NpcInstance[];
+  turnSnapshot?: TurnSnapshot;
   stocks: Stock[];
   companies: Company[];
   marketStatus: {

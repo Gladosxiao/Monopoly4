@@ -55,15 +55,15 @@ ITEM_EFFECT_REGISTRY[itemId] = (state, user, ctx) => { ... };
 - `robotDoll` 机器娃娃：清除前方 9-10 格内的陷阱
 - `missile` 飞弹：攻击指定地块，房屋降一级、站在该格玩家住院 3 天
 
-### 研究所研发产物（占位）
+### 研究所研发产物
 
-- `robot` 机器人
-- `timeMachine` 时光机
-- `teleporter` 传送机
-- `engineerTruck` 工程车
-- `nuke` 核子飞弹
+- `robot` 机器人：指定自己的土地免费升 1 级。
+- `timeMachine` 时光机：恢复上一回合结束时的玩家现金/存款/位置/地产/状态快照。
+- `teleporter` 传送机：将使用者传送到指定地块。
+- `engineerTruck` 工程车：未来 7 回合经过对手土地时拆除 1 级。
+- `nuke` 核子飞弹：指定地块前后 2 格范围建筑降 1 级、玩家住院 5 天。
 
-以上产物 `cost = 0`，由研究所等级产出，效果待实现。
+以上产物 `cost = 0`，由研究所等级产出，效果均已简化落地。
 
 ## 陷阱系统
 
