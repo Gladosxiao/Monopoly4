@@ -100,8 +100,9 @@ interface Player {
   properties: number[];   // 拥有的地块索引列表
   cards: CardInstance[];  // 持有的卡片（上限 15 张）
   items: ItemInstance[];  // 持有的道具
-  stocks?: Record<string, number>;       // 持股：stockId → 股数（扩展）
-  companyShares?: Record<string, number>; // 公司持股：companyId → 股数（扩展）
+  stockHoldings: Record<string, number>;  // 持股：stockId → 股数
+  stockCostBasis: Record<string, number>; // 每只股票的加权平均成本（仓位）
+  companyShares?: Record<string, number>;  // 公司持股：companyId → 股数（扩展）
   spirit?: Spirit;        // 当前附身神明（扩展）
   statusEffects: StatusEffect[]; // 状态效果（停留、乌龟、定时炸弹、住院、坐牢、出国等）
   isBankrupt: boolean;
@@ -345,11 +346,11 @@ interface StockMarket {
   lastUpdated: number;
 }
 
-// 玩家视角的股票持仓
+// 玩家视角的股票持仓（实际实现中合并到 Player 对象）
 interface StockHolding {
   stockId: string;
   shares: number;           // 持有股数
-  averageCost: number;      // 平均成本
+  averageCost: number;      // 加权平均成本（仓位）
 }
 
 type CompanyType = 
@@ -370,8 +371,8 @@ interface Company {
   profit: number;           // 累计盈余
   sharePrice: number;
   shareholders: Shareholder[];
-  maxShares: number;        // 总股数（原版每家 10000 张）
-  chairmanId?: string;      // 当前董事长（持股最多者）
+  maxShares: number;        // 总股数（原版每家 10000 股）
+  chairmanId?: string;      // 当前董事长（需持股 >10% 总股本，持股最多者当选）
 }
 
 interface Shareholder {

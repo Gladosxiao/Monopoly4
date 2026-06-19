@@ -38,7 +38,7 @@ export const DEFAULT_TEMPLATE: MapTemplate = {
     coupon50: 0,
     miniGame: 0,
   },
-  basePriceRange: [8000, 60000],
+  basePriceRange: [800, 6000],
   priceCurve: 'sigmoid',
 };
 
@@ -63,7 +63,7 @@ export const FAST_TEMPLATE: MapTemplate = {
     coupon50: 1,
     coupon10: 2,
   },
-  basePriceRange: [10000, 50000],
+  basePriceRange: [1000, 5000],
 };
 
 /**
@@ -94,7 +94,7 @@ export const ECONOMY_TEMPLATE: MapTemplate = {
     company: 0,
     miniGame: 0,
   },
-  basePriceRange: [12000, 70000],
+  basePriceRange: [1200, 7000],
 };
 
 /**
@@ -127,7 +127,7 @@ export const PLAYER4_TEMPLATE: MapTemplate = {
     company: 0,
     miniGame: 0,
   },
-  basePriceRange: [10000, 55000],
+  basePriceRange: [1000, 5500],
   priceCurve: 'sigmoid',
 };
 
@@ -162,7 +162,7 @@ export const MAP80_TEMPLATE: MapTemplate = {
     news: 0,
     company: 0,
   },
-  basePriceRange: [10000, 80000],
+  basePriceRange: [1000, 8000],
   priceCurve: 'sigmoid',
 };
 
