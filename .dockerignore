@@ -1,0 +1,10 @@
+node_modules
+packages/*/dist
+packages/*/node_modules
+.git
+.env
+.env.*
+!.env.example
+data.sqlite
+*.sqlite
+.DS_Store

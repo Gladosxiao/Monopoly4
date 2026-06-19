@@ -3,6 +3,8 @@
 > 本文件供 AI 编码代理阅读，定义项目规范与工作流程。
 >
 > **沟通语言**：与本仓库交互时，AI 代理必须使用**中文**回复用户，并在思考过程中尽量使用中文。
+>
+> **最近更新**：2026-06-19 — 已补齐部署基础设施（.env.example、健康检查、数据库迁移、Docker、GitHub Actions CI）。
 
 ## 工作流程铁律
 
@@ -44,10 +46,26 @@
 │   │       │   └── __tests__/                   # 单元测试
 │   │       ├── socket/                          # Socket.IO 事件处理
 │   │       ├── auth/                            # 用户认证
-│   │       └── routes/                          # REST API 路由
+│   │       ├── routes/                          # REST API 路由
+│   │       │   └── health.ts                    # 健康检查 /api/health
+│   │       ├── migrations/                      # 数据库迁移
+│   │       │   ├── runner.ts                    # 迁移执行器
+│   │       │   └── sql/                         # 迁移 SQL 文件
+│   │       └── scripts/                         # 初始化/管理脚本
 │   ├── frontend/                                # Vite + TypeScript 前端
 │   │   └── src/
-│   │       ├── main.ts                          # 入口（渲染/交互）
+│   │       ├── main.ts                          # 入口（路由初始化）
+│   │       ├── router.ts                        # 页面导航与清理
+│   │       ├── state/                           # 全局状态
+│   │       │   ├── user.ts                      # 当前用户状态
+│   │       │   └── game.ts                      # 当前房间/游戏状态
+│   │       ├── pages/                           # 页面组件
+│   │       │   ├── login.ts                     # 登录页
+│   │       │   ├── lobby.ts                     # 大厅页
+│   │       │   ├── room.ts                      # 房间页
+│   │       │   └── game.ts                      # 游戏页
+│   │       ├── ui/                              # 公共 UI 辅助
+│   │       │   └── common.ts                    # Toast / Prompt / escapeHtml
 │   │       ├── board.ts                         # 棋盘渲染
 │   │       ├── socket.ts                        # 客户端 Socket 通信
 │   │       └── style.css                        # 样式
@@ -63,11 +81,20 @@
 ## 构建与测试命令
 
 - 安装依赖：`npm install`
-- 初始化数据库：`npm run db:init`
+- 初始化数据库：`npm run db:init`（等价于 `npm run db:migrate -w packages/backend`）
 - 根目录构建：`npm run build`（依次构建 shared、frontend、backend）
 - 开发模式：`npm run dev`（同时启动 backend 与 frontend）
 - 生产启动：`npm run start`（启动已构建的后端）
 - 后端测试：`npm run test -w packages/backend`（Vitest，测试文件位于 `packages/backend/src/game/__tests__/*.test.ts`）
+- 健康检查：`curl http://localhost:3000/api/health`
+
+**Docker 部署：**
+```bash
+# 复制并编辑环境变量
+cp .env.example .env
+# 构建并启动（默认端口 3000）
+docker compose up -d --build
+```
 
 **每次修改后务必运行测试**确保不破坏现有功能。
 
@@ -75,8 +102,9 @@
 
 - **测试运行器**：Vitest
 - **测试文件位置**：`packages/backend/src/game/__tests__/`
-- **已覆盖的测试文件**（356+ 用例，26 个测试文件）：
-  - `engine.test.ts`：核心引擎规则（过路费、神明租金、卡片效果、状态递减等）
+- **已覆盖的测试文件**（389+ 用例，34 个测试文件）：
+  - `engine.test.ts` / `engineDay.test.ts`：核心引擎规则与日期推进
+  - `hospitalize.test.ts`：住院传送
   - `spirits.test.ts`：神明系统（福神/衰神/天使/恶魔/土地公完整效果）
   - `cardSystem/` + `cards.test.ts`：卡片系统（30+ 张卡片效果）
   - `itemSystem/` + `items.test.ts`：道具系统（13+ 种道具效果）

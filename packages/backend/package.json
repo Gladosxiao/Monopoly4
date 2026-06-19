@@ -8,6 +8,7 @@
     "dev": "tsx watch src/index.ts",
     "start": "node dist/index.js",
     "db:init": "tsx src/scripts/initDb.ts",
+    "db:migrate": "tsx src/scripts/initDb.ts",
     "test": "vitest run"
   },
   "dependencies": {

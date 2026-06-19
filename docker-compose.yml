@@ -1,0 +1,26 @@
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "${PORT:-3000}:3000"
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - DB_PATH=/app/data/data.sqlite
+      - JWT_SECRET=${JWT_SECRET:?请在 .env 中设置 JWT_SECRET}
+      - JWT_ACCESS_TTL=${JWT_ACCESS_TTL:-15m}
+      - JWT_REFRESH_TTL_MS=${JWT_REFRESH_TTL_MS:-604800000}
+      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-}
+      - ENABLE_TEST_MODE=${ENABLE_TEST_MODE:-false}
+      - USERS_CONFIG_PATH=/app/data/users.json
+    volumes:
+      - ./data:/app/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
