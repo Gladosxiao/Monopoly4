@@ -629,19 +629,17 @@ export function setupSocketIO(httpServer: HttpServer): SocketIOServer<ClientToSe
       socket.emit('test:freeShopResult', shop);
     });
 
-    socket.on('test:freeBuyCard', handleTest('freeBuyCard', (roomId: string, cardId: string) => {
+    socket.on('test:freeBuyCard', handleTest('freeBuyCard', (roomId: string, playerId: string, cardId: string) => {
       const state = games.get(roomId);
       if (!state) return;
-      const player = state.players[state.currentPlayerIndex];
-      testMode.freeBuyCard(state, player.id, cardId);
+      testMode.freeBuyCard(state, playerId, cardId);
       io.to(roomId).emit('game:state', state);
     }));
 
-    socket.on('test:freeBuyItem', handleTest('freeBuyItem', (roomId: string, itemId: string, quantity?: number) => {
+    socket.on('test:freeBuyItem', handleTest('freeBuyItem', (roomId: string, playerId: string, itemId: string, quantity?: number) => {
       const state = games.get(roomId);
       if (!state) return;
-      const player = state.players[state.currentPlayerIndex];
-      testMode.freeBuyItem(state, player.id, itemId, quantity);
+      testMode.freeBuyItem(state, playerId, itemId, quantity);
       io.to(roomId).emit('game:state', state);
     }));
 

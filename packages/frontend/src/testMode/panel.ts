@@ -417,7 +417,7 @@ export function createTestPanel(
       const pid = state.players[state.currentPlayerIndex]?.id;
       if (pid) {
         Object.keys(CARD_DEFINITIONS).forEach((cardId) => {
-          emitFn('test:freeBuyCard', state.roomId, pid, cardId);
+          emitFn('test:giveCard', state.roomId, pid, cardId);
         });
       }
     }],
@@ -427,7 +427,7 @@ export function createTestPanel(
       const pid = state.players[state.currentPlayerIndex]?.id;
       if (pid) {
         Object.keys(ITEM_DEFINITIONS).forEach((itemId) => {
-          emitFn('test:freeBuyItem', state.roomId, pid, itemId, 9);
+          emitFn('test:giveItem', state.roomId, pid, itemId, 9);
         });
       }
     }],
