@@ -22,7 +22,10 @@
 - 汽车：最多 3 颗骰子，玩家每回合可选择投 1、2 或 3 颗。
 > 注：游戏开始时根据 `GameConfig.moveMode` 决定拥有的交通工具；拥有载具后每回合可自由选择该载具允许范围内的骰子数。
 
-代码实现：`Dice.roll(count: number)`，其中 `count` 由玩家在当前回合选择。
+代码实现：
+- `Dice.roll(count: number): number`
+- `Game.create(roomId, config, roomPlayers): GameState` —— 根据配置初始化玩家现金、地图、回合状态。
+- `GameConfig` 中的 `moveMode` 仅决定初始载具；实际每回合骰子数由玩家在前端选择，通过 `game:roll` 事件传给后端。
 
 ## 2. 角色属性
 
@@ -36,11 +39,27 @@
 
 > 注：大富翁4 原版所有角色在游戏机制上完全对称，无任何技能/属性差异。
 
+代码实现：
+- `Player.cash`、`Player.deposit`、`Player.loan`、`Player.coupons` 字段变更。
+- `Game.transferCash(playerId, amount): void` —— 现金变动（正加负减），现金不足时自动从存款扣除。
+- `Game.transferDeposit(playerId, amount): void` —— 存款直接变动。
+- `Game.takeLoan(playerId, amount): { success; message }` —— 贷款，额度 = 总资产，3 个月免息。
+- `Game.repayLoan(playerId, amount): { success; message }` —— 还款。
+- `Game.calculateNetAssets(player): number` —— 计算总资产 = 现金 + 存款 - 贷款 + 地产估值 + 股票市值。
+- `Game.checkBankruptcy(player): boolean` —— 判定 `cash + deposit < 0`。
+
 ## 3. 地图与路径
 
 - 棋盘为 2.5D 俯视，路径由 40 格组成（具体数量可配置）。
 - 大富翁4 原版 4 张地图：台湾、中国大陆、日本、美国。
 - 角色沿 path 顺序移动，到达地图终点后绕回起点。
+
+代码实现：
+- `MapLoader.load(mapId): GameMap` —— 加载地图配置（path + tiles）。
+- `MapUtils.pathLength(map): number` —— 路径总格数。
+- `MapUtils.tileAt(map, pathIndex): Tile` —— 路径索引 → 地块。
+- `MapUtils.positionOf(map, pathIndex): { x, y }` —— 路径索引 → 2.5D 坐标（前端 Canvas 使用）。
+- `MapUtils.wrapPosition(map, pathIndex): number` —— 绕圈处理。
 
 ## 4. 土地类型
 
@@ -67,6 +86,14 @@
 - **卡片格**：经过即免费获得一张卡片（非停留）。
 - **得点券格**：踩到即获得对应点券（10/30/50 点）。
 - **小游戏格**：走到即进行小游戏，可赚取点券。
+
+代码实现：
+- `Tile.size?: 'small' | 'large'` —— 区分小块/大块土地。
+- `Tile.buildingType?: BuildingType` —— 当前建筑类型。
+- `Game.buildSpecialTile(playerId, tileIndex, buildingType): Result` —— 在大块空地上建造公园/商场/旅馆/加油站/研究所。
+- `Game.rebuildToChainStore(playerId, tileIndex): Result` —— 小块住宅改建为连锁店。
+- `Game.rebuildSpecialTile(playerId, tileIndex, buildingType): Result` —— 用改建卡改变大块建筑类型。
+- `BuildingEffect.onPass(tile, player)` / `BuildingEffect.onArrive(tile, player)` —— 公园/商场/旅馆/加油站/研究所的过路/抵达效果。
 
 ## 5. 土地购买与升级
 
@@ -106,7 +133,12 @@
 - **神明影响**：小穷神过路费 +50%，大穷神翻倍，小财神减半，大财神免除。
 - **卡片影响**：涨价卡指定路段加倍 5 天；查封卡指定路段 5 天无法收租。
 
-代码实现：`Game.calculateRent(tile, owner, allTiles, priceIndex)`。
+代码实现：
+- `Game.calculateRent(tile, owner, allTiles, priceIndex, visitor): number` —— 综合计算住宅/连锁店/特殊建筑租金，并应用神明、卡片、状态效果加成。
+- `Game.calculateMallRent(tile, owner, priceIndex): number` —— 商场转盘倍数。
+- `Game.calculateHotelRent(tile, owner, priceIndex): { rent, days }` —— 旅馆转盘天数与费用，同时给访问者附加 `hotelRest` 状态。
+- `Game.calculateGasRent(tile, owner, priceIndex, steps, vehicle): number` —— 加油站按步数收费。
+- `Game.isRentExempt(visitor, tile): boolean` —— 判断是否免租（大财神、免费卡、同盟等）。
 
 ## 7. 破产与获胜
 
@@ -124,7 +156,13 @@
   - 每月 15 日股东分红（依持股比例发放公司盈余）。
   - 每月 15 日乐透开奖（无人中奖奖金累积）。
   - 每逢星期例假日，股市及银行不对外营业。
-- 代码实现：`Game.checkBankruptcy(player)`、`Game.liquidate(player)`、`Game.checkWinCondition()`、`Game.monthlySettlement()`。
+- 代码实现：
+  - `Game.checkBankruptcy(player): boolean` —— 判定 `cash + deposit < 0`。
+  - `Game.liquidate(player): boolean` —— 破产法拍：变卖股票→土地，限 3 次；返回是否复活。
+  - `Game.forceSellStock(player)` / `Game.forceSellProperty(player, tileIndex)` —— 法拍内部辅助。
+  - `Game.checkWinCondition(state): { ended, winnerId }` —— 检查资金目标/时间限制/唯一幸存者。
+  - `Game.monthlySettlement(state): void` —— 调整物价指数、发放利息、股东分红、乐透开奖、土地到期、状态天数递减等。
+  - `Game.isBankOpen(day): boolean` —— 判断银行/股市是否营业（例假日关闭）。
 
 ## 8. 行走与回合
 
@@ -142,6 +180,18 @@
 6. 每过一天，递减所有状态效果和神仙的剩余天数。
 7. 每 30 天（一个月）触发月度结算。
 8. 检查胜利条件。
+
+代码实现（状态机）：
+- `GameState.status: 'rolling' | 'moving' | 'acting' | 'ended'` —— 当前阶段。
+- `Game.startTurn(state): void` —— 进入当前玩家回合，检查状态效果是否允许行动。
+- `Game.roll(state, playerId, diceCount): Result` —— 校验阶段→掷骰→进入 moving。
+- `Game.movePlayer(state, steps): void` —— 沿 path 移动，途中触发陷阱/神明效果，到达后进入 acting。
+- `Game.onPassTile(tile, player)` —— 经过地块触发（卡片格、点券格、起点工资等）。
+- `Game.onArriveTile(tile, player)` —— 抵达地块触发（买地/收租/系统格事件）。
+- `Game.promptAction(state): ActionOption[]` —— 根据当前地块生成可执行操作（购买/升级/结束回合）。
+- `Game.applyAction(state, action): Result` —— 执行玩家选择的操作。
+- `Game.endTurn(state): void` —— 结算地块效果→切换玩家→天数/月份推进→月度结算→检查胜利。
+- `Game.decrementStatusEffects(state): void` —— 每天递减所有玩家状态与神明剩余天数。
 
 ## 9. 卡片系统
 
@@ -208,6 +258,16 @@
 扩展卡片：均富卡、均贫卡、换屋卡、改建卡、查税卡、涨价卡、查封卡、同盟卡、抢夺卡、冬眠卡、陷害卡、嫁祸卡、梦游卡、免罪卡、送神符、请神符、红卡、黑卡。
 
 > **注意**：遥控骰子属于道具，不属于卡片。
+
+代码实现：
+- `CardSystem.drawRandomCard(): string` —— 从卡池随机抽一张卡。
+- `CardSystem.canAcquireCard(player, cardId): boolean` —— 检查是否超过 15 张上限。
+- `CardSystem.acquireCard(player, cardId): Result` —— 获得卡片，超限时要求选择丢弃。
+- `CardSystem.discardCard(player, cardInstanceId): Result` —— 丢弃指定卡片。
+- `CardSystem.useCard(state, playerId, cardId, target): Result` —— 使用卡片，调用对应效果器。
+- `CardEffectRegistry.register(cardId, effect)` —— 注册卡片效果函数。
+- `CardEffectRegistry.get(cardId): CardEffect` —— 获取卡片效果器。
+- 每张卡片对应一个 `CardEffect(state, caster, target): Result` 函数。
 
 ### 卡片与道具定价配置
 
@@ -282,6 +342,17 @@
 | 遥控骰子 | 工具 | 控制下一次骰子点数 |
 | 机器娃娃 | 工具 | 清除前方障碍物 |
 
+代码实现：
+- `ItemSystem.canAcquireItem(player, itemId, quantity): boolean` —— 检查道具是否超过该类型上限（默认 9，交通工具 1）。
+- `ItemSystem.acquireItem(player, itemId, quantity): Result` —— 添加道具到玩家背包。
+- `ItemSystem.useItem(state, playerId, itemId, target): Result` —— 使用即时工具（飞弹、机器娃娃、遥控骰子、研发产物）。
+- `ItemSystem.placeTrap(state, playerId, itemId, tileIndex): Result` —— 在道路上放置陷阱（路障、地雷、定时炸弹）。
+- `ItemSystem.applyVehicle(player, itemId): Result` —— 装备/更换交通工具。
+- `TrapSystem.trigger(state, trap, visitor): Result` —— 玩家踩中陷阱时触发效果。
+- `TrapSystem.clearAhead(state, player, range): Trap[]` —— 机器娃娃清除前方范围陷阱。
+- `TrapSystem.explode(state, trap, centerTile): void` —— 定时炸弹/飞弹/核弹爆炸处理。
+- 每种道具对应一个 `ItemEffect(state, user, target): Result` 函数。
+
 ## 11. 神明附身系统（扩展）
 
 ### 基本规则
@@ -314,6 +385,20 @@
 | 死神 | 损失全部卡片道具；罚款加倍；奖励作废；不能收过路费；替所有人付费用；不能买地盖房；送神符无效 | 14 天（认输投降+身上有复仇卡时出现） |
 
 > 视频中提到的"不可描述之神"多为对大衰神、恶魔或死神的戏称，不属于独立于 12 主神之外的新神明。
+
+代码实现：
+- `SpiritSystem.spawnSpirits(map): Spirit[]` —— 每月初在地图上随机生成神明 NPC。
+- `SpiritSystem.attach(player, spiritId): Result` —— 神明附身（新神替换旧神）。
+- `SpiritSystem.dismiss(player): Result` —— 使用送神符送走坏神或定时炸弹。
+- `SpiritSystem.summonNearest(player, state): Result` —— 使用请神符招来最近神明。
+- `SpiritSystem.onDayEnd(state): void` —— 每天递减神明剩余天数，处理变身/消失。
+- `SpiritEffectRegistry.get(spiritId): SpiritEffect` —— 获取神明效果器。
+- 每种神明对应 `SpiritEffect`：
+  - `onAttach(player)` —— 附身时触发（如大衰神丢卡）。
+  - `onPassTile(player, tile)` —— 经过土地时触发（天使/恶魔加盖或拆房）。
+  - `onArriveTile(player, tile)` —— 抵达土地时触发（土地公占地、财神免租等）。
+  - `onFate(player, event)` —— 遇到命运/新闻事件时触发（大财神挡灾、恶魔加倍等）。
+  - `onDayEnd(player)` —— 每天结束时触发（小神仙变身）。
 
 ## 12. 股票、公司与保险投资（扩展）
 
@@ -351,6 +436,18 @@
 - 理赔金额与保额/保险类型相关，可高达数十万甚至上百万。
 - **骗保策略**：玩家可主动让自己住院（如踩地雷、被恶犬咬、使用陷害卡等）触发理赔，住院期间每回合仍可能获得保险赔付或利息，从而快速积累资金。
 - 保险到期后需重新投保；无保险时住院只产生费用和停回合，无理赔。
+
+代码实现：
+- `StockMarket.getStocks(): Stock[]` —— 获取当前股票行情。
+- `StockMarket.trade(player, stockId, quantity): Result` —— 买入/卖出股票，现金从存款自动转扣。
+- `StockMarket.updatePrices(state): void` —— 每日/新闻事件后更新股价。
+- `StockMarket.payDividends(state): void` —— 每月 15 日按持股比例分红。
+- `CompanyService.onArrive(company, player): Result` —— 玩家走到公司地块触发特效（轮盘/收费/董事长特权）。
+- `CompanyService.spinWheel(company, player): WheelResult` —— 公司地块轮盘（航空/饭店/保险等）。
+- `CompanyService.updateChairman(state, company): void` —— 根据持股更新董事长。
+- `InsuranceService.buy(player, days, premium): Result` —— 购买保险。
+- `InsuranceService.claim(player, hospitalReason): number` —— 住院时理赔。
+- `InsuranceService.onDayEnd(state): void` —— 每天递减 `Player.insuranceDays`。
 
 ## 13. 其他系统（扩展）
 
@@ -399,6 +496,21 @@
 | **死神** | 认输投降时由魔法屋女巫召唤（需身上有复仇卡） | 附身指定目标 14 天，期间遗失全部卡片道具，罚款加倍，奖励作废，不能收租，替所有人付费用，不能买地盖房，送神符无效 |
 
 > 四大恶人行为通常受保释者控制，行动失败（如被反击、被捕）后会进入医院或监狱。
+
+代码实现：
+- `SpecialTileHandlers.start(tile, player): Result` —— 起点/银行：发工资、存取款、贷款。
+- `SpecialTileHandlers.hospital(tile, player)` —— 医院：住院逻辑；门外可保释。
+- `SpecialTileHandlers.prison(tile, player)` —— 监狱：坐牢逻辑；门外可保释。
+- `SpecialTileHandlers.shop(tile, player): ShopOption[]` —— 商店/百货公司：展示可购买卡片/道具列表。
+- `SpecialTileHandlers.buyFromShop(player, itemId / cardId): Result` / `sellToShop(...)` —— 商店买卖。
+- `SpecialTileHandlers.lottery(tile, player, number): Result` —— 乐透投注。
+- `SpecialTileHandlers.lotteryDraw(state): void` —— 每月 15 日开奖。
+- `SpecialTileHandlers.magicHouse(tile, player, target, spell): Result` —— 魔法屋施法。
+- `MiniGameSystem.start(gameType, player): Promise<MiniGameResult>` —— 触发小游戏。
+- `MiniGameSystem.award(player, score, gameType): void` —— 根据得分发放点券。
+- `SpecialNPCSystem.onPass(npc, player)` —— 四大恶人/乞丐/恶犬的经过效果。
+- `SpecialNPCSystem.bail(player, npcType): Result` —— 保释四大恶人。
+- `SpecialNPCSystem.moveNPCs(state): void` —— 每回合移动跟班 NPC。
 
 ## 14. 命运与新闻事件（扩展，基于视频资料补充）
 
@@ -520,3 +632,12 @@
 | 強烈地震 | 指定城市房屋倒塌。 |
 
 > 新闻事件多带有地图名称（如长沙、北京、天津），实际实现时可按地图上的城市/路段随机选择目标。
+
+代码实现：
+- `FateEventRegistry.register(eventId, event)` —— 注册命运事件。
+- `FateEventRegistry.random(state, player, tile): FateEvent` —— 根据地图/载具条件随机抽取命运事件。
+- `FateEvent.apply(state, player, event): Result` —— 执行命运事件效果。
+- `NewsEventRegistry.register(eventId, event)` —— 注册新闻事件。
+- `NewsEventRegistry.random(state, category?): NewsEvent` —— 按类别随机抽取新闻事件。
+- `NewsEvent.apply(state, event): Result` —— 执行新闻事件全局效果。
+- `EventCondition.check(event, state, player): boolean` —— 检查事件限定条件（地图、载具、神明等）。
