@@ -1,4 +1,7 @@
-import type { GameState, Tile, BuildingType } from '@monopoly4/shared';
+
+
+import type { GameState, Tile, BuildingType, SpiritOnMap } from '@monopoly4/shared';
+import { SPIRIT_DEFINITIONS } from '@monopoly4/shared';
 import {
   ringLayout,
   gridLayout,
@@ -83,6 +86,13 @@ const BUILDING_COLORS: Record<BuildingType, string> = {
   hotel: '#9b59b6',
   gasStation: '#e74c3c',
   lab: '#1abc9c',
+};
+
+/** 神明类型对应的颜色 */
+const SPIRIT_TYPE_COLORS: Record<string, string> = {
+  good: '#2ecc71',
+  bad: '#e74c3c',
+  neutral: '#f1c40f',
 };
 
 /** 地块类型对应的中文名（tooltip 用） */
@@ -177,6 +187,10 @@ export interface RenderOptions {
   hoverPixel?: { x: number; y: number };
   /** 动画时间戳，缺省则使用 Date.now() */
   time?: number;
+  /** 可选：可被选中的地块索引集合（地图选块模式高亮） */
+  selectableTileIndexes?: Set<number>;
+  /** 可选：当前是否处于地图选块模式 */
+  isSelectingTile?: boolean;
 }
 
 let currentLayout: BoardLayout | null = null;
@@ -237,6 +251,7 @@ export function renderBoard(
 
     const isHovered = tile.index === options.hoverIndex;
     const isCurrentTile = tile.index === currentTileIndex;
+    const isSelectable = options.isSelectingTile && options.selectableTileIndexes?.has(tile.index);
 
     // 地块底色 + 圆角 + 阴影
     ctx.save();
@@ -269,6 +284,18 @@ export function renderBoard(
       roundRectPath(ctx, x, y, w, h, radius);
       ctx.stroke();
     }
+
+    // 可选中地块高亮（地图选块模式）
+    if (isSelectable) {
+      ctx.strokeStyle = '#2ecc71';
+      ctx.lineWidth = 3;
+      ctx.shadowColor = 'rgba(46, 204, 113, 0.8)';
+      ctx.shadowBlur = 10;
+      roundRectPath(ctx, x - 1, y - 1, w + 2, h + 2, radius + 1);
+      ctx.stroke();
+      ctx.shadowColor = 'transparent';
+    }
+
     ctx.restore();
 
     // 所有者颜色条（顶部细条）
@@ -329,6 +356,12 @@ export function renderBoard(
     // 陷阱道具图标
     if (tile.traps && tile.traps.length > 0) {
       drawTrapIcon(ctx, x + w - minDim * 0.2, y + h - minDim * 0.2, minDim * 0.16, tile.traps[0].type);
+    }
+
+    // 神明图标
+    const spirit = state.spirits.find((s) => s.pathIndex === tile.index);
+    if (spirit) {
+      drawSpiritIcon(ctx, center.x + minDim * 0.22, center.y - h * 0.25, minDim * 0.18, spirit);
     }
   });
 
@@ -611,6 +644,42 @@ function drawTrapIcon(
   ctx.restore();
 }
 
+/** 绘制神明图标：带颜色光晕的圆形 + 名称首字 */
+function drawSpiritIcon(
+  ctx: CanvasRenderingContext2D,
+  cx: number,
+  cy: number,
+  size: number,
+  spirit: SpiritOnMap
+): void {
+  const def = SPIRIT_DEFINITIONS[spirit.spiritId];
+  const color = def ? SPIRIT_TYPE_COLORS[def.type] || '#f1c40f' : '#f1c40f';
+  const r = size / 2;
+
+  ctx.save();
+  ctx.shadowColor = color;
+  ctx.shadowBlur = r * 0.8;
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.shadowColor = 'transparent';
+  ctx.fillStyle = '#ffffff';
+  ctx.beginPath();
+  ctx.arc(cx, cy, r * 0.75, 0, Math.PI * 2);
+  ctx.fill();
+
+  const fontSize = Math.max(8, r * 1.2);
+  ctx.font = `bold ${fontSize}px sans-serif`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = '#2c3e50';
+  const label = def?.name?.[0] ?? '神';
+  ctx.fillText(label, cx, cy);
+  ctx.restore();
+}
+
 /** 绘制地块类型图标：背景圆 + 文字符号 */
 function drawTileIcon(
   ctx: CanvasRenderingContext2D,
@@ -670,7 +739,18 @@ function drawTooltip(
   }
   if (tile.traps && tile.traps.length > 0) {
     const trapNames: Record<string, string> = { barrier: '路障', mine: '地雷', timeBomb: '定时炸弹' };
-    lines.push(`陷阱：${tile.traps.map((t) => trapNames[t.type] || t.type).join('、')}`);
+    lines.push(`陷阱：${tile.traps.map((t) => {
+      const name = trapNames[t.type] || t.type;
+      if (t.type === 'timeBomb' && t.remainingSteps !== undefined) {
+        return `${name}(剩${t.remainingSteps}步)`;
+      }
+      return name;
+    }).join('、')}`);
+  }
+  const spirit = state.spirits.find((s) => s.pathIndex === tile.index);
+  if (spirit) {
+    const def = SPIRIT_DEFINITIONS[spirit.spiritId];
+    lines.push(`神明：${def?.name ?? spirit.spiritId}`);
   }
 
   const padding = 10;
