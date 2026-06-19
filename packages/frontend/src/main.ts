@@ -61,6 +61,7 @@ let currentRoom: Room | null = null;
 let currentGame: GameState | null = null;
 let currentUser: PublicUser | null = loadUser();
 let cleanupFns: Array<() => void> = [];
+let isStockCollapsed = false;
 
 /** 显示 Toast 通知 */
 function showToast(message: string, type: 'info' | 'error' | 'success' = 'info') {
@@ -499,6 +500,13 @@ async function navigateToGame(roomId: string): Promise<void> {
     <div class="game-layout">
       <div class="board-wrap"></div>
       <div class="side-panel">
+        <div class="info-card stock-card">
+          <div class="stock-card-header">
+            <h2>股市与公司</h2>
+            <button id="btn-toggle-stock" class="btn-icon" title="展开/折叠">−</button>
+          </div>
+          <div id="stock-market"></div>
+        </div>
         <div class="info-card">
           <h2>玩家信息</h2>
           <div id="players-info"></div>
@@ -514,10 +522,6 @@ async function navigateToGame(roomId: string): Promise<void> {
         <div class="info-card">
           <h2>操作</h2>
           <div id="game-actions"></div>
-        </div>
-        <div class="info-card">
-          <h2>股市与公司</h2>
-          <div id="stock-market"></div>
         </div>
         <div class="info-card logs">
           <h2>日志</h2>
@@ -546,6 +550,18 @@ async function navigateToGame(roomId: string): Promise<void> {
       const panel = container.querySelector(`#backpack-${target}`);
       if (panel) panel.classList.add('active');
     });
+  });
+
+  // 股市面板折叠切换
+  const toggleStockBtn = container.querySelector<HTMLButtonElement>('#btn-toggle-stock')!;
+  const stockCard = container.querySelector('.stock-card')!;
+  stockCard.classList.toggle('collapsed', isStockCollapsed);
+  toggleStockBtn.textContent = isStockCollapsed ? '+' : '−';
+  toggleStockBtn.addEventListener('click', () => {
+    isStockCollapsed = !isStockCollapsed;
+    stockCard.classList.toggle('collapsed', isStockCollapsed);
+    toggleStockBtn.textContent = isStockCollapsed ? '+' : '−';
+    if (currentGame) renderStockMarket(container, currentGame);
   });
 
   function renderGame(state: GameState): void {
@@ -919,7 +935,19 @@ function renderStockMarket(container: HTMLElement, state: GameState): void {
   `;
   const tbody = table.querySelector('tbody')!;
 
-  state.stocks.forEach((stock) => {
+  const filteredStocks = isStockCollapsed
+    ? state.stocks.filter((stock) => (currentPlayer?.stockHoldings[stock.id] ?? 0) > 0)
+    : state.stocks;
+
+  if (filteredStocks.length === 0) {
+    const empty = document.createElement('div');
+    empty.className = 'stock-empty';
+    empty.textContent = isStockCollapsed ? '当前未持有任何股票' : '暂无股票数据';
+    el.appendChild(empty);
+    return;
+  }
+
+  filteredStocks.forEach((stock) => {
     const company = state.companies.find((c) => c.id === stock.companyId);
     const holding = currentPlayer?.stockHoldings[stock.id] ?? 0;
     const chairman = company?.chairmanPlayerId
