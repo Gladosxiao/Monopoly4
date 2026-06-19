@@ -503,11 +503,11 @@ export interface ClientToServerEvents {
   'test:giveCard': (roomId: string, playerId: string, cardId: string) => void;
   'test:giveItem': (roomId: string, playerId: string, itemId: string, quantity?: number) => void;
   'test:setTileLevel': (roomId: string, tileIndex: number, level: number) => void;
-  'test:setTileOwner': (roomId: string, tileIndex: number, playerId: string) => void;
+  'test:setTileOwner': (roomId: string, tileIndex: number, playerId: string | null) => void;
   'test:clearEffects': (roomId: string, playerId: string) => void;
   'test:freeShop': (roomId: string) => void;
-  'test:freeBuyCard': (roomId: string, cardId: string) => void;
-  'test:freeBuyItem': (roomId: string, itemId: string, quantity?: number) => void;
+  'test:freeBuyCard': (roomId: string, playerId: string, cardId: string) => void;
+  'test:freeBuyItem': (roomId: string, playerId: string, itemId: string, quantity?: number) => void;
   'test:forceEndTurn': (roomId: string) => void;
   'test:setDay': (roomId: string, day: number) => void;
   'test:setMonth': (roomId: string, month: number) => void;
@@ -517,7 +517,7 @@ export interface ClientToServerEvents {
   'test:giveAllItems': (roomId: string, playerId: string) => void;
   'test:resetAll': (roomId: string) => void;
   'test:aiStart': (roomId: string, intervalMs?: number) => void;
-  'test:aiStop': () => void;
+  'test:aiStop': (roomId: string) => void;
   'test:aiStep': (roomId: string) => void;
 }
 

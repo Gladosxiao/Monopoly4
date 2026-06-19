@@ -62,6 +62,8 @@ interface RoadEffect {
 
 入口函数：`calculateRent(tile, owner, state, visitor)`
 
+当前版本地价与租金已统一降至原价的 **10%**，并保持 `baseRent ≈ basePrice × 10%` 的固定比例，避免早期现金流被高租金压垮。
+
 计算流程：
 1. 检查是否满足收取条件（有主人、非自己、非破产）。
 2. 调用 `isRentExempt()` 判断是否免租。
@@ -94,7 +96,7 @@ rent = baseRent * chainStoreCount * priceIndex
 |---|---|---|
 | 商场 (`mall`) | `baseRent * level * wheel(1-6) * priceIndex` | 转盘决定消费倍数 |
 | 旅馆 (`hotel`) | `baseRent * level * wheel(1-6) * priceIndex` | 转盘决定住宿天数，访客获得 `hotelRest` |
-| 加油站 (`gasStation`) | `stepsThisTurn * rate * priceIndex` | 步行 rate=50，乘车 rate=200 |
+| 加油站 (`gasStation`) | `stepsThisTurn * rate * priceIndex` | 步行 rate=50，乘车 rate=200；与土地 basePrice 无关 |
 | 公园 (`park`) | 0 | 不收费 |
 | 研究所 (`lab`) | 0 | 不收租 |
 

@@ -64,9 +64,9 @@
 | 功能 | 设计文档要求 | 当前实现 | 状态 |
 |---|---|---|---|
 | 40 格可配置路径 | 需要 | `SIMPLE_MAP.path` 为 0-39；`@monopoly4/map-generator` 提供 `DEFAULT_TEMPLATE`、`PLAYER4_TEMPLATE` 等 5 套预设 | ✅ 已实现 |
-| 80 格大地图 | 需要 | `MAP80_TEMPLATE` 已落地，人均 1 大地产 + 9 小地产，80 回合点券翻倍；所有生成模板地价已降至原价的 10% | ✅ 已实现 |
+| 80 格大地图 | 需要 | `MAP80_TEMPLATE` 已落地，人均 1 大地产 + 9 小地产，80 回合点券翻倍；所有生成模板 `basePriceRange` 已降至原价的 10% | ✅ 已实现 |
 | 大地产占 2 格 | 需要 | `largePropertySpan: 2`，生成器保证连续空位 | ✅ 已实现 |
-| 地价 | 需要 | `basePriceRange` 已统一降至 10%，租金（`basePrice * 0.05`）同步降低 | ✅ 已实现 |
+| 地价 | 需要 | `basePrice` 与 `baseRent` 已统一降至原价的 10%，并保持 `baseRent ≈ basePrice × 10%` | ✅ 已实现 |
 | 小地产连续分组 | 3-4 个连续 | `smallPropertyGroups` 支持连续分组，默认 3-4 个一组 | ✅ 已实现 |
 | 多地图加载 | `MapLoader.load(mapId)` | `loader.ts` 提供 `loadMap`/`saveMap`/`loadMapFromTemplate`/`validateMap` | ✅ 已实现 |
 | 2.5D/环形坐标 | `MapUtils.positionOf` | `coords.ts` 提供 `ringLayout`、`gridLayout`、`getTileCenter`、`getTileRect`、`interpolatePosition`、`getTileAtPosition` | ✅ 已实现 |

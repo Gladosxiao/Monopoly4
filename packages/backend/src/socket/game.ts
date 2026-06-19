@@ -703,10 +703,10 @@ export function setupSocketIO(httpServer: HttpServer): SocketIOServer<ClientToSe
       io.to(roomId).emit('game:state', state);
     }));
 
-    socket.on('test:setTileOwner', requireTestMode((roomId: string, tileIndex: number, playerId: string) => {
+    socket.on('test:setTileOwner', requireTestMode((roomId: string, tileIndex: number, playerId: string | null) => {
       const state = games.get(roomId);
       if (!state) return;
-      testMode.setTileOwner(state, tileIndex, playerId);
+      testMode.setTileOwner(state, tileIndex, playerId ?? '');
       io.to(roomId).emit('game:state', state);
     }));
 

@@ -245,9 +245,10 @@ export function createTestPanel(
 
   // 状态效果清除按钮
   const clearEffectsBtn = createButton('清除所有状态效果', () => {
+    const roomId = getCurrentState()?.roomId;
     const pid = playerSelect.value;
-    if (!pid) return;
-    emitFn('test:clearEffects', pid);
+    if (!roomId || !pid) return;
+    emitFn('test:clearEffects', roomId, pid);
   });
   content.appendChild(clearEffectsBtn);
 
