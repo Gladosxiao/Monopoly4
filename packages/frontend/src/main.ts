@@ -193,6 +193,16 @@ function clean() {
   app.innerHTML = '';
 }
 
+/** 转义 HTML 特殊字符，防止 XSS。 */
+function escapeHtml(text: string): string {
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
 async function navigateToLogin(error?: string): Promise<void> {
   clean();
   let allowRegistration = false;
@@ -209,7 +219,7 @@ async function navigateToLogin(error?: string): Promise<void> {
     <h1>大富翁4 Web</h1>
     <div class="auth-box">
       <h2>登录</h2>
-      ${error ? `<div class="error">${error}</div>` : ''}
+      ${error ? `<div class="error">${escapeHtml(error)}</div>` : ''}
       <div class="auth-hint">测试账号：test / test123</div>
       <input type="text" id="username" placeholder="用户名" />
       <input type="password" id="password" placeholder="密码" />
@@ -303,7 +313,7 @@ async function navigateToLobby(error?: string): Promise<void> {
         <button id="btn-logout">退出</button>
       </div>
     </header>
-    ${error ? `<div class="error">${error}</div>` : ''}
+    ${error ? `<div class="error">${escapeHtml(error)}</div>` : ''}
     <div class="lobby-actions">
       <input type="text" id="room-name" placeholder="房间名" />
       <select id="map-select"></select>
@@ -406,7 +416,7 @@ async function navigateToRoom(roomId: string, error?: string): Promise<void> {
       <h1>房间 ${currentRoom.name}</h1>
       <button id="btn-back">返回大厅</button>
     </header>
-    ${error ? `<div class="error">${error}</div>` : ''}
+    ${error ? `<div class="error">${escapeHtml(error)}</div>` : ''}
     <div class="room-id">房间号：<strong>${currentRoom.id}</strong></div>
     <div class="room-content">
       <div class="players-panel">
@@ -1219,8 +1229,8 @@ async function promptItemTarget(state: GameState, itemId: string): Promise<ItemU
   return target;
 }
 
-// 检测 URL 参数 ?test=1 启用测试模式
-if (new URLSearchParams(window.location.search).get('test') === '1') {
+// 仅在开发环境启用测试模式面板（后端仍受 ENABLE_TEST_MODE 环境变量与房主权限控制）
+if ((import.meta as any).env?.DEV) {
   enableTestMode();
 }
 

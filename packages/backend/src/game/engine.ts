@@ -264,7 +264,7 @@ export function roll(
 
   const max = getMaxDiceCount(player);
   const count = diceCount ?? max;
-  if (count < 1 || count > max) {
+  if (!Number.isInteger(count) || !Number.isFinite(count) || count < 1 || count > max) {
     return { success: false, message: `当前载具最多可投 ${max} 颗骰子` };
   }
 
@@ -1909,7 +1909,7 @@ export function endTurn(state: GameState): GameState {
   if (dayAdvanced) {
     state.day += 1;
     decrementEffects(state);
-    if (state.day >= 30) {
+    if (state.day > 30) {
       state.month += 1;
       state.day = 1;
       const oldPriceIndex = state.priceIndex;

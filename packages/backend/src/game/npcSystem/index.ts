@@ -27,9 +27,10 @@ function hospitalize(state: GameState, player: Player, days: number, reason: str
     remainingDays: days,
     data: { reason },
   });
-  const hospitalIndex = state.map.tiles.findIndex((t) => t.type === 'hospital');
-  if (hospitalIndex >= 0) {
-    player.position = state.map.path[hospitalIndex];
+  const hospitalTileIndex = state.map.tiles.findIndex((t) => t.type === 'hospital');
+  if (hospitalTileIndex >= 0) {
+    const pathIndex = state.map.path.findIndex((ti) => ti === hospitalTileIndex);
+    if (pathIndex >= 0) player.position = pathIndex;
   }
   // 若已投保则自动申请理赔（骗保联动点）
   claimInsurance(state, player, reason);
