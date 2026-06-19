@@ -10,7 +10,7 @@
 |---|---|---|---|
 | 1 | 开局设置 | 70% | 土地权限/游戏时间/胜利条件已补齐，多地图未实现 |
 | 2 | 角色属性 | 60% | 字段存在，利息/破产法拍已落地，贷款/总资产计算待完善 |
-| 3 | 地图与路径 | 20% | 仅有一张 40 格简化地图，无地图加载器/坐标工具 |
+| 3 | 地图与路径 | 75% | `@monopoly4/map-generator` 已提供多模板、加载器、坐标工具、SVG/HTML 渲染与棋子占位；前端 `SIMPLE_MAP` 仍需迁移接入 |
 | 4 | 土地类型 | 60% | 大小块/建筑类型已落地，但研究院产物等未实现 |
 | 5 | 土地购买与升级 | 70% | 购买/升级/改建可用，但大块土地建筑选择、建造费用未完全对齐 |
 | 6 | 过路费 | 85% | 住宅/连锁店/特殊建筑/神明/卡片影响已基本实现 |
@@ -63,12 +63,25 @@
 
 | 功能 | 设计文档要求 | 当前实现 | 状态 |
 |---|---|---|---|
-| 40 格可配置路径 | 需要 | `SIMPLE_MAP.path` 为 0-39 | ✅ 已实现 |
-| 多地图加载 | `MapLoader.load(mapId)` | 无加载器，仅硬编码一张地图 | ❌ 未实现 |
-| 2.5D 坐标 | `MapUtils.positionOf` | 前端 `board.ts` 自行按行列计算，无统一工具 | ⚠️ 临时实现 |
-| 绕圈处理 | `MapUtils.wrapPosition` | `movePlayer` 中用取模实现 | ✅ 已实现 |
+| 40 格可配置路径 | 需要 | `SIMPLE_MAP.path` 为 0-39；`@monopoly4/map-generator` 提供 `DEFAULT_TEMPLATE`、`PLAYER4_TEMPLATE` 等 5 套预设 | ✅ 已实现 |
+| 80 格大地图 | 需要 | `MAP80_TEMPLATE` 已落地，人均 1 大地产 + 9 小地产，80 回合点券翻倍 | ✅ 已实现 |
+| 大地产占 2 格 | 需要 | `largePropertySpan: 2`，生成器保证连续空位 | ✅ 已实现 |
+| 小地产连续分组 | 3-4 个连续 | `smallPropertyGroups` 支持连续分组，默认 3-4 个一组 | ✅ 已实现 |
+| 多地图加载 | `MapLoader.load(mapId)` | `loader.ts` 提供 `loadMap`/`saveMap`/`loadMapFromTemplate`/`validateMap` | ✅ 已实现 |
+| 2.5D/环形坐标 | `MapUtils.positionOf` | `coords.ts` 提供 `ringLayout`、`gridLayout`、`getTileCenter`、`getTileRect`、`interpolatePosition`、`getTileAtPosition` | ✅ 已实现 |
+| 绕圈处理 | `MapUtils.wrapPosition` | `movePlayer` 中用取模实现；`interpolatePosition` 支持跨边界最短路径 | ✅ 已实现 |
+| SVG/HTML 渲染 | 需要 | `visualizer.ts` 提供彩色环形/网格棋盘、地块名称、价格、图例 | ✅ 已实现 |
+| 角色棋子占位 | 需要 | `renderHtmlMap`/`renderSvgWithTokens` 支持彩色圆形棋子，同格自动错位 | ✅ 已实现 |
+| 前端接入 | 需要 | 前端 `board.ts` 仍使用 `SIMPLE_MAP`，未接入新加载器与坐标工具 | ⚠️ 待迁移 |
 
-**代码位置**：`packages/shared/src/index.ts`（SIMPLE_MAP）、`packages/frontend/src/board.ts`
+**代码位置**：
+- `packages/map-generator/src/generator.ts`（模板与生成）
+- `packages/map-generator/src/loader.ts`（加载器）
+- `packages/map-generator/src/coords.ts`（坐标工具）
+- `packages/map-generator/src/visualizer.ts`（渲染与棋子）
+- `packages/map-generator/src/scripts/simulate.ts`（离线模拟与可视化输出）
+- `packages/shared/src/index.ts`（SIMPLE_MAP，待迁移）
+- `packages/frontend/src/board.ts`（前端棋盘，待接入）
 
 ---
 
@@ -235,6 +248,9 @@
 
 ## 关键建议
 
-1. **近期优先**：完善行走阶段（`moving` 状态、经过效果）、道具系统（至少首期子集）、卡片格随机获得卡片。
+1. **近期优先**：
+   - 将 `@monopoly4/map-generator` 接入前端 `board.ts`，替换硬编码 `SIMPLE_MAP`。
+   - 使用 `ringLayout` + `interpolatePosition` 实现棋子移动动画。
+   - 完善行走阶段（`moving` 状态、经过效果）、道具系统（至少首期子集）、卡片格随机获得卡片。
 2. **中期目标**：实现土地权限到期（`landLease`、`purchasedAt`、`expiresAt`）、胜利条件完整检查、月度结算（利息、分红）。
 3. **长期扩展**：股票/公司/保险、命运新闻事件注册表、小游戏、神明 NPC 与寻路。
