@@ -458,6 +458,14 @@ select:focus {
   font-size: var(--font-size-sm);
 }
 
+.badge.bot {
+  padding: 2px 6px;
+  background: #6c5ce7;
+  color: #fff;
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-sm);
+}
+
 .player-ready {
   display: inline-flex;
   align-items: center;
@@ -506,6 +514,16 @@ select:focus {
 
 .action-buttons button {
   flex: 1;
+}
+
+.btn-bot {
+  background: var(--color-input) !important;
+  border: 1px dashed var(--color-border-light) !important;
+  opacity: 0.8;
+}
+.btn-bot:hover {
+  opacity: 1;
+  border-color: var(--color-primary) !important;
 }
 
 /* 游戏页 */

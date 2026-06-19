@@ -336,6 +336,7 @@ async function navigateToRoom(roomId: string, error?: string): Promise<void> {
         <div class="action-buttons">
           <button id="btn-ready">准备</button>
           <button id="btn-start" style="display:none">开始游戏</button>
+          ${isTestMode() ? '<button id="btn-add-bot" class="btn-bot">添加AI机器人</button>' : ''}
         </div>
       </div>
     </div>
@@ -355,6 +356,14 @@ async function navigateToRoom(roomId: string, error?: string): Promise<void> {
   container.querySelector('#btn-start')!.addEventListener('click', () => {
     startGame(roomId);
   });
+
+  // 测试模式：添加AI机器人
+  const addBotBtn = container.querySelector<HTMLButtonElement>('#btn-add-bot');
+  if (addBotBtn) {
+    addBotBtn.addEventListener('click', () => {
+      getSocket().emit('test:addBot', roomId);
+    });
+  }
 
   // 角色选择
   const charContainer = container.querySelector<HTMLDivElement>('#character-select')!;
@@ -403,6 +412,7 @@ function renderRoomPlayers(container: HTMLElement, room: Room): void {
         <span class="player-char">${char?.name || p.characterId}</span>
       </div>
       <span class="player-badges">
+        ${p.isAI ? '<span class="badge bot">🤖 AI</span>' : ''}
         ${p.isHost ? '<span class="badge host">房主</span>' : ''}
         <span class="player-ready ${p.isReady ? 'ready' : ''}">${p.isReady ? '✅ 已准备' : '⏳ 未准备'}</span>
       </span>

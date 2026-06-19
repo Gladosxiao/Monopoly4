@@ -71,6 +71,44 @@ export function setupSocketIO(httpServer: HttpServer): void {
   io.on('connection', (socket: Socket) => {
     const user = socket.data.user as { id: string; username: string };
 
+    // AI 自动行动：检查当前玩家是否为 AI，若是则延迟自动执行回合
+    const aiTimers = new Map<string, ReturnType<typeof setTimeout>>();
+    function scheduleAITurn(roomId: string) {
+      if (aiTimers.has(roomId)) return; // 已有定时器
+      const check = () => {
+        const state = games.get(roomId);
+        if (!state || state.status !== 'rolling') { aiTimers.delete(roomId); return; }
+        const cp = state.players[state.currentPlayerIndex];
+        if (!cp || !cp.isAI || cp.isBankrupt) { aiTimers.delete(roomId); return; }
+        const timer = setTimeout(() => {
+          aiTimers.delete(roomId);
+          const s = games.get(roomId);
+          if (!s || s.status !== 'rolling') return;
+          const ai = s.players[s.currentPlayerIndex];
+          if (!ai || !ai.isAI || ai.isBankrupt) return;
+          // AI 自动掷骰
+          const result = roll(s);
+          if (result.success && result.steps !== undefined && result.steps !== 0) {
+            movePlayer(s, result.steps);
+          }
+          // AI 自动买地/升级
+          const tile = s.map.tiles[ai.position];
+          if (tile.type === 'property' && !tile.ownerId && ai.cash >= (tile.basePrice ?? 0) * s.priceIndex) {
+            buyProperty(s);
+          } else if (tile.type === 'property' && tile.ownerId === ai.id && (tile.level ?? 0) < 5) {
+            upgradeProperty(s);
+          }
+          // 结束回合
+          endTurn(s);
+          io.to(roomId).emit('game:state', s);
+          scheduleAITurn(roomId); // 继续检查下一个
+        }, 1200);
+        aiTimers.set(roomId, timer);
+      };
+      // 延迟一小段时间再检查，让人类玩家看到状态变化
+      setTimeout(check, 500);
+    }
+
     socket.on('room:join', (roomId) => {
       const room = rooms.get(roomId) ?? loadRoomFromDb(roomId);
       if (!room) {
@@ -161,6 +199,7 @@ export function setupSocketIO(httpServer: HttpServer): void {
       games.set(roomId, state);
       io.to(roomId).emit('room:updated', room);
       io.to(roomId).emit('game:state', state);
+      scheduleAITurn(roomId); // 检查是否需要 AI 自动行动
     });
 
     socket.on('game:roll', (roomId, diceCount) => {
@@ -412,10 +451,37 @@ export function setupSocketIO(httpServer: HttpServer): void {
       }
       endTurn(state);
       io.to(roomId).emit('game:state', state);
+      scheduleAITurn(roomId); // 检查下一个玩家是否为 AI
     });
 
     // ===== 测试模式事件 =====
     // 仅在测试模式启用时生效
+
+    socket.on('test:addBot', (roomId: string) => {
+      const room = rooms.get(roomId) ?? loadRoomFromDb(roomId);
+      if (!room) return;
+      if (room.status !== 'waiting') return;
+      if (room.players.length >= room.maxPlayers) {
+        socket.emit('error', '房间已满');
+        return;
+      }
+      const takenCharacters = new Set(room.players.map((p) => p.characterId));
+      const botIndex = room.players.length;
+      const character = CHARACTERS.find((c) => !takenCharacters.has(c.id)) || CHARACTERS[botIndex % CHARACTERS.length];
+      const botNames = ['小明', '小红', '小刚', '小丽', '大壮', '阿花'];
+      const botName = botNames[botIndex % botNames.length];
+      room.players.push({
+        userId: `bot-${Date.now()}-${botIndex}`,
+        username: `[AI] ${botName}`,
+        characterId: character.id,
+        isReady: true,
+        isHost: false,
+        seatIndex: botIndex,
+        isAI: true,
+      });
+      saveRoomToDb(room);
+      io.to(roomId).emit('room:updated', room);
+    });
 
     socket.on('test:getSnapshot', (roomId: string) => {
       const state = games.get(roomId);

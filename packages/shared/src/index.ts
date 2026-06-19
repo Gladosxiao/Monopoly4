@@ -49,6 +49,7 @@ export interface RoomPlayer {
   isReady: boolean;
   isHost: boolean;
   seatIndex: number;
+  isAI?: boolean;
 }
 
 export interface Room {
@@ -461,6 +462,7 @@ export interface ClientToServerEvents {
   'game:lotteryBet': (roomId: string, number: number) => void;
   'game:magicSpell': (roomId: string, targetPlayerId: string, spell: 'swapCash' | 'dismissSpirit' | 'stealCard' | 'jail') => void;
   // 测试模式事件
+  'test:addBot': (roomId: string) => void;
   'test:getSnapshot': (roomId: string) => void;
   'test:setCash': (roomId: string, playerId: string, cash: number) => void;
   'test:setDeposit': (roomId: string, playerId: string, deposit: number) => void;

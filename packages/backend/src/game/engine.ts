@@ -102,7 +102,7 @@ export function createGame(roomId: string, config: GameConfig, roomPlayers: Room
       stockHoldings: {},
       insuranceDays: 0,
       isBankrupt: false,
-      isAI: false,
+      isAI: rp.isAI ?? false,
       liquidationCount: 0,
     };
   });
