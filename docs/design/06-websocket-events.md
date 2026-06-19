@@ -33,7 +33,9 @@ const socket = io('/game', {
 离开当前房间。
 
 ```json
-{}
+{
+  "roomId": "string"
+}
 ```
 
 #### `room:ready`
@@ -42,25 +44,29 @@ const socket = io('/game', {
 
 ```json
 {
+  "roomId": "string",
   "isReady": true
 }
 ```
 
-#### `room:start`
+#### `room:character`
 
-房主开始游戏（服务端通过 socket 关联的房间推断 roomId，无需传参）。
-
-```json
-{}
-```
-
-#### `room:kick`
-
-房主踢出指定玩家（仅房主可用）。
+选择角色。
 
 ```json
 {
-  "targetUserId": "string"
+  "roomId": "string",
+  "characterId": "string"
+}
+```
+
+#### `game:start`
+
+房主开始游戏。
+
+```json
+{
+  "roomId": "string"
 }
 ```
 
@@ -76,23 +82,12 @@ const socket = io('/game', {
 }
 ```
 
-#### `room:started`
+#### `error`
 
-游戏开始，广播初始游戏状态。
-
-```json
-{
-  "gameState": { ... }
-}
-```
-
-#### `room:error`
-
-房间操作错误。
+操作错误。
 
 ```json
 {
-  "code": "ERROR_CODE",
   "message": "string"
 }
 ```
@@ -107,7 +102,8 @@ const socket = io('/game', {
 
 ```json
 {
-  "diceCount": 1  // 1-3，根据 moveMode 限制
+  "roomId": "string",
+  "diceCount": 1  // 1-3，根据 moveMode 限制（可选，默认 1）
 }
 ```
 
@@ -116,7 +112,9 @@ const socket = io('/game', {
 购买当前所在空地。
 
 ```json
-{}
+{
+  "roomId": "string"
+}
 ```
 
 #### `game:upgrade`
@@ -124,26 +122,91 @@ const socket = io('/game', {
 升级当前所在自有土地。
 
 ```json
-{}
+{
+  "roomId": "string"
+}
+```
+
+#### `game:rebuild`
+
+改建当前所在土地的建筑类型。
+
+```json
+{
+  "roomId": "string",
+  "tileIndex": 0,
+  "buildingType": "chainStore"  // BuildingType
+}
 ```
 
 #### `game:skip`
 
-跳过购买/升级。
+跳过购买/升级，结束当前回合。
 
 ```json
-{}
+{
+  "roomId": "string"
+}
+```
+
+#### `game:buyCard`
+
+在商店购买卡片（消耗点券）。
+
+```json
+{
+  "roomId": "string",
+  "cardId": "string"
+}
+```
+
+#### `game:sellCard`
+
+出售手中卡片（获得点券）。
+
+```json
+{
+  "roomId": "string",
+  "cardId": "string"  // CardInstance.instanceId
+}
 ```
 
 #### `game:useCard`
 
-使用卡片。
+使用手中卡片。
 
 ```json
 {
-  "instanceId": "string",
-  "targetId?": "string",    // 目标玩家/地块 ID
-  "targetTileIndex?": 0
+  "roomId": "string",
+  "cardId": "string",           // CardInstance.instanceId
+  "target": {                   // 可选目标
+    "playerId": "string",       // 目标玩家 ID（如购地卡、均贫卡）
+    "tileIndex": 0              // 目标地块索引（如拆除卡）
+  }
+}
+```
+
+#### `game:buyItem`
+
+在商店购买道具（消耗点券）。
+
+```json
+{
+  "roomId": "string",
+  "itemId": "string",
+  "quantity": 1  // 可选，默认 1
+}
+```
+
+#### `game:sellItem`
+
+出售手中道具（获得点券）。
+
+```json
+{
+  "roomId": "string",
+  "itemId": "string",   // ItemInstance.instanceId
+  "quantity": 1         // 可选，默认 1
 }
 ```
 
@@ -153,29 +216,91 @@ const socket = io('/game', {
 
 ```json
 {
-  "instanceId": "string",
-  "targetTileIndex?": 0
+  "roomId": "string",
+  "itemId": "string",           // ItemInstance.instanceId
+  "target": {                   // 可选目标
+    "tileIndex": 0              // 目标地块索引（如飞弹）
+  }
 }
 ```
 
-#### `game:placeTrap`
+#### `game:stockTrade`
 
-放置陷阱道具（路障、地雷、定时炸弹）。
+买入/卖出股票。
 
 ```json
 {
-  "instanceId": "string",
-  "tileIndex": 0
+  "roomId": "string",
+  "stockId": "string",
+  "quantity": 100               // 正数=买入，负数=卖出
 }
 ```
 
-#### `game:chat`
+#### `game:claimInsurance`
 
-发送聊天消息。
+申请保险理赔。
 
 ```json
 {
-  "message": "string"
+  "roomId": "string"
+}
+```
+
+#### `game:loan`
+
+申请贷款。
+
+```json
+{
+  "roomId": "string",
+  "amount": 10000
+}
+```
+
+#### `game:repay`
+
+偿还贷款。
+
+```json
+{
+  "roomId": "string",
+  "amount": 10000
+}
+```
+
+#### `game:lotteryBet`
+
+乐透投注。
+
+```json
+{
+  "roomId": "string",
+  "number": 12345
+}
+```
+
+#### `game:magicSpell`
+
+魔法屋施法。
+
+```json
+{
+  "roomId": "string",
+  "targetPlayerId": "string",
+  "spell": "swapCash"  // 'swapCash' | 'dismissSpirit' | 'stealCard' | 'jail'
+}
+```
+
+#### `game:miniGameResult`
+
+小游戏结算（前端小游戏结束后发送结果）。
+
+```json
+{
+  "roomId": "string",
+  "result": {
+    "coupons": 100  // 获得的点券数
+  }
 }
 ```
 
@@ -187,157 +312,260 @@ const socket = io('/game', {
 
 ```json
 {
-  "gameState": { ... }
+  "state": { ... }
 }
 ```
 
-#### `game:action`
+#### `game:log`
 
-广播具体动作事件（用于前端动画触发）。`data` 结构根据 `type` 不同而不同：
-
-```json
-{
-  "type": "roll" | "move" | "buy" | "upgrade" | "payRent" | "useCard" | "useItem" | "placeTrap" | "bankrupt" | "win",
-  "playerId": "uuid",
-  "data": { ... },
-  "timestamp": 1234567890
-}
-```
-
-**各 type 对应的 data 结构：**
-
-| type | data 结构 | 说明 |
-|---|---|---|
-| `roll` | `{ dice: number[], total: number }` | 骰子点数数组（1-3 颗）与总和 |
-| `move` | `{ from: number, to: number, path: number[], triggeredTraps?: Trap[] }` | 起止位置、途经路径、触发的陷阱 |
-| `buy` | `{ tileIndex: number, price: number }` | 购买的地块与价格 |
-| `upgrade` | `{ tileIndex: number, newLevel: number, cost: number }` | 升级地块、新等级、费用 |
-| `payRent` | `{ tileIndex: number, amount: number, ownerId: string, priceIndex: number }` | 支付过路费详情 |
-| `useCard` | `{ cardId: string, instanceId: string, targetId?: string, targetTileIndex?: number }` | 使用卡片详情 |
-| `useItem` | `{ itemId: string, instanceId: string, targetTileIndex?: number }` | 使用道具详情 |
-| `placeTrap` | `{ trapId: string, trapType: string, tileIndex: number }` | 放置陷阱详情 |
-| `bankrupt` | `{ liquidationCount: number, finalBankrupt: boolean }` | 破产清算，finalBankrupt 表示是否彻底破产 |
-| `win` | `{ reason: "bankruptcy" \| "funds" \| "timeout", totalAssets: number }` | 获胜原因与总资产 |
-
-#### `game:chat`
-
-广播聊天消息。
+广播游戏日志（单条）。
 
 ```json
 {
-  "playerId": "uuid",
-  "username": "string",
-  "message": "string",
-  "timestamp": 1234567890
-}
-```
-
-#### `game:error`
-
-游戏操作错误。
-
-```json
-{
-  "code": "ERROR_CODE",
+  "timestamp": 1234567890,
+  "type": "string",
+  "actorId": "uuid",
+  "targetId": "uuid",
   "message": "string"
 }
 ```
 
-#### `game:ended`
+#### `error`
 
-游戏结束。
-
-```json
-{
-  "winnerId": "uuid",
-  "winnerName": "string",
-  "reason": "bankruptcy" | "funds" | "timeout"
-}
-```
-
-#### `game:sync`
-
-断线重连后服务端发送当前完整游戏状态（客户端重连后自动请求）。
+操作错误（统一错误事件）。
 
 ```json
 {
-  "gameState": { ... },
-  "missedActions": [ { ... } ]
+  "message": "string"
 }
 ```
 
-客户端重连流程：
-1. Socket.IO 自动重连。
-2. 客户端 emit `game:reconnect`。
-3. 服务端响应 `game:sync`，发送当前完整 `GameState` 和断线期间错过的 `game:action` 列表。
+## 测试模式事件
 
-#### `game:reconnect`（Client → Server）
+> 仅在测试模式启用时生效。
 
-请求重连同步。
+### Client → Server
+
+#### `test:addBot`
+
+添加 AI 机器人到房间。
+
+```json
+{
+  "roomId": "string"
+}
+```
+
+#### `test:getSnapshot`
+
+获取游戏状态快照。
+
+```json
+{
+  "roomId": "string"
+}
+```
+
+#### `test:setCash` / `test:setDeposit` / `test:setCoupons` / `test:setLoan`
+
+设置玩家现金/存款/点券/贷款。
+
+```json
+{
+  "roomId": "string",
+  "playerId": "string",
+  "amount": 10000
+}
+```
+
+#### `test:setPosition`
+
+设置玩家位置。
+
+```json
+{
+  "roomId": "string",
+  "playerId": "string",
+  "position": 5
+}
+```
+
+#### `test:setPriceIndex`
+
+设置物价指数。
+
+```json
+{
+  "roomId": "string",
+  "priceIndex": 1.5
+}
+```
+
+#### `test:setVehicle`
+
+设置玩家载具。
+
+```json
+{
+  "roomId": "string",
+  "playerId": "string",
+  "vehicle": "car"  // 'walk' | 'bike' | 'car'
+}
+```
+
+#### `test:setSpirit`
+
+设置玩家神明附身。
+
+```json
+{
+  "roomId": "string",
+  "playerId": "string",
+  "spiritId": "bigFortuneGod"
+}
+```
+
+#### `test:giveCard`
+
+给予玩家卡片。
+
+```json
+{
+  "roomId": "string",
+  "playerId": "string",
+  "cardId": "string"
+}
+```
+
+#### `test:giveItem`
+
+给予玩家道具。
+
+```json
+{
+  "roomId": "string",
+  "playerId": "string",
+  "itemId": "string",
+  "quantity": 1
+}
+```
+
+#### `test:setTileLevel`
+
+设置地块等级。
+
+```json
+{
+  "roomId": "string",
+  "tileIndex": 5,
+  "level": 3
+}
+```
+
+#### `test:setTileOwner`
+
+设置地块所有者。
+
+```json
+{
+  "roomId": "string",
+  "tileIndex": 5,
+  "playerId": "string"
+}
+```
+
+#### `test:clearEffects`
+
+清除玩家所有状态效果。
+
+```json
+{
+  "roomId": "string",
+  "playerId": "string"
+}
+```
+
+#### `test:freeShop`
+
+打开免费商店（不消耗点券）。
+
+```json
+{
+  "roomId": "string"
+}
+```
+
+#### `test:freeBuyCard` / `test:freeBuyItem`
+
+免费购买卡片/道具。
+
+```json
+{
+  "roomId": "string",
+  "playerId": "string",
+  "cardId": "string",  // 或 itemId
+  "quantity": 1
+}
+```
+
+#### `test:forceEndTurn`
+
+强制结束当前回合。
+
+```json
+{
+  "roomId": "string"
+}
+```
+
+#### `test:aiStart`
+
+启动 AI 自动行动。
+
+```json
+{
+  "roomId": "string",
+  "intervalMs": 2000
+}
+```
+
+#### `test:aiStop`
+
+停止 AI 自动行动。
 
 ```json
 {}
 ```
 
-#### `game:turnTimeout`
+#### `test:aiStep`
 
-当前玩家回合超时通知（服务端定时器触发）。
+AI 手动执行一步。
 
 ```json
 {
-  "playerId": "uuid",
-  "action": "skip" | "autoRoll"
+  "roomId": "string"
 }
 ```
 
-#### `room:kicked`
+### Server → Client
 
-被房主踢出通知（发给被踢者）。
+#### `test:update`
+
+测试模式状态快照更新。
 
 ```json
 {
-  "reason": "string"
+  "snapshot": { ... }
 }
 ```
 
-#### `room:paused` / `room:resumed`
+#### `test:freeShopResult`
 
-房间暂停/恢复（玩家掉线时可自动暂停）。
-
-```json
-{
-  "reason": "player_disconnected" | "manual"
-}
-```
-
-#### `game:trade:offer`（Client → Server，预留）
-
-发起交易请求（首期可不实现，预留事件）。
+免费商店结果。
 
 ```json
 {
-  "targetId": "uuid",
-  "offer": { "cash?: number, "cards?: string[], "items?: string[], "properties?: number[] },
-  "request": { "cash?: number, "cards?: string[], "items?: string[], "properties?: number[] }
-}
-```
-
-#### `game:trade:accept` / `game:trade:reject`（Client → Server，预留）
-
-```json
-{ "tradeId": "string" }
-```
-
-#### `game:trade:update`（Server → Client，预留）
-
-```json
-{
-  "tradeId": "string",
-  "status": "pending" | "accepted" | "rejected" | "cancelled",
-  "fromPlayerId": "uuid",
-  "toPlayerId": "uuid",
-  "offer": { ... },
-  "request": { ... }
+  "shop": { ... }
 }
 ```
 
@@ -345,24 +573,29 @@ const socket = io('/game', {
 
 | 错误码 | 说明 |
 |---|---|
-| `UNAUTHORIZED` | 未登录或 token 无效 |
-| `ROOM_NOT_FOUND` | 房间不存在 |
-| `ROOM_FULL` | 房间已满 |
-| `ALREADY_IN_ROOM` | 已加入其他房间 |
-| `NOT_ROOM_HOST` | 不是房主 |
-| `GAME_ALREADY_STARTED` | 游戏已开始 |
-| `NOT_YOUR_TURN` | 不是当前玩家回合 |
-| `INSUFFICIENT_FUNDS` | 现金不足 |
-| `INVALID_ACTION` | 非法操作 |
-| `CARD_NOT_FOUND` | 卡片不存在 |
-| `ITEM_NOT_FOUND` | 道具不存在 |
-| `INVALID_TARGET` | 无效目标 |
-| `CHARACTER_TAKEN` | 角色已被其他玩家选择 |
-| `SEAT_TAKEN` | 座位已被占用 |
-| `ALREADY_READY` | 玩家已准备 |
-| `NOT_ALL_READY` | 并非所有玩家已准备 |
-| `TURN_TIMEOUT` | 回合超时 |
-| `ROOM_PAUSED` | 房间已暂停 |
-| `CARD_LIMIT_REACHED` | 卡片持有已达上限（15 张） |
-| `LOAN_LIMIT_REACHED` | 贷款额度已达上限 |
-| `LIQUIDATION_LIMIT_REACHED` | 破产法拍次数已达上限（3 次） |
+| `Unauthorized` | 未登录或 token 无效 |
+| `房间不存在` | 房间不存在 |
+| `房间已满` | 房间已满 |
+| `只有房主可以开始游戏` | 不是房主 |
+| `至少需要 2 名玩家` | 玩家不足 |
+| `还有玩家未准备` | 并非所有玩家已准备 |
+| `现在不能掷骰` | 非掷骰阶段 |
+| `现在不能购买` | 非购买阶段 |
+| `现在不能升级` | 非升级阶段 |
+| `现在不能改建` | 非改建阶段 |
+| `现在不能使用卡片` | 非卡片使用阶段 |
+| `现在不能使用道具` | 非道具使用阶段 |
+| `现在不能购买卡片` | 非商店阶段 |
+| `现在不能购买道具` | 非商店阶段 |
+| `现在不能出售卡片` | 非出售阶段 |
+| `现在不能出售道具` | 非出售阶段 |
+| `现在不能申请理赔` | 无保险可理赔 |
+| `现在不能贷款` | 非贷款阶段 |
+| `现在不能还款` | 非还款阶段 |
+| `现在不能投注乐透` | 非投注阶段 |
+| `现在不能施法` | 非魔法屋阶段 |
+| `现在不能结束回合` | 非结束阶段 |
+| `卡片已满` | 持有已达上限（15 张） |
+| `现金不足` | 现金不足 |
+| `点券不足` | 点券不足 |
+| `破产法拍次数已达上限` | 破产法拍 3 次 |
