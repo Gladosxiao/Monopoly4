@@ -12,6 +12,29 @@ export function getSocket(): GameSocket {
       auth: { token },
       transports: ['websocket', 'polling'],
     });
+    // 连接失败时尝试刷新 token 并重连
+    socket.on('connect_error', (err) => {
+      if (err.message === 'Unauthorized' && !socket?.connected) {
+        // token 可能过期，尝试刷新
+        const refreshToken = localStorage.getItem('refreshToken');
+        if (refreshToken) {
+          fetch('/api/auth/refresh', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ refreshToken }),
+          }).then(res => res.json()).then(data => {
+            if (data.accessToken) {
+              localStorage.setItem('accessToken', data.accessToken);
+              if (data.refreshToken) localStorage.setItem('refreshToken', data.refreshToken);
+              // 用新 token 重连
+              socket?.disconnect();
+              socket = null;
+              getSocket();
+            }
+          }).catch(() => {});
+        }
+      }
+    });
   }
   return socket;
 }

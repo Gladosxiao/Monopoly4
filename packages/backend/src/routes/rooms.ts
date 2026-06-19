@@ -94,7 +94,8 @@ router.post('/', authMiddleware, (req: AuthRequest, res) => {
   const body = req.body as CreateRoomRequest;
   const name = body.name?.trim() || '新房間';
   const maxPlayers = Math.min(Math.max(body.maxPlayers || 4, 2), 4);
-  const config = { ...DEFAULT_GAME_CONFIG, ...body.config, mapId: 'simple' };
+  const config = { ...DEFAULT_GAME_CONFIG, ...body.config };
+  const mapId = body.config?.mapId || 'simple';
   const roomId = uuidv4().slice(0, 8).toUpperCase();
   const user = req.user!;
   const room: Room = {
@@ -103,7 +104,7 @@ router.post('/', authMiddleware, (req: AuthRequest, res) => {
     hostId: user.id,
     status: 'waiting',
     maxPlayers,
-    mapId: 'simple',
+    mapId,
     config,
     players: [
       {

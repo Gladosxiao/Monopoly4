@@ -2,6 +2,36 @@ import type { AuthResponse, CreateRoomRequest, JoinRoomRequest, PublicUser, Room
 
 const API_BASE = '/api';
 
+let isRefreshing = false;
+let refreshPromise: Promise<string | null> | null = null;
+
+/** 尝试用 refreshToken 刷新 accessToken */
+async function tryRefreshToken(): Promise<string | null> {
+  if (isRefreshing && refreshPromise) return refreshPromise;
+  isRefreshing = true;
+  refreshPromise = (async () => {
+    const refreshToken = localStorage.getItem('refreshToken');
+    if (!refreshToken) return null;
+    try {
+      const res = await fetch(`${API_BASE}/auth/refresh`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ refreshToken }),
+      });
+      if (!res.ok) return null;
+      const data = await res.json();
+      localStorage.setItem('accessToken', data.accessToken);
+      if (data.refreshToken) localStorage.setItem('refreshToken', data.refreshToken);
+      return data.accessToken as string;
+    } catch {
+      return null;
+    } finally {
+      isRefreshing = false;
+    }
+  })();
+  return refreshPromise;
+}
+
 export async function api<T>(path: string, options?: RequestInit): Promise<T> {
   const token = localStorage.getItem('accessToken');
   const res = await fetch(`${API_BASE}${path}`, {
@@ -12,6 +42,32 @@ export async function api<T>(path: string, options?: RequestInit): Promise<T> {
       ...options?.headers,
     },
   });
+
+  // 401 时尝试刷新 token 并重试一次
+  if (res.status === 401) {
+    const newToken = await tryRefreshToken();
+    if (newToken) {
+      const retryRes = await fetch(`${API_BASE}${path}`, {
+        ...options,
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${newToken}`,
+          ...options?.headers,
+        },
+      });
+      if (!retryRes.ok) {
+        const err = await retryRes.json().catch(() => ({}));
+        throw new Error(err.error || `Request failed: ${retryRes.status}`);
+      }
+      return retryRes.json();
+    }
+    // 刷新失败，清除登录状态
+    localStorage.removeItem('accessToken');
+    localStorage.removeItem('refreshToken');
+    localStorage.removeItem('user');
+    throw new Error('登录已过期，请重新登录');
+  }
+
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
     throw new Error(err.error || `Request failed: ${res.status}`);
