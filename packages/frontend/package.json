@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@monopoly4/shared": "^0.1.0",
+    "@monopoly4/map-generator": "^0.1.0",
     "socket.io-client": "^4.7.5"
   },
   "devDependencies": {

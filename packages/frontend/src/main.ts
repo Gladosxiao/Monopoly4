@@ -2,6 +2,11 @@ import {
   type Room,
   type GameState,
   type PublicUser,
+  type CardUseTarget,
+  type ItemUseTarget,
+  type BuildingType,
+  CARD_DEFINITIONS,
+  ITEM_DEFINITIONS,
   CHARACTERS,
   DEFAULT_GAME_CONFIG,
 } from '@monopoly4/shared';
@@ -27,6 +32,13 @@ import {
   rollDice,
   buyProperty,
   upgradeProperty,
+  rebuildTile,
+  useCard,
+  buyCard,
+  sellCard,
+  useItem,
+  buyItem,
+  sellItem,
   skipTurn,
   onRoomUpdated,
   onGameState,
@@ -315,7 +327,7 @@ async function navigateToGame(roomId: string): Promise<void> {
   app.appendChild(container);
 
   const boardWrap = container.querySelector<HTMLDivElement>('.board-wrap')!;
-  const canvas = createBoardCanvas();
+  let canvas = createBoardCanvas();
   boardWrap.appendChild(canvas);
 
   container.querySelector('#btn-exit')!.addEventListener('click', () => {
@@ -324,6 +336,12 @@ async function navigateToGame(roomId: string): Promise<void> {
 
   function renderGame(state: GameState): void {
     currentGame = state;
+    // 当地图格数变化时重建 canvas
+    if (String(state.map.tiles.length) !== canvas.dataset.tileCount) {
+      const newCanvas = createBoardCanvas(state.map.tiles.length);
+      boardWrap.replaceChild(newCanvas, canvas);
+      canvas = newCanvas;
+    }
     renderBoard(canvas, state, currentUser!.id);
     renderPlayersInfo(container, state);
     renderActions(container, state);
@@ -345,11 +363,16 @@ function renderPlayersInfo(container: HTMLElement, state: GameState): void {
     const div = document.createElement('div');
     div.className = 'player-info';
     const isCurrent = state.players[state.currentPlayerIndex].id === p.id;
+    const cardNames = p.cards.map((c) => CARD_DEFINITIONS[c.cardId]?.name ?? c.cardId).join(', ');
+    const itemNames = p.items.map((i) => `${ITEM_DEFINITIONS[i.itemId]?.name ?? i.itemId}×${i.quantity}`).join(', ');
     div.innerHTML = `
       <strong style="color:${p.color}">${p.username}</strong>
       ${isCurrent ? ' ← 当前回合' : ''}
-      <div>现金: $${p.cash} | 存款: $${p.deposit}</div>
+      <div>现金: $${p.cash} | 存款: $${p.deposit} | 点券: ${p.coupons}</div>
       <div>地产: ${p.properties.length} 处</div>
+      <div>卡片: ${cardNames || '无'} (${p.cards.length}/15)</div>
+      <div>道具: ${itemNames || '无'}</div>
+      ${p.spirit ? `<div>神明: ${p.spirit.spiritId}</div>` : ''}
       ${p.isBankrupt ? '<div class="bankrupt">已破产</div>' : ''}
     `;
     el.appendChild(div);
@@ -387,12 +410,106 @@ function renderActions(container: HTMLElement, state: GameState): void {
         btn.textContent = `购买 ${tile.name} ($${Math.floor(tile.basePrice * state.priceIndex)})`;
         btn.addEventListener('click', () => buyProperty(state.roomId));
         el.appendChild(btn);
-      } else if (tile.type === 'property' && tile.ownerId === currentPlayer.id && tile.level < 5) {
-        const btn = document.createElement('button');
-        const cost = Math.floor(tile.basePrice * (tile.level + 1) * 0.5 * state.priceIndex);
-        btn.textContent = `升级 ${tile.name} ($${cost})`;
-        btn.addEventListener('click', () => upgradeProperty(state.roomId));
-        el.appendChild(btn);
+      } else if (tile.type === 'shop') {
+        const shopCardBtn = document.createElement('button');
+        shopCardBtn.textContent = '购买卡片';
+        shopCardBtn.addEventListener('click', () => {
+          const lines = Object.values(CARD_DEFINITIONS)
+            .filter((c) => c.cost > 0)
+            .map((c, i) => `${i + 1}. ${c.name} (${c.cost}点)`);
+          const choice = window.prompt(`选择要购买的卡片：\n${lines.join('\n')}`);
+          const idx = parseInt(choice || '', 10) - 1;
+          const card = Object.values(CARD_DEFINITIONS).filter((c) => c.cost > 0)[idx];
+          if (card) buyCard(state.roomId, card.id);
+        });
+        el.appendChild(shopCardBtn);
+
+        const shopItemBtn = document.createElement('button');
+        shopItemBtn.textContent = '购买道具';
+        shopItemBtn.addEventListener('click', () => {
+          const lines = Object.values(ITEM_DEFINITIONS)
+            .filter((i) => i.cost > 0)
+            .map((it, i) => `${i + 1}. ${it.name} (${it.cost}点)`);
+          const choice = window.prompt(`选择要购买的道具：\n${lines.join('\n')}`);
+          const idx = parseInt(choice || '', 10) - 1;
+          const item = Object.values(ITEM_DEFINITIONS).filter((i) => i.cost > 0)[idx];
+          if (item) buyItem(state.roomId, item.id);
+        });
+        el.appendChild(shopItemBtn);
+      } else if (tile.type === 'property' && tile.ownerId === currentPlayer.id) {
+        const bt = tile.buildingType ?? 'house';
+        const canUp = bt !== 'chainStore' && bt !== 'park' && bt !== 'gasStation' && tile.level < 5;
+        if (canUp) {
+          const btn = document.createElement('button');
+          const cost = Math.floor(tile.basePrice * (tile.level + 1) * 0.5 * state.priceIndex);
+          btn.textContent = `升级 ${tile.name} ($${cost})`;
+          btn.addEventListener('click', () => upgradeProperty(state.roomId));
+          el.appendChild(btn);
+        }
+
+        // 改建按钮
+        const rebuildBtn = document.createElement('button');
+        rebuildBtn.textContent = '改建';
+        rebuildBtn.addEventListener('click', () => {
+          const options = tile.size === 'small'
+            ? [
+                { value: 'house', label: '住宅' },
+                { value: 'chainStore', label: '连锁店' },
+              ]
+            : [
+                { value: 'park', label: '公园' },
+                { value: 'mall', label: '商场' },
+                { value: 'hotel', label: '旅馆' },
+                { value: 'gasStation', label: '加油站' },
+                { value: 'lab', label: '研究所' },
+              ];
+          const choice = window.prompt(
+            `选择建筑类型：\n${options.map((o, i) => `${i + 1}. ${o.label}`).join('\n')}`
+          );
+          const idx = parseInt(choice || '', 10) - 1;
+          if (idx >= 0 && idx < options.length) {
+            rebuildTile(state.roomId, tileIndex, options[idx].value as any);
+          }
+        });
+        el.appendChild(rebuildBtn);
+      }
+
+      // 使用卡片按钮
+      if (currentPlayer.cards.length > 0) {
+        const cardBtn = document.createElement('button');
+        cardBtn.textContent = `使用卡片 (${currentPlayer.cards.length})`;
+        cardBtn.addEventListener('click', () => {
+          const lines = currentPlayer.cards.map((c, i) => {
+            const def = CARD_DEFINITIONS[c.cardId];
+            return `${i + 1}. ${def?.name ?? c.cardId}`;
+          });
+          const choice = window.prompt(`选择卡片：\n${lines.join('\n')}`);
+          const idx = parseInt(choice || '', 10) - 1;
+          const card = currentPlayer.cards[idx];
+          if (!card) return;
+          const target = promptCardTarget(state, card.cardId);
+          useCard(state.roomId, card.instanceId, target);
+        });
+        el.appendChild(cardBtn);
+      }
+
+      // 使用道具按钮
+      if (currentPlayer.items.length > 0) {
+        const itemBtn = document.createElement('button');
+        itemBtn.textContent = `使用道具 (${currentPlayer.items.reduce((s, i) => s + i.quantity, 0)})`;
+        itemBtn.addEventListener('click', () => {
+          const lines = currentPlayer.items.map((it, i) => {
+            const def = ITEM_DEFINITIONS[it.itemId];
+            return `${i + 1}. ${def?.name ?? it.itemId} ×${it.quantity}`;
+          });
+          const choice = window.prompt(`选择道具：\n${lines.join('\n')}`);
+          const idx = parseInt(choice || '', 10) - 1;
+          const item = currentPlayer.items[idx];
+          if (!item) return;
+          const target = promptItemTarget(state, item.itemId);
+          useItem(state.roomId, item.itemId, target);
+        });
+        el.appendChild(itemBtn);
       }
 
       const skipBtn = document.createElement('button');
@@ -414,6 +531,38 @@ function renderLogs(container: HTMLElement, state: GameState): void {
     div.textContent = log.message;
     el.appendChild(div);
   });
+}
+
+function promptCardTarget(state: GameState, cardId: string): CardUseTarget {
+  const target: CardUseTarget = {};
+  if (cardId === 'rebuild') {
+    target.targetTileIndex = parseInt(window.prompt('输入改建地块索引：') || '', 10);
+    target.buildingType = window.prompt(
+      '输入建筑类型（house/chainStore/park/mall/hotel/gasStation/lab）：'
+    ) as BuildingType | undefined;
+  } else if (cardId === 'priceRise' || cardId === 'seal' || cardId === 'angel' || cardId === 'devil') {
+    target.targetGroup = parseInt(window.prompt('输入目标路段 group 编号：') || '', 10);
+  } else if (cardId === 'alliance' || cardId === 'turnAround' || cardId === 'stay' || cardId === 'turtle' || cardId === 'sleepwalk' || cardId === 'frame') {
+    const lines = state.players.map((p, i) => `${i + 1}. ${p.username}`);
+    const choice = window.prompt(`选择目标玩家：\n${lines.join('\n')}`);
+    const idx = parseInt(choice || '', 10) - 1;
+    target.targetPlayerId = state.players[idx]?.id;
+  } else if (cardId === 'swapLand' || cardId === 'auction' || cardId === 'monster' || cardId === 'demolish') {
+    target.targetTileIndex = parseInt(window.prompt('输入目标地块索引：') || '', 10);
+  } else if (cardId === 'summonSpirit') {
+    target.targetPlayerId = window.prompt('输入神明 ID（如 smallWealthGod）：') || undefined;
+  }
+  return target;
+}
+
+function promptItemTarget(state: GameState, itemId: string): ItemUseTarget {
+  const target: ItemUseTarget = {};
+  if (itemId === 'remoteDice') {
+    target.diceValue = parseInt(window.prompt('输入要控制的骰子点数 1-6：') || '', 10);
+  } else if (itemId === 'barrier' || itemId === 'mine' || itemId === 'timeBomb' || itemId === 'missile') {
+    target.targetTileIndex = parseInt(window.prompt('输入目标地块索引：') || '', 10);
+  }
+  return target;
 }
 
 // 启动

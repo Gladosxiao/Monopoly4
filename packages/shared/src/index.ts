@@ -310,13 +310,19 @@ export interface ClientToServerEvents {
   'room:leave': (roomId: string) => void;
   'room:ready': (roomId: string, isReady: boolean) => void;
   'room:character': (roomId: string, characterId: string) => void;
+  'game:start': (roomId: string) => void;
   'game:roll': (roomId: string, diceCount?: number) => void;
   'game:buy': (roomId: string) => void;
   'game:upgrade': (roomId: string) => void;
   'game:rebuild': (roomId: string, tileIndex: number, buildingType: BuildingType) => void;
-  'game:useCard': (roomId: string, cardId: string, target?: CardUseTarget) => void;
   'game:skip': (roomId: string) => void;
-  'game:start': (roomId: string) => void;
+  // 卡片与道具
+  'game:buyCard': (roomId: string, cardId: string) => void;
+  'game:useCard': (roomId: string, cardId: string, target?: CardUseTarget) => void;
+  'game:sellCard': (roomId: string, cardId: string) => void;
+  'game:buyItem': (roomId: string, itemId: string, quantity?: number) => void;
+  'game:useItem': (roomId: string, itemId: string, target?: ItemUseTarget) => void;
+  'game:sellItem': (roomId: string, itemId: string, quantity?: number) => void;
 }
 
 // ==================== 简化地图 ====================

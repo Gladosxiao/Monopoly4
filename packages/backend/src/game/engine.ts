@@ -27,8 +27,11 @@ import {
   SIMPLE_MAP,
   CHARACTERS,
   getSpiritDefinition,
-  getCardDefinition,
 } from '@monopoly4/shared';
+import { useCard as useCardSystem, type CardContext } from './cardSystem/index.js';
+import { buyCard as buyCardFromSystem, sellCard as sellCardFromSystem } from './cardSystem/index.js';
+import { useItem as useItemSystem, type ItemContext } from './itemSystem/index.js';
+import { buyItem as buyItemFromSystem, sellItem as sellItemFromSystem } from './itemSystem/index.js';
 
 
 /**
@@ -693,11 +696,8 @@ function buildingTypeLabel(bt: BuildingType): string {
 /**
  * 玩家使用一张卡片。
  *
- * 已实现的影响过路费的卡片：
- * - rebuild：改建建筑类型
- * - priceRise / seal：路段效果
- * - alliance / freePass：状态效果
- * - dismissSpirit / summonSpirit：神明操作
+ * 已接入 cardSystem：支持影响过路费、建筑、神明、状态等多种卡片。
+ * 同时保持对旧接口的兼容：`target.spiritId` 或 `target.targetPlayerId` 均可指定神明。
  *
  * `cardIdOrInstanceId` 支持卡片 ID 或实例 ID。
  */
@@ -707,126 +707,14 @@ export function useCard(
   cardIdOrInstanceId: string,
   target?: CardUseTarget
 ): { success: boolean; message?: string } {
-  const player = state.players.find((p) => p.id === playerId);
-  if (!player) return { success: false, message: '玩家不存在' };
-  if (player.isBankrupt) return { success: false, message: '已破产' };
-
-  const cardIndex = player.cards.findIndex(
-    (c) => c.instanceId === cardIdOrInstanceId || c.cardId === cardIdOrInstanceId
-  );
-  if (cardIndex < 0) return { success: false, message: '未持有该卡片' };
-
-  const cardId = player.cards[cardIndex].cardId;
-  const def = getCardDefinition(cardId);
-  if (!def) return { success: false, message: '未知卡片' };
-
-  // 仅实现直接影响过路费的卡片
-  switch (cardId) {
-    case 'rebuild': {
-      if (target?.targetTileIndex === undefined || !target.buildingType) {
-        return { success: false, message: '请选择改建目标与建筑类型' };
-      }
-      const result = rebuildTile(state, target.targetTileIndex, target.buildingType);
-      if (!result.success) return result;
-      break;
-    }
-    case 'priceRise': {
-      const group = target?.targetGroup;
-      if (group === undefined) return { success: false, message: '请选择目标路段' };
-      addRoadEffect(state, {
-        id: cryptoRandomId(),
-        type: 'priceRise',
-        group,
-        multiplier: 2,
-        remainingDays: 5,
-        sourcePlayerId: player.id,
-      });
-      state.logs.push({
-        timestamp: Date.now(),
-        type: 'card:priceRise',
-        actorId: player.id,
-        message: `${player.username} 对路段 ${group} 使用涨价卡，过路费翻倍 5 天`,
-      });
-      break;
-    }
-    case 'seal': {
-      const group = target?.targetGroup;
-      if (group === undefined) return { success: false, message: '请选择目标路段' };
-      addRoadEffect(state, {
-        id: cryptoRandomId(),
-        type: 'seal',
-        group,
-        multiplier: 0,
-        remainingDays: 5,
-        sourcePlayerId: player.id,
-      });
-      state.logs.push({
-        timestamp: Date.now(),
-        type: 'card:seal',
-        actorId: player.id,
-        message: `${player.username} 对路段 ${group} 使用查封卡，5 天内无法收租`,
-      });
-      break;
-    }
-    case 'alliance': {
-      const targetId = target?.targetPlayerId;
-      if (!targetId) return { success: false, message: '请选择同盟目标' };
-      const targetPlayer = state.players.find((p) => p.id === targetId);
-      if (!targetPlayer) return { success: false, message: '目标玩家不存在' };
-      player.statusEffects.push({ type: 'alliance', remainingDays: 7, sourcePlayerId: targetId });
-      targetPlayer.statusEffects.push({ type: 'alliance', remainingDays: 7, sourcePlayerId: player.id });
-      state.logs.push({
-        timestamp: Date.now(),
-        type: 'card:alliance',
-        actorId: player.id,
-        targetId,
-        message: `${player.username} 与 ${targetPlayer.username} 结盟 7 天`,
-      });
-      break;
-    }
-    case 'freePass': {
-      player.statusEffects.push({ type: 'freePass', remainingDays: 1 });
-      state.logs.push({
-        timestamp: Date.now(),
-        type: 'card:freePass',
-        actorId: player.id,
-        message: `${player.username} 使用免费卡，可免除一次房租/罚金/税金`,
-      });
-      break;
-    }
-    case 'dismissSpirit': {
-      if (!player.spirit) return { success: false, message: '当前没有神明附身' };
-      const spiritDef = getSpiritDefinition(player.spirit.spiritId);
-      if (!spiritDef?.canDismiss) return { success: false, message: '该神明无法被送走' };
-      player.spirit = undefined;
-      state.logs.push({
-        timestamp: Date.now(),
-        type: 'card:dismissSpirit',
-        actorId: player.id,
-        message: `${player.username} 使用送神符送走神明`,
-      });
-      break;
-    }
-    case 'summonSpirit': {
-      const spiritId = target?.spiritId ?? target?.targetPlayerId;
-      if (!spiritId) return { success: false, message: '请选择要召唤的神明' };
-      const spiritDef = getSpiritDefinition(spiritId);
-      if (!spiritDef) return { success: false, message: '未知神明' };
-      player.spirit = { spiritId, remainingDays: spiritDef.duration };
-      state.logs.push({
-        timestamp: Date.now(),
-        type: 'card:summonSpirit',
-        actorId: player.id,
-        message: `${player.username} 使用请神符召唤 ${spiritDef.name}`,
-      });
-      break;
-    }
-    default:
-      return { success: false, message: '该卡片效果尚未实现' };
-  }
-
-  player.cards.splice(cardIndex, 1);
-  return { success: true };
+  const ctx: CardContext = {
+    targetPlayerId: target?.targetPlayerId,
+    targetTileIndex: target?.targetTileIndex,
+    targetGroup: target?.targetGroup,
+    buildingType: target?.buildingType,
+    targetSpiritId: target?.spiritId ?? target?.targetPlayerId,
+  };
+  return useCardSystem(state, playerId, cardIdOrInstanceId, ctx);
 }
 
 export function buyCard(
@@ -834,21 +722,7 @@ export function buyCard(
   playerId: string,
   cardId: string
 ): { success: boolean; message?: string } {
-  const player = state.players.find((p) => p.id === playerId);
-  if (!player) return { success: false, message: '玩家不存在' };
-  const def = getCardDefinition(cardId);
-  if (!def) return { success: false, message: '卡片不存在' };
-  if (player.coupons < def.cost) return { success: false, message: '点券不足' };
-  if (player.cards.length >= 15) return { success: false, message: '卡片已满' };
-  player.coupons -= def.cost;
-  player.cards.push({ instanceId: cryptoRandomId(), cardId });
-  state.logs.push({
-    timestamp: Date.now(),
-    type: 'card:buy',
-    actorId: player.id,
-    message: `${player.username} 购买 ${def.name}，花费 ${def.cost} 点券`,
-  });
-  return { success: true };
+  return buyCardFromSystem(state, playerId, cardId);
 }
 
 export function sellCard(
@@ -856,19 +730,7 @@ export function sellCard(
   playerId: string,
   cardId: string
 ): { success: boolean; message?: string } {
-  const player = state.players.find((p) => p.id === playerId);
-  if (!player) return { success: false, message: '玩家不存在' };
-  const idx = player.cards.findIndex((c) => c.cardId === cardId);
-  if (idx < 0) return { success: false, message: '未持有该卡片' };
-  player.cards.splice(idx, 1);
-  player.coupons += 500;
-  state.logs.push({
-    timestamp: Date.now(),
-    type: 'card:sell',
-    actorId: player.id,
-    message: `${player.username} 出售卡片获得 500 点券`,
-  });
-  return { success: true };
+  return sellCardFromSystem(state, playerId, cardId);
 }
 
 export function useItem(
@@ -877,7 +739,12 @@ export function useItem(
   itemId: string,
   target?: ItemUseTarget
 ): { success: boolean; message?: string } {
-  return { success: false, message: '道具系统尚未实现' };
+  const ctx: ItemContext = {
+    targetTileIndex: target?.targetTileIndex,
+    targetPlayerId: target?.targetPlayerId,
+    diceValue: target?.diceValue,
+  };
+  return useItemSystem(state, playerId, itemId, ctx);
 }
 
 export function buyItem(
@@ -886,7 +753,7 @@ export function buyItem(
   itemId: string,
   quantity = 1
 ): { success: boolean; message?: string } {
-  return { success: false, message: '道具系统尚未实现' };
+  return buyItemFromSystem(state, playerId, itemId, quantity);
 }
 
 export function sellItem(
@@ -895,11 +762,7 @@ export function sellItem(
   itemId: string,
   quantity = 1
 ): { success: boolean; message?: string } {
-  return { success: false, message: '道具系统尚未实现' };
-}
-
-function cryptoRandomId(): string {
-  return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  return sellItemFromSystem(state, playerId, itemId, quantity);
 }
 
 /**

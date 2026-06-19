@@ -10,7 +10,7 @@
 |---|---|---|---|
 | 1 | 开局设置 | 70% | 土地权限/游戏时间/胜利条件已补齐，多地图未实现 |
 | 2 | 角色属性 | 60% | 字段存在，利息/破产法拍已落地，贷款/总资产计算待完善 |
-| 3 | 地图与路径 | 75% | `@monopoly4/map-generator` 已提供多模板、加载器、坐标工具、SVG/HTML 渲染与棋子占位；前端 `SIMPLE_MAP` 仍需迁移接入 |
+| 3 | 地图与路径 | 90% | `@monopoly4/map-generator` 已提供多模板、加载器、坐标工具、SVG/HTML 渲染与棋子占位；前端 `board.ts` 已接入坐标工具 |
 | 4 | 土地类型 | 60% | 大小块/建筑类型已落地，但研究院产物等未实现 |
 | 5 | 土地购买与升级 | 70% | 购买/升级/改建可用，但大块土地建筑选择、建造费用未完全对齐 |
 | 6 | 过路费 | 85% | 住宅/连锁店/特殊建筑/神明/卡片影响已基本实现 |
@@ -72,7 +72,7 @@
 | 绕圈处理 | `MapUtils.wrapPosition` | `movePlayer` 中用取模实现；`interpolatePosition` 支持跨边界最短路径 | ✅ 已实现 |
 | SVG/HTML 渲染 | 需要 | `visualizer.ts` 提供彩色环形/网格棋盘、地块名称、价格、图例 | ✅ 已实现 |
 | 角色棋子占位 | 需要 | `renderHtmlMap`/`renderSvgWithTokens` 支持彩色圆形棋子，同格自动错位 | ✅ 已实现 |
-| 前端接入 | 需要 | 前端 `board.ts` 仍使用 `SIMPLE_MAP`，未接入新加载器与坐标工具 | ⚠️ 待迁移 |
+| 前端接入 | 需要 | 前端 `board.ts` 已接入 `@monopoly4/map-generator` 的 `ringLayout`/`gridLayout`/`getTileCenter`/`interpolatePosition` 计算坐标与棋子位置 | ✅ 已实现 |
 
 **代码位置**：
 - `packages/map-generator/src/generator.ts`（模板与生成）
