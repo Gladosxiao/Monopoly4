@@ -1,4 +1,4 @@
-import type { GameState, Player, Tile } from '@monopoly4/shared';
+import type { GameState, Player, Tile, BuildingType } from '@monopoly4/shared';
 
 const TILE_COLORS: Record<Tile['type'], string> = {
   start: '#2ecc71',
@@ -59,13 +59,15 @@ export function renderBoard(canvas: HTMLCanvasElement, state: GameState, current
     ctx.textAlign = 'center';
     ctx.fillText(tile.name, cx, cy - 6);
 
-    // 地价 / 过路费
+    // 地价 / 过路费 / 建筑类型
     if (tile.type === 'property') {
       const owner = state.players.find((p) => p.id === tile.ownerId);
       ctx.font = '10px sans-serif';
       if (owner) {
         ctx.fillStyle = owner.color;
-        ctx.fillText(`Lv.${tile.level} $${tile.baseRent}`, cx, cy + 10);
+        const typeLabel = tile.buildingType ? buildingTypeLabel(tile.buildingType) : '空地';
+        ctx.fillText(`${typeLabel} Lv.${tile.level}`, cx, cy + 8);
+        ctx.fillText(`$${tile.baseRent}`, cx, cy + 20);
       } else {
         ctx.fillText(`$${tile.basePrice}`, cx, cy + 10);
       }
@@ -97,6 +99,19 @@ export function renderBoard(canvas: HTMLCanvasElement, state: GameState, current
       ctx.stroke();
     }
   });
+}
+
+function buildingTypeLabel(bt: BuildingType): string {
+  const labels: Record<BuildingType, string> = {
+    house: '住宅',
+    chainStore: '连锁',
+    park: '公园',
+    mall: '商场',
+    hotel: '旅馆',
+    gasStation: '加油站',
+    lab: '研究所',
+  };
+  return labels[bt];
 }
 
 export function createBoardCanvas(): HTMLCanvasElement {

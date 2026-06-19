@@ -19,11 +19,21 @@ import {
   movePlayer,
   buyProperty,
   upgradeProperty,
+  rebuildTile,
+  useCard,
+  buyCard,
+  sellCard,
+  useItem,
+  buyItem,
+  sellItem,
   endTurn,
   canRoll,
   canBuy,
   canUpgrade,
+  canRebuild,
 } from '../game/engine.js';
+import { getShopCards, canBuyCard } from '../game/cardSystem/index.js';
+import { getShopItems, canBuyItem } from '../game/itemSystem/index.js';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'monopoly4-dev-secret';
 
@@ -174,6 +184,116 @@ export function setupSocketIO(httpServer: HttpServer): void {
         return;
       }
       const result = upgradeProperty(state);
+      if (!result.success) {
+        socket.emit('error', result.message);
+        return;
+      }
+      io.to(roomId).emit('game:state', state);
+    });
+
+    socket.on('game:rebuild', (roomId, tileIndex, buildingType) => {
+      const state = games.get(roomId);
+      if (!state) return;
+      const player = state.players[state.currentPlayerIndex];
+      if (player.id !== user.id || state.status !== 'acting') {
+        socket.emit('error', '现在不能改建');
+        return;
+      }
+      const result = rebuildTile(state, tileIndex, buildingType);
+      if (!result.success) {
+        socket.emit('error', result.message);
+        return;
+      }
+      io.to(roomId).emit('game:state', state);
+    });
+
+    socket.on('game:useCard', (roomId, cardId, target) => {
+      const state = games.get(roomId);
+      if (!state) return;
+      const player = state.players[state.currentPlayerIndex];
+      if (player.id !== user.id || state.status !== 'acting') {
+        socket.emit('error', '现在不能使用卡片');
+        return;
+      }
+      const result = useCard(state, user.id, cardId, target);
+      if (!result.success) {
+        socket.emit('error', result.message);
+        return;
+      }
+      io.to(roomId).emit('game:state', state);
+    });
+
+    socket.on('game:buyCard', (roomId, cardId) => {
+      const state = games.get(roomId);
+      if (!state) return;
+      if (!canBuyCard(state, user.id)) {
+        socket.emit('error', '现在不能购买卡片');
+        return;
+      }
+      const result = buyCard(state, user.id, cardId);
+      if (!result.success) {
+        socket.emit('error', result.message);
+        return;
+      }
+      io.to(roomId).emit('game:state', state);
+    });
+
+    socket.on('game:sellCard', (roomId, cardId) => {
+      const state = games.get(roomId);
+      if (!state) return;
+      const player = state.players[state.currentPlayerIndex];
+      if (player.id !== user.id || state.status !== 'acting') {
+        socket.emit('error', '现在不能出售卡片');
+        return;
+      }
+      const result = sellCard(state, user.id, cardId);
+      if (!result.success) {
+        socket.emit('error', result.message);
+        return;
+      }
+      io.to(roomId).emit('game:state', state);
+    });
+
+    socket.on('game:useItem', (roomId, itemId, target) => {
+      const state = games.get(roomId);
+      if (!state) return;
+      const player = state.players[state.currentPlayerIndex];
+      if (player.id !== user.id || state.status !== 'acting') {
+        socket.emit('error', '现在不能使用道具');
+        return;
+      }
+      const result = useItem(state, user.id, itemId, target);
+      if (!result.success) {
+        socket.emit('error', result.message);
+        return;
+      }
+      io.to(roomId).emit('game:state', state);
+    });
+
+    socket.on('game:buyItem', (roomId, itemId, quantity) => {
+      const state = games.get(roomId);
+      if (!state) return;
+      if (!canBuyItem(state, user.id)) {
+        socket.emit('error', '现在不能购买道具');
+        return;
+      }
+      const result = buyItem(state, user.id, itemId, quantity ?? 1);
+      if (!result.success) {
+        socket.emit('error', result.message);
+        return;
+      }
+      io.to(roomId).emit('game:state', state);
+    });
+
+    socket.on('game:sellItem', (roomId, itemId, quantity) => {
+      const state = games.get(roomId);
+      if (!state) return;
+      const player = state.players[state.currentPlayerIndex];
+      if (player.id !== user.id || state.status !== 'acting') {
+        socket.emit('error', '现在不能出售道具');
+        return;
+      }
+      const result = sellItem(state, user.id, itemId, quantity ?? 1);
       if (!result.success) {
         socket.emit('error', result.message);
         return;

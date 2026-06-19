@@ -5,9 +5,20 @@ import {
   type Tile,
   type GameLog,
   type RoomPlayer,
+  type BuildingType,
+  type StatusEffect,
+  type RoadEffect,
+  type CardUseTarget,
+  type ItemUseTarget,
   SIMPLE_MAP,
   CHARACTERS,
+  getSpiritDefinition,
+  getCardDefinition,
 } from '@monopoly4/shared';
+import { useCard as useCardSystem, type CardContext } from './cardSystem/index.js';
+import { buyCard as buyCardFromSystem, sellCard as sellCardFromSystem } from './cardSystem/index.js';
+import { useItem as useItemSystem, type ItemContext } from './itemSystem/index.js';
+import { buyItem as buyItemFromSystem, sellItem as sellItemFromSystem } from './itemSystem/index.js';
 
 export function createGame(roomId: string, config: GameConfig, roomPlayers: RoomPlayer[]): GameState {
   const players: Player[] = roomPlayers.map((rp, i) => {
@@ -26,6 +37,7 @@ export function createGame(roomId: string, config: GameConfig, roomPlayers: Room
       properties: [],
       cards: [],
       items: [],
+      statusEffects: [],
       isBankrupt: false,
       isAI: false,
     };
@@ -41,6 +53,7 @@ export function createGame(roomId: string, config: GameConfig, roomPlayers: Room
     day: 1,
     month: 1,
     priceIndex: 1,
+    roadEffects: [],
     logs: [
       {
         timestamp: Date.now(),
@@ -70,19 +83,153 @@ export function rollDice(count: number): number {
   return sum;
 }
 
+export function spinWheel(sides: number): number {
+  return Math.floor(Math.random() * sides) + 1;
+}
+
 export function getCurrentPlayer(state: GameState): Player {
   return state.players[state.currentPlayerIndex];
 }
 
-export function calculateRent(tile: Tile, owner: Player, allTiles: Tile[], priceIndex: number): number {
-  if (tile.type !== 'property' || !tile.ownerId || tile.ownerId !== owner.id) return 0;
-  let groupBonus = 0;
-  if (tile.group !== undefined) {
-    const groupTiles = allTiles.filter((t) => t.group === tile.group && t.ownerId === owner.id);
-    if (groupTiles.length >= 2) groupBonus = 0.2;
-    if (groupTiles.length >= 3) groupBonus = 0.5;
+function isSameGroup(tile: Tile, other: Tile): boolean {
+  return tile.group !== undefined && tile.group === other.group;
+}
+
+function hasStatusEffect(player: Player, type: StatusEffect['type'], sourcePlayerId?: string): boolean {
+  return player.statusEffects.some(
+    (e) => e.type === type && (sourcePlayerId === undefined || e.sourcePlayerId === sourcePlayerId)
+  );
+}
+
+function removeStatusEffect(player: Player, type: StatusEffect['type'], sourcePlayerId?: string): void {
+  player.statusEffects = player.statusEffects.filter(
+    (e) => !(e.type === type && (sourcePlayerId === undefined || e.sourcePlayerId === sourcePlayerId))
+  );
+}
+
+function addRoadEffect(state: GameState, effect: RoadEffect): void {
+  // 同一路段同类型效果刷新持续天数
+  state.roadEffects = state.roadEffects.filter(
+    (e) => !(e.group === effect.group && e.type === effect.type)
+  );
+  state.roadEffects.push(effect);
+}
+
+export function isRentExempt(
+  visitor: Player,
+  owner: Player,
+  tile: Tile,
+  state: GameState
+): boolean {
+  if (tile.type !== 'property' || !tile.ownerId) return true;
+
+  // 大财神：免过路费
+  if (visitor.spirit?.spiritId === 'bigWealthGod') return true;
+
+  // 同盟：彼此不收过路费
+  if (hasStatusEffect(visitor, 'alliance', owner.id) || hasStatusEffect(owner, 'alliance', visitor.id)) {
+    return true;
   }
-  return Math.floor(tile.baseRent * (1 + tile.level * 0.5) * (1 + groupBonus) * priceIndex);
+
+  // 查封卡：指定路段无法收租
+  if (tile.group !== undefined) {
+    const sealed = state.roadEffects.some(
+      (e) => e.group === tile.group && e.type === 'seal' && e.remainingDays > 0
+    );
+    if (sealed) return true;
+  }
+
+  // 免费卡：触发一次免租
+  if (hasStatusEffect(visitor, 'freePass')) return true;
+
+  return false;
+}
+
+export function getSpiritRentMultiplier(visitor: Player): number {
+  const spiritId = visitor.spirit?.spiritId;
+  if (!spiritId) return 1;
+  const def = getSpiritDefinition(spiritId);
+  if (!def) return 1;
+  if (def.rentExempt) return 0;
+  return def.rentMultiplier ?? 1;
+}
+
+export function calculateRent(
+  tile: Tile,
+  owner: Player,
+  state: GameState,
+  visitor: Player
+): { rent: number; hotelDays?: number } {
+  if (tile.type !== 'property' || !tile.ownerId || tile.ownerId !== owner.id) {
+    return { rent: 0 };
+  }
+  if (isRentExempt(visitor, owner, tile, state)) {
+    return { rent: 0 };
+  }
+
+  const buildingType = tile.buildingType ?? 'house';
+  let base = 0;
+  let hotelDays: number | undefined;
+
+  switch (buildingType) {
+    case 'house': {
+      let groupBonus = 0;
+      if (tile.size === 'small' && tile.group !== undefined) {
+        const groupTiles = state.map.tiles.filter(
+          (t) => t.group === tile.group && t.ownerId === owner.id
+        );
+        if (groupTiles.length >= 2) groupBonus = 0.2;
+        if (groupTiles.length >= 3) groupBonus = 0.5;
+      }
+      base = tile.baseRent * (1 + tile.level * 0.5) * (1 + groupBonus);
+      break;
+    }
+    case 'chainStore': {
+      const chainCount = state.map.tiles.filter(
+        (t) => t.ownerId === owner.id && t.buildingType === 'chainStore'
+      ).length;
+      base = tile.baseRent * chainCount;
+      break;
+    }
+    case 'mall':
+      base = tile.baseRent * tile.level * spinWheel(6);
+      break;
+    case 'hotel': {
+      hotelDays = spinWheel(6);
+      base = tile.baseRent * tile.level * hotelDays;
+      break;
+    }
+    case 'gasStation': {
+      // 仅对乘坐交通工具的玩家生效；步行时只收象征性费用
+      const steps = state.lastRoll ?? 1;
+      const rate = state.config.moveMode === 'walk' ? 50 : 200;
+      base = steps * rate;
+      break;
+    }
+    case 'park':
+    case 'lab':
+      base = 0;
+      break;
+    default:
+      base = 0;
+  }
+
+  let rent = base * state.priceIndex;
+
+  // 路段效果：涨价卡
+  if (tile.group !== undefined) {
+    const priceRise = state.roadEffects.find(
+      (e) => e.group === tile.group && e.type === 'priceRise' && e.remainingDays > 0
+    );
+    if (priceRise) {
+      rent *= priceRise.multiplier;
+    }
+  }
+
+  // 神明影响
+  rent *= getSpiritRentMultiplier(visitor);
+
+  return { rent: Math.floor(rent), hotelDays };
 }
 
 export function movePlayer(state: GameState, steps: number): GameState {
@@ -135,56 +282,27 @@ export function handleTileEffect(state: GameState): GameState {
       // 付过路费
       const owner = state.players.find((p) => p.id === tile.ownerId);
       if (owner && !owner.isBankrupt) {
-        const rent = calculateRent(tile, owner, state.map.tiles, state.priceIndex);
-        if (player.cash >= rent) {
-          player.cash -= rent;
-          owner.cash += rent;
+        const { rent, hotelDays } = calculateRent(tile, owner, state, player);
+        const finalRent = applyRentPayment(state, player, owner, rent);
+        if (hotelDays && finalRent > 0) {
+          player.statusEffects.push({
+            type: 'hotelRest',
+            remainingDays: hotelDays,
+            sourcePlayerId: owner.id,
+          });
           state.logs.push({
             timestamp: Date.now(),
-            type: 'player:rent',
+            type: 'player:hotelRest',
             actorId: player.id,
             targetId: owner.id,
-            message: `${player.username} 支付过路费 $${rent} 给 ${owner.username}`,
+            message: `${player.username} 在 ${tile.name} 休息 ${hotelDays} 天`,
           });
-        } else {
-          // 现金不足，从存款扣
-          const total = player.cash + player.deposit;
-          if (total >= rent) {
-            const fromDeposit = rent - player.cash;
-            player.cash = 0;
-            player.deposit -= fromDeposit;
-            owner.cash += rent;
-            state.logs.push({
-              timestamp: Date.now(),
-              type: 'player:rent',
-              actorId: player.id,
-              targetId: owner.id,
-              message: `${player.username} 支付过路费 $${rent} 给 ${owner.username}`,
-            });
-          } else {
-            player.cash = 0;
-            player.deposit = 0;
-            owner.cash += total;
-            state.logs.push({
-              timestamp: Date.now(),
-              type: 'player:bankrupt',
-              actorId: player.id,
-              message: `${player.username} 资金不足，破产了！`,
-            });
-            player.isBankrupt = true;
-          }
         }
       }
     }
   } else if (tile.type === 'tax') {
     const tax = 5000;
-    player.cash -= tax;
-    state.logs.push({
-      timestamp: Date.now(),
-      type: 'player:tax',
-      actorId: player.id,
-      message: `${player.username} 缴纳税款 $${tax}`,
-    });
+    payMoney(state, player, tax, '税款');
   } else if (tile.type === 'card') {
     player.coupons += 30;
     state.logs.push({
@@ -216,6 +334,155 @@ export function handleTileEffect(state: GameState): GameState {
   return state;
 }
 
+function consumeFreePass(player: Player): boolean {
+  const idx = player.statusEffects.findIndex((e) => e.type === 'freePass');
+  if (idx >= 0) {
+    player.statusEffects.splice(idx, 1);
+    return true;
+  }
+  return false;
+}
+
+function applyRentPayment(
+  state: GameState,
+  player: Player,
+  owner: Player,
+  rent: number
+): number {
+  if (rent <= 0) return 0;
+
+  // 免费卡自动抵扣一次房租
+  if (consumeFreePass(player)) {
+    state.logs.push({
+      timestamp: Date.now(),
+      type: 'player:freePass',
+      actorId: player.id,
+      message: `${player.username} 使用免费卡，免除过路费 $${rent}`,
+    });
+    return 0;
+  }
+
+  if (player.cash >= rent) {
+    player.cash -= rent;
+    owner.cash += rent;
+  } else {
+    const total = player.cash + player.deposit;
+    if (total >= rent) {
+      const fromDeposit = rent - player.cash;
+      player.cash = 0;
+      player.deposit -= fromDeposit;
+      owner.cash += rent;
+    } else {
+      player.cash = 0;
+      player.deposit = 0;
+      owner.cash += total;
+      player.isBankrupt = true;
+      state.logs.push({
+        timestamp: Date.now(),
+        type: 'player:bankrupt',
+        actorId: player.id,
+        message: `${player.username} 资金不足，破产了！`,
+      });
+      return total;
+    }
+  }
+
+  state.logs.push({
+    timestamp: Date.now(),
+    type: 'player:rent',
+    actorId: player.id,
+    targetId: owner.id,
+    message: `${player.username} 支付过路费 $${rent} 给 ${owner.username}`,
+  });
+
+  return rent;
+}
+
+export function transferMoney(
+  state: GameState,
+  from: Player,
+  to: Player,
+  amount: number,
+  reason: string
+): void {
+  if (amount <= 0) return;
+  if (from.cash >= amount) {
+    from.cash -= amount;
+    to.cash += amount;
+  } else {
+    const total = from.cash + from.deposit;
+    if (total >= amount) {
+      const fromDeposit = amount - from.cash;
+      from.cash = 0;
+      from.deposit -= fromDeposit;
+      to.cash += amount;
+    } else {
+      from.cash = 0;
+      from.deposit = 0;
+      to.cash += total;
+      from.isBankrupt = true;
+      state.logs.push({
+        timestamp: Date.now(),
+        type: 'player:bankrupt',
+        actorId: from.id,
+        message: `${from.username} 资金不足，破产了！`,
+      });
+      return;
+    }
+  }
+  state.logs.push({
+    timestamp: Date.now(),
+    type: 'player:transfer',
+    actorId: from.id,
+    targetId: to.id,
+    message: `${from.username} 向 ${to.username} 支付 ${reason} $${amount}`,
+  });
+}
+
+export function payMoney(state: GameState, player: Player, amount: number, reason: string): void {
+  if (amount <= 0) return;
+
+  // 免费卡可免除罚金/税金
+  if (consumeFreePass(player)) {
+    state.logs.push({
+      timestamp: Date.now(),
+      type: 'player:freePass',
+      actorId: player.id,
+      message: `${player.username} 使用免费卡，免除${reason} $${amount}`,
+    });
+    return;
+  }
+
+  if (player.cash >= amount) {
+    player.cash -= amount;
+  } else {
+    const total = player.cash + player.deposit;
+    if (total >= amount) {
+      const fromDeposit = amount - player.cash;
+      player.cash = 0;
+      player.deposit -= fromDeposit;
+    } else {
+      player.cash = 0;
+      player.deposit = 0;
+      player.isBankrupt = true;
+      state.logs.push({
+        timestamp: Date.now(),
+        type: 'player:bankrupt',
+        actorId: player.id,
+        message: `${player.username} 资金不足，破产了！`,
+      });
+      return;
+    }
+  }
+
+  state.logs.push({
+    timestamp: Date.now(),
+    type: 'player:tax',
+    actorId: player.id,
+    message: `${player.username} 缴纳${reason} $${amount}`,
+  });
+}
+
 export function buyProperty(state: GameState): { success: boolean; message?: string } {
   const player = getCurrentPlayer(state);
   const tileIndex = state.pendingTileIndex ?? player.position;
@@ -234,6 +501,8 @@ export function buyProperty(state: GameState): { success: boolean; message?: str
 
   player.cash -= price;
   tile.ownerId = player.id;
+  // 小块默认住宅，大块默认商场（后续可让玩家在大块土地上选择建筑类型）
+  tile.buildingType = tile.size === 'small' ? 'house' : 'mall';
   tile.level = 0;
   player.properties.push(tileIndex);
   state.logs.push({
@@ -253,6 +522,12 @@ export function upgradeProperty(state: GameState): { success: boolean; message?:
   if (tile.type !== 'property' || tile.ownerId !== player.id) {
     return { success: false, message: '只能升级自己的土地' };
   }
+
+  const bt = tile.buildingType ?? 'house';
+  // 连锁店、公园、加油站不可升级
+  if (bt === 'chainStore' || bt === 'park' || bt === 'gasStation') {
+    return { success: false, message: '该建筑类型无法升级' };
+  }
   if (tile.level >= 5) {
     return { success: false, message: '已达到最高等级' };
   }
@@ -270,6 +545,125 @@ export function upgradeProperty(state: GameState): { success: boolean; message?:
     message: `${player.username} 升级 ${tile.name} 到 ${tile.level} 级，花费 $${cost}`,
   });
   return { success: true };
+}
+
+export function rebuildTile(
+  state: GameState,
+  tileIndex: number,
+  buildingType: BuildingType
+): { success: boolean; message?: string } {
+  const player = getCurrentPlayer(state);
+  const tile = state.map.tiles[tileIndex];
+
+  if (tile.type !== 'property' || tile.ownerId !== player.id) {
+    return { success: false, message: '只能改建自己的土地' };
+  }
+
+  // 小块土地：住宅 ↔ 连锁店
+  if (tile.size === 'small') {
+    if (buildingType !== 'house' && buildingType !== 'chainStore') {
+      return { success: false, message: '小块土地只能改建为住宅或连锁店' };
+    }
+  }
+  // 大块土地：公园 / 商场 / 旅馆 / 加油站 / 研究所
+  else if (tile.size === 'large') {
+    if (!['park', 'mall', 'hotel', 'gasStation', 'lab'].includes(buildingType)) {
+      return { success: false, message: '大块土地只能改建为特殊建筑' };
+    }
+  }
+
+  const oldType = tile.buildingType ?? 'house';
+  tile.buildingType = buildingType;
+  tile.level = buildingType === 'chainStore' ? 1 : oldType === 'chainStore' ? 0 : tile.level;
+
+  state.logs.push({
+    timestamp: Date.now(),
+    type: 'player:rebuild',
+    actorId: player.id,
+    message: `${player.username} 将 ${tile.name} 改建为 ${buildingTypeLabel(buildingType)}`,
+  });
+  return { success: true };
+}
+
+function buildingTypeLabel(bt: BuildingType): string {
+  const labels: Record<BuildingType, string> = {
+    house: '住宅',
+    chainStore: '连锁店',
+    park: '公园',
+    mall: '商场',
+    hotel: '旅馆',
+    gasStation: '加油站',
+    lab: '研究所',
+  };
+  return labels[bt];
+}
+
+export function useCard(
+  state: GameState,
+  playerId: string,
+  cardIdOrInstanceId: string,
+  target?: CardUseTarget
+): { success: boolean; message?: string } {
+  const ctx: CardContext = {
+    targetPlayerId: target?.targetPlayerId,
+    targetTileIndex: target?.targetTileIndex,
+    targetGroup: target?.targetGroup,
+    buildingType: target?.buildingType,
+    targetSpiritId: target?.targetPlayerId,
+  };
+  return useCardSystem(state, playerId, cardIdOrInstanceId, ctx);
+}
+
+export function buyCard(
+  state: GameState,
+  playerId: string,
+  cardId: string
+): { success: boolean; message?: string } {
+  return buyCardFromSystem(state, playerId, cardId);
+}
+
+export function sellCard(
+  state: GameState,
+  playerId: string,
+  cardId: string
+): { success: boolean; message?: string } {
+  return sellCardFromSystem(state, playerId, cardId);
+}
+
+export function useItem(
+  state: GameState,
+  playerId: string,
+  itemId: string,
+  target?: ItemUseTarget
+): { success: boolean; message?: string } {
+  const ctx: ItemContext = {
+    targetTileIndex: target?.targetTileIndex,
+    targetPlayerId: target?.targetPlayerId,
+    diceValue: target?.diceValue,
+  };
+  return useItemSystem(state, playerId, itemId, ctx);
+}
+
+export function buyItem(
+  state: GameState,
+  playerId: string,
+  itemId: string,
+  quantity = 1
+): { success: boolean; message?: string } {
+  return buyItemFromSystem(state, playerId, itemId, quantity);
+}
+
+export function sellItem(
+  state: GameState,
+  playerId: string,
+  itemId: string,
+  quantity = 1
+): { success: boolean; message?: string } {
+  return sellItemFromSystem(state, playerId, itemId, quantity);
+}
+
+function cryptoRandomId(): string {
+  return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 
 export function endTurn(state: GameState): GameState {
@@ -296,8 +690,10 @@ export function endTurn(state: GameState): GameState {
     return state;
   }
 
-  if (nextIndex <= state.currentPlayerIndex) {
+  const dayAdvanced = nextIndex <= state.currentPlayerIndex;
+  if (dayAdvanced) {
     state.day += 1;
+    decrementEffects(state);
     if (state.day > 30) {
       state.month += 1;
       state.day = 1;
@@ -311,6 +707,28 @@ export function endTurn(state: GameState): GameState {
   state.pendingTileIndex = undefined;
 
   return state;
+}
+
+function decrementEffects(state: GameState): void {
+  // 玩家状态效果
+  for (const player of state.players) {
+    if (player.statusEffects.length > 0) {
+      player.statusEffects = player.statusEffects
+        .map((e) => ({ ...e, remainingDays: e.remainingDays - 1 }))
+        .filter((e) => e.remainingDays > 0);
+    }
+    // 神明持续天数
+    if (player.spirit) {
+      player.spirit.remainingDays -= 1;
+      if (player.spirit.remainingDays <= 0) {
+        player.spirit = undefined;
+      }
+    }
+  }
+  // 路段效果
+  state.roadEffects = state.roadEffects
+    .map((e) => ({ ...e, remainingDays: e.remainingDays - 1 }))
+    .filter((e) => e.remainingDays > 0);
 }
 
 export function calculatePriceIndex(state: GameState): number {
@@ -339,5 +757,18 @@ export function canBuy(state: GameState, playerId: string): boolean {
 export function canUpgrade(state: GameState, playerId: string): boolean {
   if (state.status !== 'acting' || getCurrentPlayer(state).id !== playerId) return false;
   const tile = state.map.tiles[state.pendingTileIndex ?? getCurrentPlayer(state).position];
-  return tile.type === 'property' && tile.ownerId === playerId && tile.level < 5;
+  if (tile.type !== 'property' || tile.ownerId !== playerId) return false;
+  const bt = tile.buildingType ?? 'house';
+  if (bt === 'chainStore' || bt === 'park' || bt === 'gasStation') return false;
+  return tile.level < 5;
+}
+
+export function canRebuild(state: GameState, playerId: string): boolean {
+  if (state.status !== 'acting' || getCurrentPlayer(state).id !== playerId) return false;
+  const tile = state.map.tiles[state.pendingTileIndex ?? getCurrentPlayer(state).position];
+  return tile.type === 'property' && tile.ownerId === playerId;
+}
+
+export function canUseCard(state: GameState, playerId: string): boolean {
+  return state.status === 'acting' && getCurrentPlayer(state).id === playerId;
 }

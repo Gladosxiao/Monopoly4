@@ -1,5 +1,5 @@
 import { io, Socket } from 'socket.io-client';
-import type { ClientToServerEvents, ServerToClientEvents, Room, GameState, GameLog } from '@monopoly4/shared';
+import type { ClientToServerEvents, ServerToClientEvents, Room, GameState, GameLog, BuildingType, CardUseTarget, ItemUseTarget } from '@monopoly4/shared';
 
 type GameSocket = Socket<ServerToClientEvents, ClientToServerEvents>;
 
@@ -75,6 +75,34 @@ export function buyProperty(roomId: string): void {
 
 export function upgradeProperty(roomId: string): void {
   getSocket().emit('game:upgrade', roomId);
+}
+
+export function rebuildTile(roomId: string, tileIndex: number, buildingType: BuildingType): void {
+  getSocket().emit('game:rebuild', roomId, tileIndex, buildingType);
+}
+
+export function useCard(roomId: string, cardId: string, target?: CardUseTarget): void {
+  getSocket().emit('game:useCard', roomId, cardId, target);
+}
+
+export function buyCard(roomId: string, cardId: string): void {
+  getSocket().emit('game:buyCard', roomId, cardId);
+}
+
+export function sellCard(roomId: string, cardId: string): void {
+  getSocket().emit('game:sellCard', roomId, cardId);
+}
+
+export function useItem(roomId: string, itemId: string, target?: ItemUseTarget): void {
+  getSocket().emit('game:useItem', roomId, itemId, target);
+}
+
+export function buyItem(roomId: string, itemId: string, quantity = 1): void {
+  getSocket().emit('game:buyItem', roomId, itemId, quantity);
+}
+
+export function sellItem(roomId: string, itemId: string, quantity = 1): void {
+  getSocket().emit('game:sellItem', roomId, itemId, quantity);
 }
 
 export function skipTurn(roomId: string): void {
