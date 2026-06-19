@@ -39,6 +39,8 @@ import {
   useItem,
   buyItem,
   sellItem,
+  tradeStock,
+  claimInsurance,
   skipTurn,
   onRoomUpdated,
   onGameState,
@@ -317,6 +319,10 @@ async function navigateToGame(roomId: string): Promise<void> {
           <h2>操作</h2>
           <div id="game-actions"></div>
         </div>
+        <div class="info-card">
+          <h2>股市与公司</h2>
+          <div id="stock-market"></div>
+        </div>
         <div class="info-card logs">
           <h2>日志</h2>
           <div id="game-logs"></div>
@@ -345,6 +351,7 @@ async function navigateToGame(roomId: string): Promise<void> {
     renderBoard(canvas, state, currentUser!.id);
     renderPlayersInfo(container, state);
     renderActions(container, state);
+    renderStockMarket(container, state);
     renderLogs(container, state);
   }
 
@@ -369,7 +376,7 @@ function renderPlayersInfo(container: HTMLElement, state: GameState): void {
       <strong style="color:${p.color}">${p.username}</strong>
       ${isCurrent ? ' ← 当前回合' : ''}
       <div>现金: $${p.cash} | 存款: $${p.deposit} | 点券: ${p.coupons}</div>
-      <div>地产: ${p.properties.length} 处</div>
+      <div>地产: ${p.properties.length} 处 | 保险: ${p.insuranceDays} 天</div>
       <div>卡片: ${cardNames || '无'} (${p.cards.length}/15)</div>
       <div>道具: ${itemNames || '无'}</div>
       ${p.spirit ? `<div>神明: ${p.spirit.spiritId}</div>` : ''}
@@ -512,6 +519,48 @@ function renderActions(container: HTMLElement, state: GameState): void {
         el.appendChild(itemBtn);
       }
 
+      // 改建按钮（自己的地）
+      if (tile.type === 'property' && tile.ownerId === currentPlayer.id) {
+        const rebuildBtn = document.createElement('button');
+        rebuildBtn.textContent = '改建';
+        rebuildBtn.addEventListener('click', () => {
+          const choices = tile.size === 'small'
+            ? [{ id: 'house', name: '住宅' }, { id: 'chainStore', name: '连锁店' }]
+            : [
+                { id: 'park', name: '公园' },
+                { id: 'mall', name: '商场' },
+                { id: 'hotel', name: '旅馆' },
+                { id: 'gasStation', name: '加油站' },
+                { id: 'lab', name: '研究所' },
+              ];
+          const choice = window.prompt(
+            '选择建筑类型：' + choices.map((c) => `${c.id}=${c.name}`).join('，')
+          );
+          if (choice) rebuildTile(state.roomId, tileIndex, choice as any);
+        });
+        el.appendChild(rebuildBtn);
+      }
+
+      // 使用卡片按钮
+      if (currentPlayer.cards.length > 0) {
+        const cardBtn = document.createElement('button');
+        cardBtn.textContent = '使用卡片';
+        cardBtn.addEventListener('click', () => {
+          const card = currentPlayer.cards[0];
+          const def = currentPlayer.cards.find((c) => c.cardId === card.cardId);
+          useCard(state.roomId, card.instanceId);
+        });
+        el.appendChild(cardBtn);
+      }
+
+      // 理赔按钮
+      if (currentPlayer.insuranceDays > 0) {
+        const claimBtn = document.createElement('button');
+        claimBtn.textContent = '申请理赔';
+        claimBtn.addEventListener('click', () => claimInsurance(state.roomId));
+        el.appendChild(claimBtn);
+      }
+
       const skipBtn = document.createElement('button');
       skipBtn.textContent = '结束回合';
       skipBtn.addEventListener('click', () => skipTurn(state.roomId));
@@ -520,6 +569,61 @@ function renderActions(container: HTMLElement, state: GameState): void {
   } else {
     el.innerHTML = `<div>等待 ${currentPlayer.username} 操作...</div>`;
   }
+}
+
+function renderStockMarket(container: HTMLElement, state: GameState): void {
+  const el = container.querySelector<HTMLDivElement>('#stock-market')!;
+  el.innerHTML = '';
+
+  const currentPlayer = state.players.find((p) => p.id === currentUser?.id);
+  const table = document.createElement('table');
+  table.className = 'stock-table';
+  table.innerHTML = `
+    <thead>
+      <tr>
+        <th>公司</th>
+        <th>股价</th>
+        <th>涨跌</th>
+        <th>持有</th>
+        <th>操作</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  `;
+  const tbody = table.querySelector('tbody')!;
+
+  state.stocks.forEach((stock) => {
+    const company = state.companies.find((c) => c.id === stock.companyId);
+    const holding = currentPlayer?.stockHoldings[stock.id] ?? 0;
+    const chairman = company?.chairmanPlayerId
+      ? state.players.find((p) => p.id === company.chairmanPlayerId)?.username
+      : '无';
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${stock.name}<br><small>董事长：${chairman}</small></td>
+      <td>$${stock.price}</td>
+      <td>${stock.fluctuation >= 0 ? '+' : ''}${stock.fluctuation}%</td>
+      <td>${holding}</td>
+      <td></td>
+    `;
+    const actions = tr.querySelector('td:last-child')!;
+
+    const buyBtn = document.createElement('button');
+    buyBtn.textContent = '买1';
+    buyBtn.disabled = stock.suspendedDays > 0 || currentPlayer?.id !== state.players[state.currentPlayerIndex].id;
+    buyBtn.addEventListener('click', () => tradeStock(state.roomId, stock.id, 1));
+    actions.appendChild(buyBtn);
+
+    const sellBtn = document.createElement('button');
+    sellBtn.textContent = '卖1';
+    sellBtn.disabled = holding <= 0 || stock.suspendedDays > 0;
+    sellBtn.addEventListener('click', () => tradeStock(state.roomId, stock.id, -1));
+    actions.appendChild(sellBtn);
+
+    tbody.appendChild(tr);
+  });
+
+  el.appendChild(table);
 }
 
 function renderLogs(container: HTMLElement, state: GameState): void {

@@ -23,6 +23,8 @@ const TILE_COLORS: Record<string, string> = {
   coupon30: '#16a085',
   coupon50: '#16a085',
   tax: '#c0392b',
+  news: '#e84393',
+  company: '#0984e3',
 };
 
 const GROUP_COLORS = [

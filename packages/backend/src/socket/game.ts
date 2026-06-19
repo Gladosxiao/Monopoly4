@@ -26,6 +26,8 @@ import {
   useItem,
   buyItem,
   sellItem,
+  tradeStock,
+  claimPlayerInsurance,
   endTurn,
   canRoll,
   canBuy,
@@ -238,6 +240,18 @@ export function setupSocketIO(httpServer: HttpServer): void {
       io.to(roomId).emit('game:state', state);
     });
 
+    socket.on('game:stockTrade', (roomId, stockId, quantity) => {
+      const state = games.get(roomId);
+      if (!state) return;
+      // 股票交易可在任意阶段进行
+      const result = tradeStock(state, user.id, stockId, quantity);
+      if (!result.success) {
+        socket.emit('error', result.message);
+        return;
+      }
+      io.to(roomId).emit('game:state', state);
+    });
+
     socket.on('game:sellCard', (roomId, cardId) => {
       const state = games.get(roomId);
       if (!state) return;
@@ -294,6 +308,17 @@ export function setupSocketIO(httpServer: HttpServer): void {
         return;
       }
       const result = sellItem(state, user.id, itemId, quantity ?? 1);
+      if (!result.success) {
+        socket.emit('error', result.message);
+        return;
+      }
+      io.to(roomId).emit('game:state', state);
+    });
+
+    socket.on('game:claimInsurance', (roomId) => {
+      const state = games.get(roomId);
+      if (!state) return;
+      const result = claimPlayerInsurance(state, user.id);
       if (!result.success) {
         socket.emit('error', result.message);
         return;

@@ -108,3 +108,11 @@ export function sellItem(roomId: string, itemId: string, quantity = 1): void {
 export function skipTurn(roomId: string): void {
   getSocket().emit('game:skip', roomId);
 }
+
+export function tradeStock(roomId: string, stockId: string, quantity: number): void {
+  getSocket().emit('game:stockTrade', roomId, stockId, quantity);
+}
+
+export function claimInsurance(roomId: string): void {
+  getSocket().emit('game:claimInsurance', roomId);
+}
