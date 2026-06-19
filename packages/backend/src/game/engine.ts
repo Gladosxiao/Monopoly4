@@ -36,7 +36,9 @@ import { useCard as useCardSystem, type CardContext } from './cardSystem/index.j
 import { buyCard as buyCardFromSystem, sellCard as sellCardFromSystem } from './cardSystem/index.js';
 import { useItem as useItemSystem, type ItemContext } from './itemSystem/index.js';
 import { buyItem as buyItemFromSystem, sellItem as sellItemFromSystem } from './itemSystem/index.js';
+import { triggerTrap, tickBomb, type TriggerResult } from './itemSystem/trapSystem.js';
 import { triggerFateEvent, triggerNewsEvent, type EventEffect, type EventOutcome } from './eventSystem/index.js';
+import { spawnNpcs, moveNpcs, triggerNpcEffect } from './npcSystem/index.js';
 import {
   tradeStock as tradeStockImpl,
   sellAllStocks,
@@ -81,7 +83,7 @@ export function createGame(roomId: string, config: GameConfig, roomPlayers: Room
     };
   });
 
-  return {
+  const state: GameState = {
     roomId,
     status: 'rolling',
     config,
@@ -93,6 +95,7 @@ export function createGame(roomId: string, config: GameConfig, roomPlayers: Room
     priceIndex: 1,
     roadEffects: [],
     spirits: [],
+    npcs: [],
     stocks: JSON.parse(JSON.stringify(DEFAULT_STOCKS)),
     companies: JSON.parse(JSON.stringify(DEFAULT_COMPANIES)),
     marketStatus: { loanFrozenDays: 0 },
@@ -104,6 +107,10 @@ export function createGame(roomId: string, config: GameConfig, roomPlayers: Room
       },
     ],
   };
+
+  spawnNpcs(state);
+
+  return state;
 }
 
 export function getDiceCount(player: Player): number {
@@ -417,37 +424,92 @@ export function movePlayer(state: GameState, steps: number): GameState {
     });
   }
 
-  const oldPos = player.position;
-  const pathLength = state.map.path.length;
-  let newPos = (oldPos + steps) % pathLength;
-  if (newPos < 0) newPos += pathLength;
-  player.position = newPos;
+  const path = state.map.path;
+  const pathLength = path.length;
+  let currentPathIdx = path.indexOf(player.position);
+  if (currentPathIdx < 0) currentPathIdx = 0;
 
-  // 经过起点奖励（正向移动且跨越起点时发放）
-  if (steps > 0 && oldPos + steps >= pathLength) {
-    const salary = 10000;
-    player.cash += salary;
-    state.logs.push({
-      timestamp: Date.now(),
-      type: 'player:salary',
-      actorId: player.id,
-      message: `${player.username} 经过起点领取工资 $${salary}`,
-    });
+  const direction = steps >= 0 ? 1 : -1;
+  const absSteps = Math.abs(steps);
+
+  state.status = 'moving';
+  state.lastRoll = absSteps;
+
+  for (let i = 0; i < absSteps; i++) {
+    const previousPathIdx = currentPathIdx;
+    currentPathIdx = (currentPathIdx + direction + pathLength) % pathLength;
+    const tileIndex = path[currentPathIdx];
+
+    // 经过起点工资：正向跨过 path 0 或反向从 0 跨到末尾
+    if (
+      (direction === 1 && currentPathIdx < previousPathIdx) ||
+      (direction === -1 && currentPathIdx > previousPathIdx)
+    ) {
+      const salary = 10000;
+      player.cash += salary;
+      state.logs.push({
+        timestamp: Date.now(),
+        type: 'player:salary',
+        actorId: player.id,
+        message: `${player.username} 经过起点领取工资 $${salary}`,
+      });
+    }
+
+    player.position = tileIndex;
+
+    // 身上附身的定时炸弹每走一格减 1
+    tickBomb(state, player);
+
+    const stop = onPassTile(state, tileIndex, player);
+    if (stop) {
+      break;
+    }
   }
 
-  state.lastRoll = Math.abs(steps);
-  state.pendingTileIndex = newPos;
+  state.pendingTileIndex = player.position;
   state.status = 'acting';
 
-  const tile = state.map.tiles[newPos];
+  const tile = state.map.tiles[player.position];
   state.logs.push({
     timestamp: Date.now(),
     type: 'player:move',
     actorId: player.id,
-    message: `${player.username} 掷出 ${Math.abs(steps)} 点，移动到 ${tile.name}`,
+    message: `${player.username} 移动到 ${tile.name}`,
   });
 
   return state;
+}
+
+/**
+ * 玩家经过某个地块时触发的效果。
+ * 返回 true 表示强制停止后续移动（如路障）。
+ */
+function onPassTile(state: GameState, tileIndex: number, player: Player): boolean {
+  const tile = state.map.tiles[tileIndex];
+
+  // 陷阱触发
+  if (tile.traps && tile.traps.length > 0) {
+    const traps = [...tile.traps];
+    for (const trap of traps) {
+      const { stop, consumed } = triggerTrap(state, trap, player, tileIndex);
+      if (consumed) {
+        tile.traps = tile.traps.filter((t) => t.id !== trap.id);
+      }
+      if (stop) {
+        return true;
+      }
+    }
+  }
+
+  // NPC 同格触发
+  const pathIndex = state.map.path.indexOf(tileIndex);
+  for (const npc of state.npcs) {
+    if (npc.pathIndex === pathIndex) {
+      triggerNpcEffect(state, npc, player);
+    }
+  }
+
+  return false;
 }
 
 /**
@@ -550,6 +612,17 @@ export function handleTileEffect(state: GameState): GameState {
     const company = state.companies.find((c) => c.id === tile.companyId);
     if (company) {
       handleCompanyArrival(state, player, company);
+    }
+  } else if (tile.type === 'hospital') {
+    if (hasStatusEffect(player, 'hospital')) {
+      removeStatusEffect(player, 'hospital');
+      player.insuranceDays = 0;
+      state.logs.push({
+        timestamp: Date.now(),
+        type: 'player:hospitalCured',
+        actorId: player.id,
+        message: `${player.username} 抵达医院，提前出院`,
+      });
     }
   }
 
@@ -1263,6 +1336,9 @@ export function sellItem(
 export function endTurn(state: GameState): GameState {
   // 先处理地块效果
   state = handleTileEffect(state);
+
+  // NPC 每回合结束后移动并刷新存在天数
+  moveNpcs(state);
 
   // 找到下一个可以行动的玩家（未破产且未冬眠/入狱/住院/梦游）
   let nextIndex = (state.currentPlayerIndex + 1) % state.players.length;

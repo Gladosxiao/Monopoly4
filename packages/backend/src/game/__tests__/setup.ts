@@ -26,6 +26,8 @@ export function makeTestState(
 ): GameState {
   const state = createGame('room-test', { ...DEFAULT_TEST_CONFIG, ...config }, players);
   state.priceIndex = 1;
+  // 测试中默认清空 NPC，避免随机 NPC 干扰断言；需要测试 NPC 时手动添加
+  state.npcs = [];
   return state;
 }
 

@@ -67,12 +67,13 @@ ITEM_EFFECT_REGISTRY[itemId] = (state, user, ctx) => { ... };
 
 ## 陷阱系统
 
-`Tile.traps?: Trap[]` 存储地块上的陷阱。当前已实现放置逻辑，触发逻辑待接入 `movePlayer` 的移动过程：
+`Tile.traps?: Trap[]` 存储地块上的陷阱。`itemSystem/trapSystem.ts` 已提供 `triggerTrap` 与 `tickBomb`，并在 `engine.ts` 的 `movePlayer` 逐格移动过程中调用。
 
-```typescript
-// 建议在 movePlayer 的逐格移动过程中调用：
-// TrapSystem.trigger(state, trap, visitor)
-```
+| 陷阱 | 触发效果 |
+|---|---|
+| 路障 | 玩家强制停留在该格 |
+| 地雷 | 玩家住院 3 天，载具恢复步行 |
+| 定时炸弹 | 附身玩家，走满 38 步后 3×3 范围爆炸，住院 5 天、房屋降一级 |
 
 ## 与游戏引擎的集成
 

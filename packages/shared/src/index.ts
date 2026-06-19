@@ -1,3 +1,5 @@
+import type { NpcType } from './data/npcs.js';
+
 // ==================== 用户 ====================
 
 export interface User {
@@ -260,6 +262,13 @@ export interface SpiritOnMap {
   pathIndex: number;
 }
 
+export interface NpcInstance {
+  id: string;
+  type: NpcType;
+  pathIndex: number; // 当前在 map.path 中的索引
+  remainingDays: number;
+}
+
 export interface CardUseTarget {
   targetPlayerId?: string;
   targetTileIndex?: number;
@@ -288,6 +297,7 @@ export interface GameState {
   logs: GameLog[];
   roadEffects: RoadEffect[];
   spirits: SpiritOnMap[];
+  npcs: NpcInstance[];
   stocks: Stock[];
   companies: Company[];
   marketStatus: {
@@ -479,5 +489,13 @@ export {
   type SpiritDefinition,
   type SpiritType,
 } from './data/spirits.js';
+
+export {
+  NPC_DEFINITIONS,
+  NPC_TYPES,
+  getNpcDefinition,
+  type NpcDefinition,
+  type NpcType,
+} from './data/npcs.js';
 
 export * from './data/minigames.js';
