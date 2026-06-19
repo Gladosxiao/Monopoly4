@@ -218,7 +218,7 @@ interface CardDefinition {
   name: string;           // 如：购地卡、天使卡
   description: string;    // 功能描述
   type: 'attack' | 'defense' | 'control' | 'special';
-  cost: number;           // 点券价格（点数），常见 10/15/20/25/30/35/40/50/70/100/160/180/200 点
+  cost: number;           // 点券价格（点数），具体数值见 doc/card_item_pricing.md 与 packages/shared/src/data/cards.ts
   target: 'self' | 'opponent' | 'tile' | 'global' | 'road';
   assetKey: string;       // 美术资源 key，映射到 /assets/cards/{assetKey}.png
   // 效果参数由 CardEffect 处理
