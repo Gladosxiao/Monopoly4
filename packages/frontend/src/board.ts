@@ -312,7 +312,7 @@ export function renderBoard(
         const iconSize = minDim * 0.2;
         const buildingType = tile.buildingType ?? 'house';
         drawBuildingIcon(ctx, center.x - minDim * 0.22, center.y + h * 0.05, iconSize, buildingType, tile.level);
-        drawLevelBlocks(ctx, center.x + minDim * 0.08, center.y + h * 0.05, minDim * 0.14, tile.level);
+        drawLevelBadge(ctx, center.x + minDim * 0.08, center.y + h * 0.05, minDim * 0.18, tile.level);
 
         ctx.fillStyle = '#f1c40f';
         ctx.fillText(`$${formatMoney(tile.baseRent)}`, center.x, center.y + h * 0.32);
@@ -502,25 +502,50 @@ function drawBuildingIcon(
   ctx.restore();
 }
 
-/** 用实心方块表示等级，最多 5 级 */
-function drawLevelBlocks(
+/** 绘制醒目的等级徽章（Lv.X），放在建筑旁 */
+function drawLevelBadge(
   ctx: CanvasRenderingContext2D,
-  startX: number,
+  cx: number,
   cy: number,
-  blockSize: number,
+  size: number,
   level: number
 ): void {
-  const count = Math.max(0, Math.min(level, 5));
-  if (count === 0) return;
-  const gap = blockSize * 0.25;
-  const totalW = count * blockSize + (count - 1) * gap;
-  let x = startX - totalW / 2;
+  const r = Math.max(size * 0.45, 8);
+  const displayLevel = Math.max(0, Math.min(level, 5));
   ctx.save();
+
+  // 外圈金色光环
+  ctx.shadowColor = 'rgba(241, 196, 15, 0.6)';
+  ctx.shadowBlur = r * 0.4;
   ctx.fillStyle = '#f1c40f';
-  for (let i = 0; i < count; i++) {
-    ctx.fillRect(x, cy - blockSize / 2, blockSize, blockSize);
-    x += blockSize + gap;
-  }
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, 0, Math.PI * 2);
+  ctx.fill();
+
+  // 内圈深色背景，让白字更突出
+  ctx.shadowColor = 'transparent';
+  ctx.fillStyle = '#2c3e50';
+  ctx.beginPath();
+  ctx.arc(cx, cy, r * 0.82, 0, Math.PI * 2);
+  ctx.fill();
+
+  // 白色边框
+  ctx.strokeStyle = '#ffffff';
+  ctx.lineWidth = Math.max(1, r * 0.1);
+  ctx.beginPath();
+  ctx.arc(cx, cy, r * 0.82, 0, Math.PI * 2);
+  ctx.stroke();
+
+  // 等级数字 + Lv 前缀
+  const fontSize = Math.max(8, r * 0.95);
+  ctx.font = `bold ${fontSize}px sans-serif`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = '#ffffff';
+  setTextShadow(ctx, 'rgba(0,0,0,0.8)');
+  ctx.fillText(`Lv.${displayLevel}`, cx, cy);
+  clearTextShadow(ctx);
+
   ctx.restore();
 }
 
