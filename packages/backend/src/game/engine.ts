@@ -9,7 +9,7 @@
  * - 卡片与道具的使用入口
  * - 回合结束与状态效果递减
  *
- * 详细设计见：docs/design/09-rent-system.md
+ * 详细设计见：spec/design/09-rent-system.md
  */
 
 import {

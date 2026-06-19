@@ -16,7 +16,7 @@
 - **项目名称/主题**：大富翁4（Monopoly 4）Web 复刻版，支持**多人在线游戏**。
 - **项目目标**：在浏览器中完整复刻《大富翁4》，部署到 Kimi 的网站；仅登录用户可进入游戏。
 - **当前状态**：项目已有完整可运行的前后端源码与配套测试，持续迭代中。
-- **技术栈**：Monorepo（pnpm workspace）+ Vite + TypeScript + Node.js/Express + Socket.IO + Vitest。
+- **技术栈**：Monorepo（npm workspace）+ Vite + TypeScript + Node.js/Express + Socket.IO + Vitest + SQLite（better-sqlite3）。
 
 ## 仓库结构
 
@@ -62,10 +62,12 @@
 
 ## 构建与测试命令
 
-- 安装依赖：`pnpm install`
+- 安装依赖：`npm install`
+- 初始化数据库：`npm run db:init`
 - 根目录构建：`npm run build`（依次构建 shared、frontend、backend）
 - 开发模式：`npm run dev`（同时启动 backend 与 frontend）
-- 后端测试：`npm run test -w packages/backend`（Vitest，测试文件位于 `packages/backend/src/game/*.test.ts`）
+- 生产启动：`npm run start`（启动已构建的后端）
+- 后端测试：`npm run test -w packages/backend`（Vitest，测试文件位于 `packages/backend/src/game/__tests__/*.test.ts`）
 
 **每次修改后务必运行测试**确保不破坏现有功能。
 
@@ -73,15 +75,22 @@
 
 - **测试运行器**：Vitest
 - **测试文件位置**：`packages/backend/src/game/__tests__/`
-- **已覆盖的测试文件**（345+ 用例）：
+- **已覆盖的测试文件**（356+ 用例，26 个测试文件）：
   - `engine.test.ts`：核心引擎规则（过路费、神明租金、卡片效果、状态递减等）
   - `spirits.test.ts`：神明系统（福神/衰神/天使/恶魔/土地公完整效果）
+  - `cardSystem/` + `cards.test.ts`：卡片系统（30+ 张卡片效果）
+  - `itemSystem/` + `items.test.ts`：道具系统（13+ 种道具效果）
   - `minigames.test.ts`：小游戏系统（七彩气球/喜从天降/企鹅挖宝）
   - `bankruptcy.test.ts`：破产法拍（股票清算+土地法拍）
   - `financial.test.ts`：股票交易、加权成本、董事长、分红、公司特效、保险理赔
+  - `property.test.ts` / `rent.test.ts` / `movement.test.ts`：土地、租金、移动规则
+  - `shop.test.ts` / `couponTiles.test.ts` / `loan.test.ts` / `lottery.test.ts`：商店、点券格、贷款、乐透
+  - `traps.test.ts` / `npcs.test.ts` / `magicHouse.test.ts`：陷阱、NPC、魔法屋
+  - `turn.test.ts` / `victory.test.ts` / `characters.test.ts`：回合、胜利条件、角色
+  - `landLease.test.ts` / `mapLoading.test.ts`：土地租约与地图加载
   - `e2e.test.ts`：端到端集成测试
+  - `socket.test.ts` / `socketIntegration.test.ts`：Socket 事件与集成测试
   - `setup.ts`：测试辅助工具与工厂函数
-  - `socketIntegration.test.ts`：Socket 事件集成测试
 
 ## 代码组织
 
@@ -93,8 +102,8 @@
 ## 开发规范
 
 - 代码注释与文档优先使用中文；变量名、函数名、类名等技术标识符保持英文。
-- 统一使用 Prettier 格式化（`pnpm exec prettier --write .`）。
 - 代码提交前必须通过 `npm run build` 编译检查。
+- 后端逻辑修改后建议运行 `npm run test -w packages/backend`。
 
 ## 多代理协作
 
