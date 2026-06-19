@@ -1,0 +1,409 @@
+import type {
+  IMiniGame,
+  MiniGameConfig,
+  MiniGameResult,
+  MiniGameType,
+} from '@monopoly4/shared';
+
+/** 气球类型 */
+type BalloonKind = 'normal' | 'double' | 'mystery';
+
+/** 单个气球对象 */
+interface Balloon {
+  x: number;
+  y: number;
+  radius: number;
+  speed: number;
+  kind: BalloonKind;
+  color: string;
+  wobbleOffset: number;
+  wobbleSpeed: number;
+  popped: boolean;
+}
+
+/** 粒子对象，用于气球爆炸效果 */
+interface Particle {
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  life: number;
+  maxLife: number;
+  color: string;
+  size: number;
+}
+
+/** 浮动文字提示，用于显示随机效果 */
+interface FloatingText {
+  x: number;
+  y: number;
+  text: string;
+  color: string;
+  life: number;
+  maxLife: number;
+}
+
+const GAME_TYPE: MiniGameType = 'balloon';
+
+/** 普通气球颜色池 */
+const NORMAL_COLORS = ['#ff6b6b', '#4ecdc4', '#2ecc71', '#f1c40f'];
+/** ×2 气球颜色 */
+const DOUBLE_COLOR = '#ffd700';
+/** 问号气球颜色 */
+const MYSTERY_COLOR = '#9b59b6';
+
+/** 七彩气球小游戏 */
+export class BalloonMiniGame implements IMiniGame {
+  config: MiniGameConfig;
+
+  private canvas: HTMLCanvasElement | null = null;
+  private ctx: CanvasRenderingContext2D | null = null;
+  private balloons: Balloon[] = [];
+  private particles: Particle[] = [];
+  private floatingTexts: FloatingText[] = [];
+  private score = 0;
+  private startTime = 0;
+  private endTime = 0;
+  private lastSpawnTime = 0;
+  private spawnInterval = 800;
+  private timeScale = 1;
+  private isRunning = false;
+  private ended = false;
+  private rafId = 0;
+  onUpdate?: (score: number) => void;
+  onEnd?: (result: MiniGameResult) => void;
+
+  constructor(duration = 30000) {
+    this.config = {
+      type: GAME_TYPE,
+      duration,
+      canvasWidth: 800,
+      canvasHeight: 600,
+    };
+  }
+
+  /** 启动游戏，绑定 Canvas 与事件 */
+  start(canvas: HTMLCanvasElement): void {
+    if (this.isRunning) return;
+
+    this.canvas = canvas;
+    this.ctx = canvas.getContext('2d');
+    if (!this.ctx) return;
+
+    canvas.width = this.config.canvasWidth;
+    canvas.height = this.config.canvasHeight;
+
+    this.score = 0;
+    this.timeScale = 1;
+    this.balloons = [];
+    this.particles = [];
+    this.floatingTexts = [];
+    this.startTime = performance.now();
+    this.endTime = this.startTime + this.config.duration;
+    this.lastSpawnTime = this.startTime;
+    this.isRunning = true;
+
+    canvas.addEventListener('pointerdown', this.handlePointerDown);
+    this.rafId = requestAnimationFrame(this.loop);
+  }
+
+  /** 停止游戏并返回结果 */
+  stop(): MiniGameResult {
+    if (this.ended) {
+      return {
+        type: GAME_TYPE,
+        score: this.score,
+        coupons: Math.min(this.score, 500),
+        duration: Math.round(performance.now() - this.startTime),
+      };
+    }
+    this.ended = true;
+    this.cleanup();
+    const duration = Math.round(performance.now() - this.startTime);
+    const coupons = Math.min(this.score, 500);
+    const result: MiniGameResult = {
+      type: GAME_TYPE,
+      score: this.score,
+      coupons,
+      duration,
+    };
+    this.onEnd?.(result);
+    return result;
+  }
+
+  private cleanup(): void {
+    this.isRunning = false;
+    if (this.rafId) cancelAnimationFrame(this.rafId);
+    this.canvas?.removeEventListener('pointerdown', this.handlePointerDown);
+  }
+
+  private handlePointerDown = (e: PointerEvent): void => {
+    if (!this.canvas || !this.isRunning) return;
+    const rect = this.canvas.getBoundingClientRect();
+    const scaleX = this.canvas.width / rect.width;
+    const scaleY = this.canvas.height / rect.height;
+    const x = (e.clientX - rect.left) * scaleX;
+    const y = (e.clientY - rect.top) * scaleY;
+
+    // 从后往前检测，优先命中上层气球
+    for (let i = this.balloons.length - 1; i >= 0; i--) {
+      const b = this.balloons[i];
+      if (b.popped) continue;
+      const dx = x - b.x;
+      const dy = y - b.y;
+      if (dx * dx + dy * dy <= b.radius * b.radius) {
+        this.popBalloon(b, i);
+        break;
+      }
+    }
+  };
+
+  private popBalloon(balloon: Balloon, index: number): void {
+    balloon.popped = true;
+    this.balloons.splice(index, 1);
+    this.spawnParticles(balloon.x, balloon.y, balloon.color);
+
+    switch (balloon.kind) {
+      case 'normal': {
+        this.score += 1;
+        this.addFloatingText(balloon.x, balloon.y, '+1', '#fff');
+        break;
+      }
+      case 'double': {
+        this.score *= 2;
+        this.addFloatingText(balloon.x, balloon.y, '×2', '#ffd700');
+        break;
+      }
+      case 'mystery': {
+        this.applyMysteryEffect(balloon.x, balloon.y);
+        break;
+      }
+    }
+
+    this.onUpdate?.(this.score);
+  }
+
+  /** 问号气球的随机效果 */
+  private applyMysteryEffect(x: number, y: number): void {
+    const effects = [
+      { weight: 25, apply: () => { this.score += 10; return '+10'; }, color: '#2ecc71' },
+      { weight: 20, apply: () => { this.score -= 5; return '-5'; }, color: '#e74c3c' },
+      { weight: 10, apply: () => { this.score = 0; return '清零'; }, color: '#c0392b' },
+      { weight: 20, apply: () => { this.timeScale = Math.min(this.timeScale + 0.5, 2.5); return '加速'; }, color: '#f1c40f' },
+      { weight: 15, apply: () => { this.timeScale = Math.max(this.timeScale - 0.3, 0.5); return '减速'; }, color: '#3498db' },
+      { weight: 10, apply: () => { this.endTime -= 5000; return '-5s'; }, color: '#e67e22' },
+    ];
+
+    const totalWeight = effects.reduce((sum, e) => sum + e.weight, 0);
+    let random = Math.random() * totalWeight;
+    for (const effect of effects) {
+      random -= effect.weight;
+      if (random <= 0) {
+        const text = effect.apply();
+        this.addFloatingText(x, y, `? ${text}`, effect.color);
+        break;
+      }
+    }
+    if (this.score < 0) this.score = 0;
+  }
+
+  private spawnParticles(x: number, y: number, color: string): void {
+    const count = 8 + Math.floor(Math.random() * 6);
+    for (let i = 0; i < count; i++) {
+      const angle = (Math.PI * 2 * i) / count + Math.random() * 0.5;
+      const speed = 2 + Math.random() * 3;
+      this.particles.push({
+        x,
+        y,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed,
+        life: 30,
+        maxLife: 30,
+        color,
+        size: 2 + Math.random() * 3,
+      });
+    }
+  }
+
+  private addFloatingText(x: number, y: number, text: string, color: string): void {
+    this.floatingTexts.push({
+      x,
+      y: y - 20,
+      text,
+      color,
+      life: 40,
+      maxLife: 40,
+    });
+  }
+
+  private spawnBalloon(now: number): void {
+    if (now - this.lastSpawnTime < this.spawnInterval / this.timeScale) return;
+    this.lastSpawnTime = now;
+
+    const radius = 24 + Math.random() * 12;
+    const x = radius + Math.random() * (this.config.canvasWidth - radius * 2);
+    const kindRoll = Math.random();
+    let kind: BalloonKind;
+    let color: string;
+
+    if (kindRoll < 0.12) {
+      kind = 'double';
+      color = DOUBLE_COLOR;
+    } else if (kindRoll < 0.28) {
+      kind = 'mystery';
+      color = MYSTERY_COLOR;
+    } else {
+      kind = 'normal';
+      color = NORMAL_COLORS[Math.floor(Math.random() * NORMAL_COLORS.length)];
+    }
+
+    const baseSpeed = 1.2 + Math.random() * 1.3;
+    this.balloons.push({
+      x,
+      y: this.config.canvasHeight + radius,
+      radius,
+      speed: baseSpeed * (0.8 + this.timeScale * 0.2),
+      kind,
+      color,
+      wobbleOffset: Math.random() * Math.PI * 2,
+      wobbleSpeed: 0.02 + Math.random() * 0.02,
+      popped: false,
+    });
+  }
+
+  private loop = (now: number): void => {
+    if (!this.ctx || !this.canvas || !this.isRunning) return;
+
+    const dt = 1;
+    const remaining = Math.max(0, this.endTime - now);
+    if (remaining <= 0) {
+      this.stop();
+      return;
+    }
+
+    this.spawnBalloon(now);
+
+    // 更新气球位置
+    for (let i = this.balloons.length - 1; i >= 0; i--) {
+      const b = this.balloons[i];
+      b.y -= b.speed * this.timeScale * dt;
+      b.x += Math.sin(now * b.wobbleSpeed + b.wobbleOffset) * 0.5;
+      if (b.y + b.radius < 0) {
+        this.balloons.splice(i, 1);
+      }
+    }
+
+    // 更新粒子
+    for (let i = this.particles.length - 1; i >= 0; i--) {
+      const p = this.particles[i];
+      p.x += p.vx;
+      p.y += p.vy;
+      p.vy += 0.15;
+      p.life -= 1;
+      if (p.life <= 0) this.particles.splice(i, 1);
+    }
+
+    // 更新浮动文字
+    for (let i = this.floatingTexts.length - 1; i >= 0; i--) {
+      const t = this.floatingTexts[i];
+      t.y -= 1;
+      t.life -= 1;
+      if (t.life <= 0) this.floatingTexts.splice(i, 1);
+    }
+
+    this.render(now, remaining);
+    this.rafId = requestAnimationFrame(this.loop);
+  };
+
+  private render(now: number, remaining: number): void {
+    if (!this.ctx || !this.canvas) return;
+    const ctx = this.ctx;
+    const width = this.config.canvasWidth;
+    const height = this.config.canvasHeight;
+
+    // 背景
+    ctx.clearRect(0, 0, width, height);
+    const gradient = ctx.createLinearGradient(0, 0, 0, height);
+    gradient.addColorStop(0, '#87CEEB');
+    gradient.addColorStop(1, '#E0F7FA');
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, width, height);
+
+    // 绘制气球
+    this.balloons.forEach((b) => this.drawBalloon(ctx, b, now));
+
+    // 绘制粒子
+    this.particles.forEach((p) => {
+      ctx.globalAlpha = p.life / p.maxLife;
+      ctx.fillStyle = p.color;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.globalAlpha = 1;
+    });
+
+    // 绘制浮动文字
+    this.floatingTexts.forEach((t) => {
+      ctx.globalAlpha = t.life / t.maxLife;
+      ctx.fillStyle = t.color;
+      ctx.font = 'bold 22px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.strokeStyle = '#000';
+      ctx.lineWidth = 3;
+      ctx.strokeText(t.text, t.x, t.y);
+      ctx.fillText(t.text, t.x, t.y);
+      ctx.globalAlpha = 1;
+    });
+
+    // HUD
+    ctx.fillStyle = '#1a1a2e';
+    ctx.font = 'bold 24px sans-serif';
+    ctx.textAlign = 'left';
+    ctx.fillText(`得分: ${this.score}`, 16, 36);
+    ctx.fillText(`时间: ${(remaining / 1000).toFixed(1)}s`, 16, 68);
+  }
+
+  private drawBalloon(ctx: CanvasRenderingContext2D, b: Balloon, now: number): void {
+    const wobbleX = Math.sin(now * b.wobbleSpeed + b.wobbleOffset) * 4;
+    const x = b.x + wobbleX;
+
+    // 绳子
+    ctx.strokeStyle = '#555';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(x, b.y + b.radius);
+    ctx.quadraticCurveTo(x + Math.sin(now * 0.01) * 6, b.y + b.radius + 20, x, b.y + b.radius + 36);
+    ctx.stroke();
+
+    // 气球本体（带高光）
+    ctx.fillStyle = b.color;
+    ctx.beginPath();
+    ctx.ellipse(x, b.y, b.radius, b.radius * 1.15, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // 气球底部小三角
+    ctx.beginPath();
+    ctx.moveTo(x - 6, b.y + b.radius * 1.1);
+    ctx.lineTo(x + 6, b.y + b.radius * 1.1);
+    ctx.lineTo(x, b.y + b.radius * 1.1 + 8);
+    ctx.closePath();
+    ctx.fill();
+
+    // 高光
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.35)';
+    ctx.beginPath();
+    ctx.ellipse(x - b.radius * 0.25, b.y - b.radius * 0.25, b.radius * 0.22, b.radius * 0.32, -0.4, 0, Math.PI * 2);
+    ctx.fill();
+
+    // 特殊标识
+    ctx.fillStyle = '#fff';
+    ctx.font = `bold ${Math.max(14, b.radius * 0.6)}px sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    if (b.kind === 'double') {
+      ctx.fillText('×2', x, b.y);
+    } else if (b.kind === 'mystery') {
+      ctx.fillText('?', x, b.y);
+    }
+  }
+}

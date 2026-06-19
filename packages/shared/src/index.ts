@@ -400,3 +400,5 @@ export {
   type SpiritDefinition,
   type SpiritType,
 } from './data/spirits.js';
+
+export * from './data/minigames.js';
