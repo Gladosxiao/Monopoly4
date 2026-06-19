@@ -1,0 +1,276 @@
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  background: #1a1a2e;
+  color: #eee;
+}
+
+#app {
+  min-height: 100vh;
+}
+
+.page {
+  min-height: 100vh;
+  padding: 20px;
+}
+
+button {
+  cursor: pointer;
+  border: none;
+  border-radius: 6px;
+  padding: 10px 16px;
+  font-size: 14px;
+  background: #e94560;
+  color: #fff;
+  transition: opacity 0.2s;
+}
+
+button:hover {
+  opacity: 0.9;
+}
+
+button:disabled {
+  background: #555;
+  cursor: not-allowed;
+}
+
+input {
+  padding: 10px;
+  border-radius: 6px;
+  border: 1px solid #444;
+  background: #0f3460;
+  color: #fff;
+  font-size: 14px;
+}
+
+.error {
+  color: #ff6b6b;
+  margin: 10px 0;
+  padding: 10px;
+  background: rgba(255, 107, 107, 0.1);
+  border-radius: 6px;
+}
+
+/* 登录页 */
+.login-page {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.login-page h1 {
+  text-align: center;
+  margin-bottom: 20px;
+}
+
+.auth-box {
+  background: #16213e;
+  padding: 30px;
+  border-radius: 12px;
+  width: 100%;
+  max-width: 360px;
+}
+
+.auth-box input {
+  width: 100%;
+  margin-bottom: 12px;
+}
+
+.auth-box .buttons {
+  display: flex;
+  gap: 10px;
+}
+
+.auth-box button {
+  flex: 1;
+}
+
+/* 大厅 */
+.lobby-page header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.lobby-page .user-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.lobby-actions {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+}
+
+#room-list {
+  list-style: none;
+  padding: 0;
+}
+
+#room-list li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px;
+  background: #16213e;
+  margin-bottom: 8px;
+  border-radius: 8px;
+}
+
+/* 房间页 */
+.room-page header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.room-id {
+  margin-bottom: 20px;
+  font-size: 18px;
+}
+
+.room-content {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+}
+
+.players-panel,
+.actions-panel {
+  background: #16213e;
+  padding: 16px;
+  border-radius: 12px;
+}
+
+#player-list {
+  list-style: none;
+  padding: 0;
+}
+
+#player-list li {
+  padding: 10px;
+  background: #0f3460;
+  margin-bottom: 8px;
+  border-radius: 6px;
+  display: flex;
+  justify-content: space-between;
+}
+
+#character-select {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+
+.char-btn {
+  min-width: 80px;
+}
+
+.action-buttons {
+  display: flex;
+  gap: 10px;
+}
+
+/* 游戏页 */
+.game-page header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.game-layout {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 20px;
+}
+
+.board-wrap {
+  display: flex;
+  justify-content: center;
+}
+
+.side-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.info-card {
+  background: #16213e;
+  padding: 16px;
+  border-radius: 12px;
+}
+
+.info-card h2 {
+  margin-top: 0;
+  font-size: 18px;
+}
+
+.player-info {
+  padding: 10px;
+  background: #0f3460;
+  margin-bottom: 8px;
+  border-radius: 6px;
+}
+
+.player-info .bankrupt {
+  color: #ff6b6b;
+  font-weight: bold;
+}
+
+.month-info {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid #444;
+}
+
+#game-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+#game-actions button {
+  width: 100%;
+}
+
+.logs {
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+#game-logs {
+  font-size: 13px;
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.log-item {
+  padding: 4px 0;
+  border-bottom: 1px solid #333;
+}
+
+.winner {
+  font-size: 20px;
+  color: #2ecc71;
+  text-align: center;
+  padding: 20px;
+}
+
+@media (max-width: 900px) {
+  .room-content,
+  .game-layout {
+    grid-template-columns: 1fr;
+  }
+}

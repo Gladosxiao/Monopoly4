@@ -1,0 +1,19 @@
+node_modules
+.DS_Store
+1
+
+# Python virtual env & speech models
+tools/video_processing/venv/
+tools/video_processing/models/
+
+# Generated media / input assets
+# 保留关键笔记和原始说明文档，排除可重新生成的视频/关键帧/contact sheets
+doc/ilovepdf_pages-to-jpg/
+doc/videos/
+doc/videos_extra/*
+!doc/videos_extra/keyframe_notes.md
+
+# Build outputs & runtime data
+packages/*/dist/
+packages/*/data.sqlite*
+
