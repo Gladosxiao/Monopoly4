@@ -100,11 +100,13 @@
 - 角色到达空地时，可支付现金购买。
 - 再次到达自己土地时，可升级，每块土地最多 5 次（0 级空地 → 5 级最高）。
 - 现金不足时无法购买或升级。
-- **购买价格**：`price = basePrice * priceIndex`
+- **购买价格**：`price = basePrice * priceIndex`。当前版本中 `basePrice` 已统一调至原价的 **10%**，避免单局资金被地产快速耗尽。
 - **升级费用**：`upgradeCost = basePrice * (currentLevel + 1) * 0.5 * priceIndex`
   - 即升到 1 级需 basePrice×0.5，升到 2 级需 basePrice×1.0，以此类推
 - **连锁店改建**：使用改建卡将住宅改为连锁店，连锁店固定 1 级，不可再升级。
 - **大块土地建筑**：购买空地后选择建造类型（公园/商场/旅馆/加油站/研究所），建造费用 = basePrice × 建筑系数。
+
+> **价格比例约定**：当前版本保持 `baseRent ≈ basePrice × 10%`，使过路费回报与购买成本成固定比例，便于平衡性调整。
 
 代码实现：`Game.buyTile(playerId, tileIndex)`、`Game.upgradeTile(playerId, tileIndex)`、`Game.rebuildTile(playerId, tileIndex, buildingType)`。
 
@@ -127,9 +129,11 @@
 - **特殊建筑**按各自规则计算：
   - 商场：`rent = mallBaseRent * level * randomMultiplier(1-6) * priceIndex`
   - 旅馆：`rent = hotelBaseRent * level * randomDays(1-6) * priceIndex`（停留期间无法行动和收租）
-  - 加油站：`rent = stepsThisTurn * gasRate * priceIndex`（仅对乘坐交通工具的对手）
+  - 加油站：`rent = stepsThisTurn * gasRate * priceIndex`（仅对乘坐交通工具的对手；步行 rate=50，乘车 rate=200）
   - 研究所：不收过路费，按等级制造道具
   - 公园：不收费
+
+> `baseRent` 与 `basePrice` 保持 10% 比例，例如 `basePrice=30` 的地块 `baseRent=3`。
 - **神明影响**：小穷神过路费 +50%，大穷神翻倍，小财神减半，大财神免除。
 - **卡片影响**：涨价卡指定路段加倍 5 天；查封卡指定路段 5 天无法收租。
 

@@ -165,3 +165,35 @@ export function castMagicSpell(roomId: string, targetPlayerId: string, spell: 's
 export function skipTurn(roomId: string): void {
   getSocket().emit('game:skip', roomId);
 }
+
+export function submitMiniGameResult(roomId: string, result: { coupons: number }): void {
+  getSocket().emit('game:miniGameResult', roomId, result);
+}
+
+export function testSetDay(roomId: string, day: number): void {
+  getSocket().emit('test:setDay', roomId, day);
+}
+
+export function testSetMonth(roomId: string, month: number): void {
+  getSocket().emit('test:setMonth', roomId, month);
+}
+
+export function testMaxMoney(roomId: string, playerId: string): void {
+  getSocket().emit('test:maxMoney', roomId, playerId);
+}
+
+export function testMaxCoupons(roomId: string, playerId: string): void {
+  getSocket().emit('test:maxCoupons', roomId, playerId);
+}
+
+export function testGiveAllCards(roomId: string, playerId: string): void {
+  getSocket().emit('test:giveAllCards', roomId, playerId);
+}
+
+export function testGiveAllItems(roomId: string, playerId: string): void {
+  getSocket().emit('test:giveAllItems', roomId, playerId);
+}
+
+export function testResetAll(roomId: string): void {
+  getSocket().emit('test:resetAll', roomId);
+}

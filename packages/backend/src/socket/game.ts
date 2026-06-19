@@ -746,6 +746,55 @@ export function setupSocketIO(httpServer: HttpServer): SocketIOServer<ClientToSe
       io.to(roomId).emit('game:state', state);
     }));
 
+    socket.on('test:setDay', requireTestMode((roomId: string, day: number) => {
+      const state = games.get(roomId);
+      if (!state) return;
+      testMode.setGameDay(state, day);
+      io.to(roomId).emit('game:state', state);
+    }));
+
+    socket.on('test:setMonth', requireTestMode((roomId: string, month: number) => {
+      const state = games.get(roomId);
+      if (!state) return;
+      testMode.setGameMonth(state, month);
+      io.to(roomId).emit('game:state', state);
+    }));
+
+    socket.on('test:maxMoney', requireTestMode((roomId: string, playerId: string) => {
+      const state = games.get(roomId);
+      if (!state) return;
+      testMode.maxPlayerMoney(state, playerId);
+      io.to(roomId).emit('game:state', state);
+    }));
+
+    socket.on('test:maxCoupons', requireTestMode((roomId: string, playerId: string) => {
+      const state = games.get(roomId);
+      if (!state) return;
+      testMode.maxPlayerCoupons(state, playerId);
+      io.to(roomId).emit('game:state', state);
+    }));
+
+    socket.on('test:giveAllCards', handleTest('giveAllCards', requireTestMode((roomId: string, playerId: string) => {
+      const state = games.get(roomId);
+      if (!state) return;
+      testMode.giveAllCards(state, playerId);
+      io.to(roomId).emit('game:state', state);
+    })));
+
+    socket.on('test:giveAllItems', handleTest('giveAllItems', requireTestMode((roomId: string, playerId: string) => {
+      const state = games.get(roomId);
+      if (!state) return;
+      testMode.giveAllItems(state, playerId);
+      io.to(roomId).emit('game:state', state);
+    })));
+
+    socket.on('test:resetAll', requireTestMode((roomId: string) => {
+      const state = games.get(roomId);
+      if (!state) return;
+      testMode.resetAllPlayers(state);
+      io.to(roomId).emit('game:state', state);
+    }));
+
     // AI 玩家控制
     let aiStopFn: (() => void) | null = null;
     let aiBroadcastTimer: ReturnType<typeof setInterval> | null = null;

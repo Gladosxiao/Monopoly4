@@ -509,6 +509,13 @@ export interface ClientToServerEvents {
   'test:freeBuyCard': (roomId: string, cardId: string) => void;
   'test:freeBuyItem': (roomId: string, itemId: string, quantity?: number) => void;
   'test:forceEndTurn': (roomId: string) => void;
+  'test:setDay': (roomId: string, day: number) => void;
+  'test:setMonth': (roomId: string, month: number) => void;
+  'test:maxMoney': (roomId: string, playerId: string) => void;
+  'test:maxCoupons': (roomId: string, playerId: string) => void;
+  'test:giveAllCards': (roomId: string, playerId: string) => void;
+  'test:giveAllItems': (roomId: string, playerId: string) => void;
+  'test:resetAll': (roomId: string) => void;
   'test:aiStart': (roomId: string, intervalMs?: number) => void;
   'test:aiStop': () => void;
   'test:aiStep': (roomId: string) => void;
@@ -524,54 +531,54 @@ export const SIMPLE_MAP: GameMap = {
     // 起点
     { index: 0, name: '起点', type: 'start', basePrice: 0, baseRent: 0, level: 0 },
     // 第一组（低价区，小块土地）
-    { index: 1, name: '蘑菇村', type: 'property', size: 'small', group: 0, basePrice: 300, baseRent: 30, level: 0 },
+    { index: 1, name: '蘑菇村', type: 'property', size: 'small', group: 0, basePrice: 30, baseRent: 3, level: 0 },
     { index: 2, name: '命运', type: 'fate', basePrice: 0, baseRent: 0, level: 0 },
-    { index: 3, name: '青青草原', type: 'property', size: 'small', group: 0, basePrice: 400, baseRent: 40, level: 0 },
+    { index: 3, name: '青青草原', type: 'property', size: 'small', group: 0, basePrice: 40, baseRent: 4, level: 0 },
     { index: 4, name: '卡片格', type: 'card', basePrice: 0, baseRent: 0, level: 0 },
-    { index: 5, name: '石板路', type: 'property', size: 'small', group: 1, basePrice: 500, baseRent: 50, level: 0 },
+    { index: 5, name: '石板路', type: 'property', size: 'small', group: 1, basePrice: 50, baseRent: 5, level: 0 },
     { index: 6, name: '电脑公司', type: 'company', companyId: 'computer', basePrice: 0, baseRent: 0, level: 0 },
-    { index: 7, name: '小河边', type: 'property', size: 'small', group: 1, basePrice: 600, baseRent: 60, level: 0 },
+    { index: 7, name: '小河边', type: 'property', size: 'small', group: 1, basePrice: 60, baseRent: 6, level: 0 },
     // 税务
     { index: 8, name: '税务', type: 'tax', basePrice: 0, baseRent: 0, level: 0 },
     // 第二组（小块土地）
-    { index: 9, name: '风车镇', type: 'property', size: 'small', group: 2, basePrice: 700, baseRent: 70, level: 0 },
+    { index: 9, name: '风车镇', type: 'property', size: 'small', group: 2, basePrice: 70, baseRent: 7, level: 0 },
     { index: 10, name: '建设公司', type: 'company', companyId: 'construction', basePrice: 0, baseRent: 0, level: 0 },
-    { index: 11, name: '苹果园', type: 'property', size: 'small', group: 2, basePrice: 800, baseRent: 80, level: 0 },
+    { index: 11, name: '苹果园', type: 'property', size: 'small', group: 2, basePrice: 80, baseRent: 8, level: 0 },
     { index: 12, name: '卡片格', type: 'card', basePrice: 0, baseRent: 0, level: 0 },
-    { index: 13, name: '橡树林', type: 'property', size: 'small', group: 3, basePrice: 500, baseRent: 50, level: 0 },
+    { index: 13, name: '橡树林', type: 'property', size: 'small', group: 3, basePrice: 50, baseRent: 5, level: 0 },
     { index: 14, name: '保险公司', type: 'company', companyId: 'insurance', basePrice: 0, baseRent: 0, level: 0 },
-    { index: 15, name: '枫叶林', type: 'property', size: 'small', group: 3, basePrice: 600, baseRent: 60, level: 0 },
+    { index: 15, name: '枫叶林', type: 'property', size: 'small', group: 3, basePrice: 60, baseRent: 6, level: 0 },
     // 医院
     { index: 16, name: '医院', type: 'hospital', basePrice: 0, baseRent: 0, level: 0 },
     // 第三组（小块土地）
-    { index: 17, name: '港口', type: 'property', size: 'small', group: 4, basePrice: 700, baseRent: 70, level: 0 },
+    { index: 17, name: '港口', type: 'property', size: 'small', group: 4, basePrice: 70, baseRent: 7, level: 0 },
     { index: 18, name: '航空公司', type: 'company', companyId: 'airline', basePrice: 0, baseRent: 0, level: 0 },
-    { index: 19, name: '渔人码头', type: 'property', size: 'small', group: 4, basePrice: 800, baseRent: 80, level: 0 },
+    { index: 19, name: '渔人码头', type: 'property', size: 'small', group: 4, basePrice: 80, baseRent: 8, level: 0 },
     { index: 20, name: '得点券 30', type: 'coupon', couponValue: 30, basePrice: 0, baseRent: 0, level: 0 },
     // 第四组（大块土地）
-    { index: 21, name: '商业街', type: 'property', size: 'large', group: 5, basePrice: 1200, baseRent: 120, level: 0 },
+    { index: 21, name: '商业街', type: 'property', size: 'large', group: 5, basePrice: 120, baseRent: 12, level: 0 },
     { index: 22, name: '新闻点', type: 'news', basePrice: 0, baseRent: 0, level: 0 },
-    { index: 23, name: '集市', type: 'property', size: 'large', group: 5, basePrice: 1500, baseRent: 150, level: 0 },
+    { index: 23, name: '集市', type: 'property', size: 'large', group: 5, basePrice: 150, baseRent: 15, level: 0 },
     // 商店
     { index: 24, name: '商店', type: 'shop', basePrice: 0, baseRent: 0, level: 0 },
     // 第五组（大块土地）
-    { index: 25, name: '钟楼', type: 'property', size: 'large', group: 6, basePrice: 1800, baseRent: 180, level: 0 },
+    { index: 25, name: '钟楼', type: 'property', size: 'large', group: 6, basePrice: 180, baseRent: 18, level: 0 },
     { index: 26, name: '命运', type: 'fate', basePrice: 0, baseRent: 0, level: 0 },
-    { index: 27, name: '市政厅', type: 'property', size: 'large', group: 6, basePrice: 2000, baseRent: 200, level: 0 },
+    { index: 27, name: '市政厅', type: 'property', size: 'large', group: 6, basePrice: 200, baseRent: 20, level: 0 },
     { index: 28, name: '百货公司', type: 'company', companyId: 'departmentStore', basePrice: 0, baseRent: 0, level: 0 },
-    { index: 29, name: '剧院', type: 'property', size: 'large', group: 7, basePrice: 2000, baseRent: 200, level: 0 },
+    { index: 29, name: '剧院', type: 'property', size: 'large', group: 7, basePrice: 200, baseRent: 20, level: 0 },
     { index: 30, name: '饭店', type: 'company', companyId: 'hotel', basePrice: 0, baseRent: 0, level: 0 },
-    { index: 31, name: '歌剧院', type: 'property', size: 'large', group: 7, basePrice: 2200, baseRent: 220, level: 0 },
+    { index: 31, name: '歌剧院', type: 'property', size: 'large', group: 7, basePrice: 220, baseRent: 22, level: 0 },
     // 石油公司
     { index: 32, name: '石油公司', type: 'company', companyId: 'petroleum', basePrice: 0, baseRent: 0, level: 0 },
     // 第六组（高价区，大块土地）
-    { index: 33, name: '水晶湖', type: 'property', size: 'large', group: 8, basePrice: 2500, baseRent: 250, level: 0 },
+    { index: 33, name: '水晶湖', type: 'property', size: 'large', group: 8, basePrice: 250, baseRent: 25, level: 0 },
     { index: 34, name: '卡片格', type: 'card', basePrice: 0, baseRent: 0, level: 0 },
-    { index: 35, name: '云顶宫', type: 'property', size: 'large', group: 8, basePrice: 2800, baseRent: 280, level: 0 },
+    { index: 35, name: '云顶宫', type: 'property', size: 'large', group: 8, basePrice: 280, baseRent: 28, level: 0 },
     { index: 36, name: '餐饮公司', type: 'company', companyId: 'restaurant', basePrice: 0, baseRent: 0, level: 0 },
-    { index: 37, name: '钻石大道', type: 'property', size: 'large', group: 9, basePrice: 3000, baseRent: 300, level: 0 },
+    { index: 37, name: '钻石大道', type: 'property', size: 'large', group: 9, basePrice: 300, baseRent: 30, level: 0 },
     { index: 38, name: '汽车公司', type: 'company', companyId: 'automobile', basePrice: 0, baseRent: 0, level: 0 },
-    { index: 39, name: '黄金广场', type: 'property', size: 'large', group: 9, basePrice: 3000, baseRent: 300, level: 0 },
+    { index: 39, name: '黄金广场', type: 'property', size: 'large', group: 9, basePrice: 300, baseRent: 30, level: 0 },
   ],
 };
 

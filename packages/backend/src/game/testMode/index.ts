@@ -379,3 +379,126 @@ export function getTestSnapshot(state: GameState): TestSnapshot {
     })),
   };
 }
+
+// ==================== 缺失功能补齐 ====================
+
+/** 设置游戏当前天数 */
+export function setGameDay(state: GameState, day: number): void {
+  const old = state.day;
+  state.day = Math.max(1, Math.min(day, 30));
+  state.logs.push({
+    timestamp: Date.now(),
+    type: 'test:setDay',
+    message: `[测试] 天数从 ${old} 调整为 ${state.day}`,
+  });
+}
+
+/** 设置游戏当前月份 */
+export function setGameMonth(state: GameState, month: number): void {
+  const old = state.month;
+  state.month = Math.max(1, month);
+  state.logs.push({
+    timestamp: Date.now(),
+    type: 'test:setMonth',
+    message: `[测试] 月份从 ${old} 调整为 ${state.month}`,
+  });
+}
+
+/** 将玩家现金与存款设为最大值 */
+export function maxPlayerMoney(state: GameState, playerId: string): void {
+  const player = findPlayer(state, playerId);
+  player.cash = 999999999;
+  player.deposit = 999999999;
+  state.logs.push({
+    timestamp: Date.now(),
+    type: 'test:maxMoney',
+    actorId: playerId,
+    message: `[测试] ${player.username} 现金与存款设为最大`,
+  });
+}
+
+/** 将玩家点券设为最大值 */
+export function maxPlayerCoupons(state: GameState, playerId: string): void {
+  const player = findPlayer(state, playerId);
+  player.coupons = 999999;
+  state.logs.push({
+    timestamp: Date.now(),
+    type: 'test:maxCoupons',
+    actorId: playerId,
+    message: `[测试] ${player.username} 点券设为最大`,
+  });
+}
+
+/** 给玩家所有可购买卡片 */
+export function giveAllCards(state: GameState, playerId: string): void {
+  const player = findPlayer(state, playerId);
+  for (const cardId of CARD_IDS) {
+    const def = CARD_DEFINITIONS[cardId];
+    if (!def || def.cost <= 0) continue;
+    if (player.cards.length >= 15) break;
+    const instanceId = `${cardId}-test-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+    player.cards.push({ instanceId, cardId });
+  }
+  state.logs.push({
+    timestamp: Date.now(),
+    type: 'test:giveAllCards',
+    actorId: playerId,
+    message: `[测试] 给 ${player.username} 添加所有卡片`,
+  });
+}
+
+/** 给玩家所有可购买道具 */
+export function giveAllItems(state: GameState, playerId: string): void {
+  const player = findPlayer(state, playerId);
+  for (const itemId of ITEM_IDS) {
+    const def = ITEM_DEFINITIONS[itemId];
+    if (!def || def.cost <= 0) continue;
+    const existing = player.items.find((i) => i.itemId === itemId);
+    if (existing) {
+      existing.quantity = def.maxStack;
+    } else {
+      const instanceId = `${itemId}-test-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+      player.items.push({ instanceId, itemId, quantity: def.maxStack });
+    }
+  }
+  state.logs.push({
+    timestamp: Date.now(),
+    type: 'test:giveAllItems',
+    actorId: playerId,
+    message: `[测试] 给 ${player.username} 添加所有道具`,
+  });
+}
+
+/** 重置所有玩家状态（金钱、位置、状态效果、神明、卡片、道具、股票） */
+export function resetAllPlayers(state: GameState): void {
+  for (const player of state.players) {
+    player.cash = state.config.totalFunds;
+    player.deposit = 0;
+    player.loan = 0;
+    player.coupons = 300;
+    player.position = 0;
+    player.properties = [];
+    player.cards = [];
+    player.items = [];
+    player.statusEffects = [];
+    player.spirit = undefined;
+    player.stockHoldings = {};
+    player.stockCostBasis = {};
+    player.insuranceDays = 0;
+    player.isBankrupt = false;
+    player.liquidationCount = 0;
+    player.vehicle = state.config.moveMode;
+  }
+  state.currentPlayerIndex = 0;
+  state.day = 1;
+  state.month = 1;
+  state.priceIndex = 1;
+  state.roadEffects = [];
+  state.spirits = [];
+  state.npcs = [];
+  state.logs.push({
+    timestamp: Date.now(),
+    type: 'test:resetAll',
+    message: '[测试] 重置所有玩家状态',
+  });
+}
