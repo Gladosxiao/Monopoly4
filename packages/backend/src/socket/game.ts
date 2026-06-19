@@ -19,6 +19,8 @@ import {
   movePlayer,
   buyProperty,
   upgradeProperty,
+  rebuildTile,
+  useCard,
   endTurn,
   canRoll,
   canBuy,
@@ -174,6 +176,38 @@ export function setupSocketIO(httpServer: HttpServer): void {
         return;
       }
       const result = upgradeProperty(state);
+      if (!result.success) {
+        socket.emit('error', result.message);
+        return;
+      }
+      io.to(roomId).emit('game:state', state);
+    });
+
+    socket.on('game:rebuild', (roomId, tileIndex, buildingType) => {
+      const state = games.get(roomId);
+      if (!state) return;
+      const player = state.players[state.currentPlayerIndex];
+      if (player.id !== user.id || state.status !== 'acting') {
+        socket.emit('error', '现在不能改建');
+        return;
+      }
+      const result = rebuildTile(state, tileIndex, buildingType);
+      if (!result.success) {
+        socket.emit('error', result.message);
+        return;
+      }
+      io.to(roomId).emit('game:state', state);
+    });
+
+    socket.on('game:useCard', (roomId, cardId, target) => {
+      const state = games.get(roomId);
+      if (!state) return;
+      const player = state.players[state.currentPlayerIndex];
+      if (player.id !== user.id || state.status !== 'acting') {
+        socket.emit('error', '现在不能使用卡片');
+        return;
+      }
+      const result = useCard(state, user.id, cardId, target);
       if (!result.success) {
         socket.emit('error', result.message);
         return;
