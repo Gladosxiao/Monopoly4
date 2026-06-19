@@ -18,6 +18,18 @@
     "./simulator": {
       "import": "./dist/simulator.js",
       "types": "./dist/simulator.d.ts"
+    },
+    "./loader": {
+      "import": "./dist/loader.js",
+      "types": "./dist/loader.d.ts"
+    },
+    "./coords": {
+      "import": "./dist/coords.js",
+      "types": "./dist/coords.d.ts"
+    },
+    "./visualizer": {
+      "import": "./dist/visualizer.js",
+      "types": "./dist/visualizer.d.ts"
     }
   },
   "files": [
@@ -27,7 +39,8 @@
   "scripts": {
     "build": "tsc",
     "dev": "tsc --watch",
-    "simulate": "tsc && node dist/scripts/simulate.js"
+    "simulate": "tsc && node dist/scripts/simulate.js",
+    "test": "tsc && node --test dist/tests/*.test.js"
   },
   "devDependencies": {
     "typescript": "^5.4.5"

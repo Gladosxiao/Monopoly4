@@ -114,6 +114,18 @@ export interface Tile {
   level: number;
   ownerId?: string;
   buildingType?: BuildingType; // 当前建筑类型，未购买时为 undefined
+  traps?: Trap[]; // 道路上的陷阱
+}
+
+export type TrapType = 'barrier' | 'mine' | 'timeBomb';
+
+export interface Trap {
+  id: string;
+  type: TrapType;
+  tileIndex: number;
+  ownerId: string;
+  placedAt: number; // 放置时的天数
+  remainingSteps?: number; // 定时炸弹剩余步数
 }
 
 export interface GameMap {
@@ -139,6 +151,7 @@ export type StatusEffectType =
   | 'revenge'
   | 'alliance'
   | 'freePass'
+  | 'innocence'
   | 'spirit';
 
 export interface StatusEffect {
@@ -175,6 +188,9 @@ export interface Player {
   isBankrupt: boolean;
   isAI: boolean;
   liquidationCount: number;
+  // 一次性状态覆盖
+  nextDiceOverride?: number; // 遥控骰子指定的下一次点数
+  pendingDirection?: 'forward' | 'backward'; // 转向卡效果
 }
 
 export interface CardInstance {

@@ -17,17 +17,18 @@ export const DEFAULT_TEMPLATE: MapTemplate = {
   id: 'map_default',
   name: '随机乐园',
   totalTiles: 40,
-  largePropertyCount: 6,
-  smallPropertyGroups: [2, 2, 3, 2, 3, 2, 2], // 16 个小块，共 22 块可购买土地
+  largePropertyCount: 4,
+  largePropertySpan: 2,
+  smallPropertyGroups: [3, 3, 3, 3], // 12 个小块，分 4 组，每组 3 个
   specialTiles: {
     fate: 3,
     chance: 4,
     prison: 1,
     hospital: 1,
-    shop: 1,
+    shop: 2,
     card: 4,
     tax: 2,
-    coupon30: 1,
+    coupon30: 2,
     park: 0,
     lottery: 0,
     magic: 0,
@@ -48,16 +49,19 @@ export const FAST_TEMPLATE: MapTemplate = {
   ...DEFAULT_TEMPLATE,
   id: 'map_fast',
   name: '速战速决',
-  largePropertyCount: 4,
-  smallPropertyGroups: [2, 2, 2, 2, 2, 2, 2, 2], // 16 个小块，共 20 块土地
+  largePropertyCount: 3,
+  largePropertySpan: 2,
+  smallPropertyGroups: [3, 3, 3], // 9 个小块
   specialTiles: {
     ...DEFAULT_TEMPLATE.specialTiles,
     fate: 3,
     chance: 3,
-    card: 4,
+    card: 5,
     tax: 3,
     shop: 2,
-    coupon30: 2,
+    coupon30: 3,
+    coupon50: 1,
+    coupon10: 2,
   },
   basePriceRange: [10000, 50000],
 };
@@ -69,16 +73,26 @@ export const ECONOMY_TEMPLATE: MapTemplate = {
   ...DEFAULT_TEMPLATE,
   id: 'map_economy',
   name: '地产为王',
-  largePropertyCount: 8,
-  smallPropertyGroups: [2, 2, 3, 2, 3, 2, 2, 2], // 18 个小块，分组更细避免连续垄断
+  largePropertyCount: 4,
+  largePropertySpan: 2,
+  smallPropertyGroups: [4, 4, 4, 4], // 16 个小块，分 4 组，每组 4 个
   specialTiles: {
-    ...DEFAULT_TEMPLATE.specialTiles,
-    fate: 3,
-    chance: 3,
+    fate: 2,
+    chance: 2,
+    prison: 1,
+    hospital: 1,
+    shop: 1,
     card: 3,
     tax: 1,
-    shop: 1,
     coupon30: 0,
+    coupon50: 2,
+    coupon10: 2,
+    park: 0,
+    lottery: 0,
+    magic: 0,
+    news: 0,
+    company: 0,
+    miniGame: 0,
   },
   basePriceRange: [12000, 70000],
 };
@@ -93,17 +107,18 @@ export const PLAYER4_TEMPLATE: MapTemplate = {
   name: '四人桌游',
   totalTiles: 40,
   largePropertyCount: 4,
-  smallPropertyGroups: [2, 2, 2, 2, 2, 2], // 12 个小块，人均 3 个
+  largePropertySpan: 2, // 每个大地产占 2 格，共 8 格
+  smallPropertyGroups: [4, 4, 4], // 12 个小块，分 3 组连续 4 个
   specialTiles: {
-    fate: 2,
-    chance: 2,
+    fate: 1,
+    chance: 1,
     prison: 1,
     hospital: 1,
-    shop: 2,
+    shop: 1,
     card: 5,
     tax: 1,
     coupon10: 2,
-    coupon30: 4,
+    coupon30: 3,
     coupon50: 3,
     park: 0,
     lottery: 0,
@@ -113,6 +128,41 @@ export const PLAYER4_TEMPLATE: MapTemplate = {
     miniGame: 0,
   },
   basePriceRange: [10000, 55000],
+  priceCurve: 'sigmoid',
+};
+
+/**
+ * 80 格大地图模板：同时满足 4 人局人均 9 个小块、点券翻倍（约 600 点）的目标。
+ *
+ * 40 格地图物理上无法同时容纳 36 个小块 + 足够点券格；80 格可在 40 回合绕 1.75 圈，
+ * 使人均获得约 600 点券。
+ */
+export const MAP80_TEMPLATE: MapTemplate = {
+  id: 'map_80',
+  name: '大地图80格',
+  totalTiles: 80,
+  largePropertyCount: 4,
+  largePropertySpan: 2, // 4 个大地产各占 2 格，共 8 格
+  smallPropertyGroups: [4, 4, 4, 4, 4, 4, 4, 4, 4], // 36 个小块，分 9 组，每组 4 个
+  specialTiles: {
+    fate: 4,
+    chance: 4,
+    prison: 1,
+    hospital: 1,
+    shop: 3,
+    card: 3,
+    tax: 2,
+    coupon10: 3,
+    coupon30: 5,
+    coupon50: 8,
+    miniGame: 1,
+    park: 0,
+    lottery: 0,
+    magic: 0,
+    news: 0,
+    company: 0,
+  },
+  basePriceRange: [10000, 80000],
   priceCurve: 'sigmoid',
 };
 
@@ -148,20 +198,21 @@ function createSeededRandom(seed?: number): SeededRandom {
 }
 
 function normalizeTemplate(template: MapTemplate): MapTemplate {
+  const span = template.largePropertySpan ?? 1;
   const totalSpecial = Object.values(template.specialTiles).reduce((a, b) => a + b, 0);
-  const totalProperty =
-    template.largePropertyCount + template.smallPropertyGroups.reduce((a, b) => a + b, 0);
-  const expected = 1 + totalSpecial + totalProperty;
+  const totalPropertyTiles =
+    template.largePropertyCount * span + template.smallPropertyGroups.reduce((a, b) => a + b, 0);
+  const expected = 1 + totalSpecial + totalPropertyTiles;
   if (expected !== template.totalTiles) {
     throw new Error(
-      `[map-generator] 模板格数不匹配: 起点1 + 系统格${totalSpecial} + 土地${totalProperty} = ${expected}, 期望 ${template.totalTiles}`
+      `[map-generator] 模板格数不匹配: 起点1 + 系统格${totalSpecial} + 土地格${totalPropertyTiles} = ${expected}, 期望 ${template.totalTiles}`
     );
   }
   return template;
 }
 
 const TILE_NAMES: Record<TileType, string> = {
-  start: '起点',
+  start: '起点/银行',
   property: '土地',
   fate: '命运',
   chance: '机会',
@@ -230,7 +281,7 @@ function placeSpecialTiles(
 
       const prevType = slots[(idx - 1 + slots.length) % slots.length]?.type;
       const nextType = slots[(idx + 1) % slots.length]?.type;
-      if (prevType === type || nextType === type) continue;
+      const adjacentSameType = (prevType === type ? 1 : 0) + (nextType === type ? 1 : 0);
 
       // 与最近同类型格子的距离
       const sameType = placed.filter((p) => p.type === type);
@@ -239,7 +290,7 @@ function placeSpecialTiles(
         minSameTypeDist = Math.min(minSameTypeDist, cyclicDistance(idx, p.index, slots.length));
       }
 
-      // 避免与其他特殊格过于扎堆
+      // 避免与其他特殊格过于扎堆，同类型相邻大幅惩罚
       let clusterPenalty = 0;
       for (const p of placed) {
         const d = cyclicDistance(idx, p.index, slots.length);
@@ -247,7 +298,7 @@ function placeSpecialTiles(
         else if (d === 2) clusterPenalty += 100;
       }
 
-      const score = minSameTypeDist - clusterPenalty + rng.next() * 0.5;
+      const score = minSameTypeDist - clusterPenalty - adjacentSameType * 2000 + rng.next() * 0.5;
       if (score > bestScore) {
         bestScore = score;
         bestIndex = idx;
@@ -270,14 +321,16 @@ function placeSpecialTiles(
 
 interface PropertyPlan {
   size: PropertySize;
+  span: number;
   group?: number;
 }
 
 function createPropertyPlans(template: MapTemplate): PropertyPlan[] {
+  const span = template.largePropertySpan ?? 1;
   const plans: PropertyPlan[] = [];
-  for (let i = 0; i < template.largePropertyCount; i++) plans.push({ size: 'large' });
+  for (let i = 0; i < template.largePropertyCount; i++) plans.push({ size: 'large', span });
   template.smallPropertyGroups.forEach((count, groupIdx) => {
-    for (let i = 0; i < count; i++) plans.push({ size: 'small', group: groupIdx });
+    for (let i = 0; i < count; i++) plans.push({ size: 'small', span: 1, group: groupIdx });
   });
   return plans;
 }
@@ -323,9 +376,56 @@ function findEmptySegment(
   return chosen.slice(start, start + length);
 }
 
+interface PropertyBlock {
+  size: PropertySize;
+  tiles: Tile[];
+  group?: number;
+}
+
+function createPropertyBlocks(template: MapTemplate): PropertyBlock[] {
+  const largeSpan = template.largePropertySpan ?? 1;
+  const blocks: PropertyBlock[] = [];
+
+  for (let i = 0; i < template.largePropertyCount; i++) {
+    blocks.push({
+      size: 'large',
+      tiles: Array.from({ length: largeSpan }, () => ({
+        index: -1,
+        name: `商业用地${i + 1}`,
+        type: 'property',
+        size: 'large',
+        span: largeSpan,
+        basePrice: 0,
+        baseRent: 0,
+        level: 0,
+      })),
+    });
+  }
+
+  template.smallPropertyGroups.forEach((count, groupIdx) => {
+    blocks.push({
+      size: 'small',
+      group: groupIdx,
+      tiles: Array.from({ length: count }, (_, i) => ({
+        index: -1,
+        name: `路段${groupIdx + 1}-${i + 1}`,
+        type: 'property',
+        size: 'small',
+        span: 1,
+        group: groupIdx,
+        basePrice: 0,
+        baseRent: 0,
+        level: 0,
+      })),
+    });
+  });
+
+  return blocks;
+}
+
 function fillPropertySlots(
   slots: (Tile | null)[],
-  propertyTiles: Tile[],
+  blocks: PropertyBlock[],
   rng: SeededRandom
 ): void {
   const sortedEmpty = slots
@@ -333,70 +433,113 @@ function fillPropertySlots(
     .filter((i) => slots[i] === null)
     .sort((a, b) => a - b);
 
-  if (sortedEmpty.length !== propertyTiles.length) {
+  const totalTiles = blocks.reduce((sum, b) => sum + b.tiles.length, 0);
+  if (sortedEmpty.length < totalTiles) {
     throw new Error(
-      `[map-generator] 土地数量不匹配: 空位 ${sortedEmpty.length}, 土地 ${propertyTiles.length}`
+      `[map-generator] 空位不足: 空位 ${sortedEmpty.length}, 土地 ${totalTiles}`
     );
   }
 
   const assigned = new Set<number>();
 
-  // 先放 small 组，尽量连续
-  const smallTiles = propertyTiles.filter((t) => t.size === 'small');
-  const smallGroups = groupBy(smallTiles, (t) => t.group ?? -1);
+  // 先放大块：每个大块占 span 个连续空位，优先保证有连续空间
+  const largeBlocks = blocks.filter((b) => b.size === 'large');
+  for (const block of largeBlocks) {
+    const span = block.tiles.length;
+    const unassigned = sortedEmpty.filter((i) => !assigned.has(i));
+    if (unassigned.length < span) throw new Error('[map-generator] 无空位放置大块土地');
 
-  for (const [groupId, tiles] of smallGroups) {
-    if (groupId === -1) continue;
-    const segment = findEmptySegment(sortedEmpty, assigned, tiles.length, rng);
-    for (let i = 0; i < tiles.length; i++) {
-      const idx = segment[i];
-      tiles[i].index = idx;
-      tiles[i].name = `路段${groupId + 1}-${i + 1}`;
-      slots[idx] = tiles[i];
+    // 收集所有长度 >= span 的连续空位段
+    const segments: number[][] = [];
+    let current: number[] = [];
+    for (const idx of unassigned) {
+      if (current.length === 0 || idx === current[current.length - 1] + 1) {
+        current.push(idx);
+      } else {
+        if (current.length >= span) segments.push(current);
+        current = [idx];
+      }
+    }
+    if (current.length >= span) segments.push(current);
+
+    // 处理环形首尾相连的情况
+    if (unassigned.length > 0 && segments.length > 1) {
+      const first = unassigned[0];
+      const last = unassigned[unassigned.length - 1];
+      if (last === slots.length - 1 && first === 0) {
+        // 尝试把尾段和首段合并
+        const tail = segments[segments.length - 1];
+        const head = segments[0];
+        const merged = [...tail, ...head];
+        if (merged.length >= span) {
+          segments.push(merged);
+        }
+      }
+    }
+
+    if (segments.length === 0) {
+      throw new Error('[map-generator] 无法为大块土地找到连续空位');
+    }
+
+    let bestSegment: number[] = segments[0].slice(0, span);
+    let bestScore = -Infinity;
+
+    for (const seg of segments) {
+      for (let start = 0; start <= seg.length - span; start++) {
+        const segment = seg.slice(start, start + span);
+        let score = rng.next() * 0.5;
+
+        for (const pos of segment) {
+          const prev = slots[(pos - 1 + slots.length) % slots.length];
+          const next = slots[(pos + 1) % slots.length];
+          if (prev?.type === 'property') score -= 2;
+          if (next?.type === 'property') score -= 2;
+        }
+
+        // 离其他 large 块远一些
+        for (let i = 0; i < slots.length; i++) {
+          if (slots[i]?.size === 'large') {
+            score += cyclicDistance(segment[0], i, slots.length) * 0.05;
+          }
+        }
+
+        if (score > bestScore) {
+          bestScore = score;
+          bestSegment = segment;
+        }
+      }
+    }
+
+    for (let offset = 0; offset < span; offset++) {
+      const idx = bestSegment[offset];
+      block.tiles[offset].index = idx;
+      slots[idx] = block.tiles[offset];
       assigned.add(idx);
     }
   }
 
-  // 再放 large，分散布置
-  const largeTiles = propertyTiles.filter((t) => t.size === 'large');
-  for (const tile of largeTiles) {
-    const candidates = sortedEmpty.filter((i) => !assigned.has(i));
-    if (candidates.length === 0) throw new Error('[map-generator] 无空位放置大块土地');
-
-    let best = candidates[0];
-    let bestScore = -Infinity;
-    for (const idx of candidates) {
-      const prev = slots[(idx - 1 + slots.length) % slots.length];
-      const next = slots[(idx + 1) % slots.length];
-      let score = rng.next() * 0.5;
-      if (prev?.type === 'property') score -= 3;
-      if (next?.type === 'property') score -= 3;
-
-      for (let i = 0; i < slots.length; i++) {
-        if (slots[i]?.size === 'large') {
-          score += cyclicDistance(idx, i, slots.length) * 0.05;
-        }
-      }
-      if (score > bestScore) {
-        bestScore = score;
-        best = idx;
-      }
+  // 再放 small 组，尽量连续
+  const smallBlocks = blocks.filter((b) => b.size === 'small');
+  for (const block of smallBlocks) {
+    const segment = findEmptySegment(sortedEmpty, assigned, block.tiles.length, rng);
+    for (let i = 0; i < block.tiles.length; i++) {
+      const idx = segment[i];
+      block.tiles[i].index = idx;
+      slots[idx] = block.tiles[i];
+      assigned.add(idx);
     }
-
-    tile.index = best;
-    tile.name = `商业用地${largeTiles.indexOf(tile) + 1}`;
-    slots[best] = tile;
-    assigned.add(best);
   }
 
-  // 兜底
-  for (const tile of propertyTiles) {
-    if (tile.index !== -1) continue;
-    const idx = sortedEmpty.find((i) => !assigned.has(i));
-    if (idx === undefined) throw new Error('[map-generator] 仍有未分配土地');
-    tile.index = idx;
-    slots[idx] = tile;
-    assigned.add(idx);
+  // 兜底：理论上不应有剩余
+  for (const block of blocks) {
+    for (const tile of block.tiles) {
+      if (tile.index !== -1) continue;
+      const idx = sortedEmpty.find((i) => !assigned.has(i));
+      if (idx === undefined) throw new Error('[map-generator] 仍有未分配土地');
+      tile.index = idx;
+      slots[idx] = tile;
+      assigned.add(idx);
+    }
   }
 }
 
@@ -407,7 +550,16 @@ function assignPrices(slots: (Tile | null)[], template: MapTemplate): void {
 
   properties.sort((a, b) => a.index - b.index);
 
+  // 按 name 分组：大地产多个格子共享一个价格
+  const nameToPrice = new Map<string, number>();
+
   properties.forEach((tile, i) => {
+    if (nameToPrice.has(tile.name)) {
+      tile.basePrice = nameToPrice.get(tile.name)!;
+      tile.baseRent = Math.round(tile.basePrice * 0.05 / 100) * 100;
+      return;
+    }
+
     const progress = total <= 1 ? 0 : i / (total - 1);
     let normalized: number;
     if (template.priceCurve === 'sigmoid') {
@@ -417,7 +569,9 @@ function assignPrices(slots: (Tile | null)[], template: MapTemplate): void {
     }
     const price = minPrice + normalized * (maxPrice - minPrice);
     const sizeMultiplier = tile.size === 'large' ? 1.3 : 1;
-    tile.basePrice = Math.round((price * sizeMultiplier) / 1000) * 1000;
+    const basePrice = Math.round((price * sizeMultiplier) / 1000) * 1000;
+    nameToPrice.set(tile.name, basePrice);
+    tile.basePrice = basePrice;
     tile.baseRent = Math.round(tile.basePrice * 0.05 / 100) * 100;
   });
 }
@@ -435,7 +589,7 @@ export function generateMap(template: MapTemplate = DEFAULT_TEMPLATE): GameMap {
   const rng = createSeededRandom(t.seed);
 
   const slots: (Tile | null)[] = Array(t.totalTiles).fill(null);
-  slots[0] = createTile(0, 'start', '起点');
+  slots[0] = createTile(0, 'start');
 
   // 固定关键系统格
   const anchors: { type: TileType; name: string }[] = [];
@@ -449,7 +603,13 @@ export function generateMap(template: MapTemplate = DEFAULT_TEMPLATE): GameMap {
     slots[pos] = createTile(pos, anchor.type, anchor.name);
   });
 
-  // 放置其他系统格（扣除已作为 anchor 固定的关键设施）
+  // 创建土地块（先不放置）
+  const blocks = createPropertyBlocks(t);
+
+  // 先放置土地，保证大地产连续 2 格、小地产连续 3-4 格有空间
+  fillPropertySlots(slots, blocks, rng);
+
+  // 放置其他系统格（扣除已作为 anchor 固定的关键设施），填充剩余空位
   const anchorTypes = new Set<TileType>(anchors.map((a) => a.type));
   const specialTypes = Object.entries(t.specialTiles)
     .filter(([type, count]) => type !== 'start' && type !== 'property' && count > 0)
@@ -458,20 +618,6 @@ export function generateMap(template: MapTemplate = DEFAULT_TEMPLATE): GameMap {
       return Array(actualCount).fill(type as Exclude<TileType, 'start' | 'property'>);
     });
   placeSpecialTiles(slots, specialTypes, rng);
-
-  // 创建并放置土地
-  const plans = createPropertyPlans(t);
-  const propertyTiles: Tile[] = plans.map((plan) => ({
-    index: -1,
-    name: plan.size === 'large' ? '商业用地' : '住宅用地',
-    type: 'property',
-    size: plan.size,
-    group: plan.group,
-    basePrice: 0,
-    baseRent: 0,
-    level: 0,
-  }));
-  fillPropertySlots(slots, propertyTiles, rng);
 
   // 定价
   assignPrices(slots, t);

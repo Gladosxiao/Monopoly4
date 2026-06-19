@@ -41,6 +41,7 @@ export interface Tile {
   type: TileType;
   position?: { x: number; y: number }; // 可选：前端渲染坐标
   size?: PropertySize;    // 仅 property
+  span?: number;          // 占地格数，大地产默认 2，小地产默认 1
   group?: number;         // 连接式路段分组
   basePrice: number;      // 底价
   baseRent: number;       // 基础租金
@@ -63,6 +64,7 @@ export interface MapTemplate {
   name: string;
   totalTiles: number;
   largePropertyCount: number;
+  largePropertySpan?: number; // 每个大地产占几个路径格，默认 2
   smallPropertyGroups: number[];
   specialTiles: Record<Exclude<TileType, 'start' | 'property'>, number>;
   basePriceRange: [number, number];

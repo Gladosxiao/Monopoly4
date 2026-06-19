@@ -16,4 +16,7 @@ doc/videos_extra/*
 # Build outputs & runtime data
 packages/*/dist/
 packages/*/data.sqlite*
+packages/map-generator/.venv/
+packages/map-generator/output/
+__pycache__/
 

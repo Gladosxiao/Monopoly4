@@ -19,7 +19,7 @@ import {
 } from './engine.js';
 
 function makeTestState(): GameState {
-  const state = createGame('room-1', { totalFunds: 100000, moveMode: 'walk', winCondition: 'unlimited', mapId: 'simple' }, [
+  const state = createGame('room-1', { totalFunds: 100000, moveMode: 'walk', landLease: 'perpetual', gameTime: 'perpetual', winCondition: 'unlimited', mapId: 'simple' }, [
     { userId: 'p1', username: '玩家1', characterId: 'sun', isReady: true, isHost: true, seatIndex: 0 },
     { userId: 'p2', username: '玩家2', characterId: 'atu', isReady: true, isHost: false, seatIndex: 1 },
   ]);

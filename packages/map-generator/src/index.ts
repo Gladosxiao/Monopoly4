@@ -13,6 +13,7 @@ export {
   FAST_TEMPLATE,
   ECONOMY_TEMPLATE,
   PLAYER4_TEMPLATE,
+  MAP80_TEMPLATE,
 } from './generator.js';
 
 export type {
@@ -38,3 +39,5 @@ export type {
   TileVisitStat,
   BatchResult,
 } from './simulator.js';
+
+export { renderTextMap, renderRingTextMap, renderSvgMap, renderHtmlMap } from './visualizer.js';

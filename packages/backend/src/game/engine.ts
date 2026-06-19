@@ -47,6 +47,7 @@ export function createGame(roomId: string, config: GameConfig, roomPlayers: Room
       deposit: 0,
       loan: 0,
       coupons: 300,
+      vehicle: config.moveMode,
       position: 0,
       properties: [],
       cards: [],
@@ -54,6 +55,7 @@ export function createGame(roomId: string, config: GameConfig, roomPlayers: Room
       statusEffects: [],
       isBankrupt: false,
       isAI: false,
+      liquidationCount: 0,
     };
   });
 
@@ -68,6 +70,7 @@ export function createGame(roomId: string, config: GameConfig, roomPlayers: Room
     month: 1,
     priceIndex: 1,
     roadEffects: [],
+    spirits: [],
     logs: [
       {
         timestamp: Date.now(),
@@ -79,6 +82,10 @@ export function createGame(roomId: string, config: GameConfig, roomPlayers: Room
 }
 
 export function getDiceCount(moveMode: GameConfig['moveMode']): number {
+  return getMaxDiceCount(moveMode);
+}
+
+export function getMaxDiceCount(moveMode: GameConfig['moveMode']): number {
   switch (moveMode) {
     case 'bike':
       return 2;
@@ -89,12 +96,30 @@ export function getDiceCount(moveMode: GameConfig['moveMode']): number {
   }
 }
 
+/** 根据当前载具获取可选骰子数范围 */
+export function getAllowedDiceCounts(moveMode: GameConfig['moveMode']): number[] {
+  const max = getMaxDiceCount(moveMode);
+  return Array.from({ length: max }, (_, i) => i + 1);
+}
+
 export function rollDice(count: number): number {
   let sum = 0;
   for (let i = 0; i < count; i++) {
     sum += Math.floor(Math.random() * 6) + 1;
   }
   return sum;
+}
+
+export function roll(state: GameState, diceCount?: number): { success: boolean; message?: string; steps?: number } {
+  const player = getCurrentPlayer(state);
+  const max = getMaxDiceCount(player.vehicle);
+  const count = diceCount ?? max;
+  if (count < 1 || count > max) {
+    return { success: false, message: `当前载具最多可投 ${max} 颗骰子` };
+  }
+  state.selectedDiceCount = count;
+  const steps = rollDice(count);
+  return { success: true, steps };
 }
 
 export function spinWheel(sides: number): number {
@@ -348,13 +373,14 @@ export function handleTileEffect(state: GameState): GameState {
       actorId: player.id,
       message: `${player.username} 获得 30 点券`,
     });
-  } else if (tile.type === 'coupon30') {
-    player.coupons += 30;
+  } else if (tile.type === 'coupon') {
+    const value = tile.couponValue ?? 30;
+    player.coupons += value;
     state.logs.push({
       timestamp: Date.now(),
       type: 'player:coupon',
       actorId: player.id,
-      message: `${player.username} 获得 30 点券`,
+      message: `${player.username} 获得 ${value} 点券`,
     });
   } else if (tile.type === 'fate' || tile.type === 'chance') {
     // MVP 简化为随机小额金钱事件

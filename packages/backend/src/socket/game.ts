@@ -14,18 +14,26 @@ import { authMiddleware, type AuthRequest } from '../auth.js';
 import { saveRoomToDb, loadRoomFromDb } from '../routes/rooms.js';
 import {
   createGame,
-  getMaxDiceCount,
-  roll,
+  getDiceCount,
+  rollDice,
   movePlayer,
   buyProperty,
   upgradeProperty,
   rebuildTile,
   useCard,
+  buyCard,
+  sellCard,
+  useItem,
+  buyItem,
+  sellItem,
   endTurn,
   canRoll,
   canBuy,
   canUpgrade,
+  canRebuild,
 } from '../game/engine.js';
+import { getShopCards, canBuyCard } from '../game/cardSystem/index.js';
+import { getShopItems, canBuyItem } from '../game/itemSystem/index.js';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'monopoly4-dev-secret';
 
@@ -148,12 +156,8 @@ export function setupSocketIO(httpServer: HttpServer): void {
         socket.emit('error', '现在不能掷骰');
         return;
       }
-      const rollResult = roll(state, diceCount);
-      if (!rollResult.success) {
-        socket.emit('error', rollResult.message);
-        return;
-      }
-      movePlayer(state, rollResult.steps!);
+      const steps = diceCount ? rollDice(diceCount) : rollDice(getDiceCount(state.config.moveMode));
+      movePlayer(state, steps);
       io.to(roomId).emit('game:state', state);
     });
 

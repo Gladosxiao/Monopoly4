@@ -14,9 +14,14 @@ import {
   FAST_TEMPLATE,
   ECONOMY_TEMPLATE,
   PLAYER4_TEMPLATE,
+  MAP80_TEMPLATE,
 } from '../generator.js';
 import type { MapTemplate } from '../types.js';
 import { simulateMap, evaluateBalance, formatReport, batchSimulate } from '../simulator.js';
+import { renderTextMap, renderRingTextMap, renderHtmlMap, renderSvgMap, renderSvgWithTokens } from '../visualizer.js';
+import { mkdirSync, writeFileSync } from 'fs';
+import { dirname, join } from 'path';
+import { fileURLToPath } from 'url';
 
 function printSection(title: string) {
   console.log('\n' + '='.repeat(60));
@@ -42,28 +47,43 @@ function main() {
   const p4Balance = evaluateBalance(p4Result);
   console.log(formatReport(p4Result, p4Balance));
 
-  printSection('多模板批量对比（40 回合 ≈ 绕 1 圈）');
+  printSection('80 格大地图详细模拟（人均9小块、80回合点券翻倍）');
+  const map80 = generateBalancedMap(MAP80_TEMPLATE, 20);
+  const map80Result = simulateMap(map80, {
+    ...commonConfig,
+    roundsPerPlayer: 80,
+    iterations: 3000,
+  });
+  const map80Balance = evaluateBalance(map80Result);
+  console.log(formatReport(map80Result, map80Balance));
+
+  printSection('多模板批量对比（各模板推荐回合）');
   const templates = [
     { ...DEFAULT_TEMPLATE, id: 'default', name: '默认' },
     { ...FAST_TEMPLATE, id: 'fast', name: '快速' },
     { ...ECONOMY_TEMPLATE, id: 'economy', name: '经济' },
     { ...PLAYER4_TEMPLATE, id: '4player', name: '四人' },
+    { ...MAP80_TEMPLATE, id: 'map80', name: '80格' },
   ];
   const maps = templates.map((t) => generateMap(t));
   const batch = batchSimulate(maps, {
     ...commonConfig,
     iterations: 2000,
   });
-  console.log('地图ID       评分  地产占比  事件密度  最长连续  人均地产  人均卡+道  警告');
+  console.log('地图ID       评分  地产占比  事件密度  最长连续  人均地产  人均卡+道  推荐回合  警告');
   console.log('-'.repeat(85));
   for (const r of batch) {
     const map = maps.find((m) => m.id === r.mapId)!;
-    const largePerPlayer = map.tiles.filter((t) => t.size === 'large').length / commonConfig.playerCount;
-    const smallPerPlayer = map.tiles.filter((t) => t.size === 'small').length / commonConfig.playerCount;
-    // 重新跑一遍模拟以获取卡片道具指标
-    const res = simulateMap(map, { ...commonConfig, iterations: 1000 });
+    const largeCount = new Set(map.tiles.filter((t) => t.size === 'large').map((t) => t.name)).size;
+    const smallCount = map.tiles.filter((t) => t.size === 'small').length;
+    const largePerPlayer = largeCount / commonConfig.playerCount;
+    const smallPerPlayer = smallCount / commonConfig.playerCount;
+    // 重新跑一遍模拟以获取卡片道具指标；80格大地图用60回合
+    const simConfig = map.id === 'map80' ? { ...commonConfig, roundsPerPlayer: 80, iterations: 1000 } : { ...commonConfig, iterations: 1000 };
+    const res = simulateMap(map, simConfig);
+    const rounds = map.id === 'map80' ? 80 : 40;
     console.log(
-      `${r.mapId.padEnd(11)} ${String(r.score).padStart(3)}  ${(r.propertyRatio * 100).toFixed(0)}%      ${(r.eventDensity * 100).toFixed(0)}%      ${r.maxPropertyStreak}        ${largePerPlayer.toFixed(1)}大${smallPerPlayer.toFixed(1)}小   ${res.avgTotalCardsAndItemsPerPlayer.toFixed(1)}       ${r.warnings.length > 0 ? r.warnings.join('; ') : '无'}`
+      `${r.mapId.padEnd(11)} ${String(r.score).padStart(3)}  ${(r.propertyRatio * 100).toFixed(0)}%      ${(r.eventDensity * 100).toFixed(0)}%      ${r.maxPropertyStreak}        ${largePerPlayer.toFixed(1)}大${smallPerPlayer.toFixed(1)}小   ${res.avgTotalCardsAndItemsPerPlayer.toFixed(1)}        ${rounds}      ${r.warnings.length > 0 ? r.warnings.join('; ') : '无'}`
     );
   }
 
@@ -82,6 +102,40 @@ function main() {
     console.log(
       `  ${cfg.label.padEnd(4)} 绕圈:${r.avgLapsPerPlayer.toFixed(2)}  免费卡:${r.avgCardsPerPlayer.toFixed(1)}  点券:${r.avgCouponsPerPlayer.toFixed(0)}  购买:${r.avgShopPurchasesPerPlayer.toFixed(1)}  合计:${r.avgTotalCardsAndItemsPerPlayer.toFixed(1)}`
     );
+  }
+
+  printSection('地图可视化输出');
+  const __filename = fileURLToPath(import.meta.url);
+  const __dirname = dirname(__filename);
+  const outputDir = join(__dirname, '..', '..', 'output');
+  mkdirSync(outputDir, { recursive: true });
+
+  const sampleTokens = [
+    { id: 'p1', positionIndex: 0, color: '#e74c3c', name: '阿土伯' },
+    { id: 'p2', positionIndex: 0, color: '#3498db', name: '孙小美' },
+    { id: 'p3', positionIndex: 5, color: '#f1c40f', name: '钱夫人' },
+    { id: 'p4', positionIndex: 10, color: '#2ecc71', name: '金贝贝' },
+  ];
+
+  for (const map of [p4Map, map80]) {
+    const size = map.tiles.length <= 40 ? 800 : 1200;
+    const html = renderHtmlMap(map, { size, showNames: true }, sampleTokens);
+    const svg = renderSvgMap(map, { size, showNames: true });
+    const svgWithTokens = renderSvgWithTokens(map, sampleTokens, { size, showNames: true });
+    writeFileSync(join(outputDir, `${map.id}.html`), html, 'utf-8');
+    writeFileSync(join(outputDir, `${map.id}.svg`), svg, 'utf-8');
+    writeFileSync(join(outputDir, `${map.id}_tokens.svg`), svgWithTokens, 'utf-8');
+    console.log(`已生成 HTML: ${join(outputDir, `${map.id}.html`)}`);
+    console.log(`已生成 SVG:  ${join(outputDir, `${map.id}.svg`)}`);
+    console.log(`已生成带棋子 SVG: ${join(outputDir, `${map.id}_tokens.svg`)}`);
+
+    console.log(`\n--- ${map.name} 文本可视化 ---`);
+    console.log(renderTextMap(map));
+
+    if (map.tiles.length === 40) {
+      console.log(`\n--- ${map.name} 环形布局 ---`);
+      console.log(renderRingTextMap(map, 10));
+    }
   }
 
   printSection('参数扫描：土地数量 vs 均衡评分');

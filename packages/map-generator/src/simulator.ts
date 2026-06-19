@@ -251,7 +251,7 @@ export function simulateMap(map: GameMap, config: SimulationConfig = DEFAULT_SIM
     typeStats,
     propertyGroupStats,
     avgStepsPerTurn: totalSteps / totalTurnsSimulated,
-    avgLapsPerPlayer: (totalVisits / map.path.length) / config.iterations / config.playerCount,
+    avgLapsPerPlayer: (totalSteps / config.iterations / config.playerCount) / map.path.length,
     keyFacilitySpacing,
     maxPropertyStreak,
     adjacentSameTypeCount,
