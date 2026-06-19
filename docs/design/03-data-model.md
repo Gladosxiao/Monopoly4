@@ -219,7 +219,8 @@ interface CardDefinition {
   description: string;    // 功能描述
   type: 'attack' | 'defense' | 'control' | 'special';
   cost: number;           // 点券价格（点数），常见 10/15/20/25/30/35/40/50/70/100/160/180/200 点
-  targetType: 'self' | 'opponent' | 'tile' | 'global';
+  target: 'self' | 'opponent' | 'tile' | 'global' | 'road';
+  assetKey: string;       // 美术资源 key，映射到 /assets/cards/{assetKey}.png
   // 效果参数由 CardEffect 处理
 }
 
@@ -229,13 +230,17 @@ interface CardInstance {
 }
 ```
 
+> 卡片定义与定价统一维护在 `packages/shared/src/data/cards.ts`，前后端共享。
+
 主要卡片（首期建议实现子集）：
-- 控制类：遥控骰子、转向卡、停留卡、乌龟卡
+- 控制类：转向卡、停留卡、乌龟卡
 - 攻击类：购地卡、换地卡、拍卖卡、恶魔卡、怪兽卡、拆除卡
-- 辅助类：天使卡、改建卡、机器娃娃
+- 辅助类：天使卡、改建卡
 - 防御类：免罪卡、嫁祸卡（扩展）
 
 完整 30 张卡片（扩展）：均富卡、均贫卡、购地卡、换地卡、换屋卡、改建卡、拍卖卡、天使卡、恶魔卡、怪兽卡、拆除卡、转向卡、停留卡、乌龟卡、抢夺卡、冬眠卡、梦游卡、陷害卡、复仇卡、嫁祸卡、免费卡、免罪卡、送神符、请神符、红卡、黑卡、查税卡、涨价卡、查封卡、同盟卡。
+
+> 注意：遥控骰子属于道具，不属于卡片。
 
 ### 道具 (Item)
 
@@ -244,9 +249,11 @@ interface ItemDefinition {
   id: string;
   name: string;           // 如：路障、地雷、机车
   description: string;
-  cost: number;           // 点券价格
-  type: 'consumable' | 'vehicle' | 'trap' | 'tool';
-  maxStack?: number;      // 最大堆叠数量（原版每种道具上限 9 个）
+  cost: number;           // 点券价格（研究所产物为 0）
+  type: 'vehicle' | 'trap' | 'tool' | 'research';
+  maxStack: number;       // 最大堆叠数量（原版每种道具上限 9 个，交通工具为 1）
+  assetKey: string;       // 美术资源 key，映射到 /assets/items/{assetKey}.png
+  diceRange?: [number, number]; // 载具专属：可选骰子数量范围
 }
 
 interface ItemInstance {
@@ -256,8 +263,10 @@ interface ItemInstance {
 }
 ```
 
+> 道具定义与定价统一维护在 `packages/shared/src/data/items.ts`，前后端共享。
+
 主要道具：
-- 交通工具：机车（2 骰）、汽车（3 骰）
+- 交通工具：机车（可选 1-2 骰）、汽车（可选 1-3 骰）
 - 陷阱：路障、地雷、定时炸弹
 - 工具：遥控骰子、机器娃娃、飞弹
 - 研发道具（研究所产出，扩展）：机器人、时光机、传送机、工程车、核子飞弹
@@ -444,6 +453,23 @@ CREATE TABLE game_records (
   ended_at INTEGER NOT NULL
 );
 ```
+
+## 美术资源管理
+
+美术资源采用**约定式静态目录 + 共享 key 映射**，便于前后端统一引用：
+
+```
+packages/frontend/public/assets/
+├── cards/          # 卡片图片：{assetKey}.png
+├── items/          # 道具图片：{assetKey}.png
+├── spirits/        # 神明图片：{assetKey}.png
+├── characters/     # 角色头像：{characterId}.png
+└── tiles/          # 地块图标：{tileType}.png
+```
+
+- 资源路径统一由 `packages/shared/src/data/assets.ts` 维护，业务代码只使用 `getCardAssetUrl(assetKey)` 等函数。
+- 资源缺失时前端可回退到占位图或纯色块/emoji，避免阻塞开发。
+- 当前项目没有真实美术资源，所有 `assetKey` 均为配置占位，后续替换图片即可，无需修改代码。
 
 ## 与原版的已知偏差
 

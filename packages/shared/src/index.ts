@@ -262,3 +262,32 @@ export const SIMPLE_MAP: GameMap = {
     { index: 39, name: '黄金广场', type: 'property', group: 9, basePrice: 60000, baseRent: 3000, level: 0 },
   ],
 };
+
+// ==================== 数据配置 ====================
+
+export {
+  CARD_DEFINITIONS,
+  CARD_IDS,
+  getCardDefinition,
+  type CardDefinition,
+  type CardType,
+  type CardTarget,
+} from './data/cards.js';
+
+export {
+  ITEM_DEFINITIONS,
+  ITEM_IDS,
+  getItemDefinition,
+  type ItemDefinition,
+  type ItemType,
+} from './data/items.js';
+
+export {
+  ASSET_BASE_URL,
+  ASSET_FALLBACK,
+  getCardAssetUrl,
+  getItemAssetUrl,
+  getSpiritAssetUrl,
+  getCharacterAvatarUrl,
+  getTileIconUrl,
+} from './data/assets.js';
