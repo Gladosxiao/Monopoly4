@@ -1,0 +1,202 @@
+/**
+ * 过路费系统单元测试
+ *
+ * 覆盖：住宅基础租金、等级系数、同组加成、连锁店、特殊建筑、
+ * 神明影响、路段效果（涨价/查封）、同盟关系。
+ */
+
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { calculateRent } from '../engine.js';
+import {
+  makeTestState,
+  makeThreePlayerState,
+  setOwner,
+  DEFAULT_TEST_CONFIG,
+} from './setup.js';
+
+describe('calculateRent', () => {
+  beforeEach(() => {
+    vi.spyOn(Math, 'random').mockReturnValue(0); // 转盘/骰子结果固定为 1
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('住宅：基础租金 + 等级系数', () => {
+    const state = makeTestState();
+    setOwner(state, 1, 'p1', 'house', 1);
+    const owner = state.players[0];
+    const visitor = state.players[1];
+    // 蘑菇村 baseRent=400，等级 1 时倍率 1.5
+    expect(calculateRent(state.map.tiles[1], owner, state, visitor).rent).toBe(600);
+  });
+
+  it('住宅：同组 2 块加成 20%', () => {
+    const state = makeTestState();
+    setOwner(state, 1, 'p1', 'house', 0);
+    setOwner(state, 3, 'p1', 'house', 0);
+    const owner = state.players[0];
+    const visitor = state.players[1];
+    // 蘑菇村 baseRent=400 * 1.2
+    expect(calculateRent(state.map.tiles[1], owner, state, visitor).rent).toBe(480);
+  });
+
+  it('住宅：同组 3 块加成 50%', () => {
+    const state = makeThreePlayerState();
+    setOwner(state, 1, 'p1', 'house', 0);
+    setOwner(state, 3, 'p1', 'house', 0);
+    // 同组只有 2 块，无法测试 3 块加成；使用另一组
+    setOwner(state, 5, 'p2', 'house', 0);
+    setOwner(state, 7, 'p2', 'house', 0);
+    expect(calculateRent(state.map.tiles[5], state.players[1], state, state.players[0]).rent).toBe(720);
+  });
+
+  it('连锁店：按全图连锁店数量联合收费', () => {
+    const state = makeTestState();
+    setOwner(state, 1, 'p1', 'chainStore', 1);
+    setOwner(state, 3, 'p1', 'chainStore', 1);
+    setOwner(state, 5, 'p1', 'chainStore', 1);
+    const owner = state.players[0];
+    const visitor = state.players[1];
+    // 蘑菇村 baseRent=400，owner 拥有 3 家连锁店
+    expect(calculateRent(state.map.tiles[1], owner, state, visitor).rent).toBe(1200);
+  });
+
+  it('商场：baseRent * level * 转盘倍数', () => {
+    const state = makeTestState();
+    setOwner(state, 21, 'p1', 'mall', 2);
+    const owner = state.players[0];
+    const visitor = state.players[1];
+    // 商业街 baseRent=1400，等级 2，转盘 mock 为 1
+    expect(calculateRent(state.map.tiles[21], owner, state, visitor).rent).toBe(2800);
+  });
+
+  it('旅馆：baseRent * level * 天数，并附带休息天数', () => {
+    const state = makeTestState();
+    setOwner(state, 21, 'p1', 'hotel', 2);
+    const owner = state.players[0];
+    const visitor = state.players[1];
+    const result = calculateRent(state.map.tiles[21], owner, state, visitor);
+    expect(result.rent).toBe(2800);
+    expect(result.hotelDays).toBe(1);
+  });
+
+  it('加油站：按本回合步数收费', () => {
+    const state = makeTestState();
+    state.lastRoll = 5;
+    setOwner(state, 21, 'p1', 'gasStation', 0);
+    const owner = state.players[0];
+    const visitor = state.players[1];
+    // 步行模式 rate=50
+    expect(calculateRent(state.map.tiles[21], owner, state, visitor).rent).toBe(250);
+  });
+
+  it('公园：不收过路费', () => {
+    const state = makeTestState();
+    setOwner(state, 21, 'p1', 'park', 0);
+    const owner = state.players[0];
+    const visitor = state.players[1];
+    expect(calculateRent(state.map.tiles[21], owner, state, visitor).rent).toBe(0);
+  });
+
+  it('研究所：不收过路费', () => {
+    const state = makeTestState();
+    setOwner(state, 21, 'p1', 'lab', 3);
+    const owner = state.players[0];
+    const visitor = state.players[1];
+    expect(calculateRent(state.map.tiles[21], owner, state, visitor).rent).toBe(0);
+  });
+
+  it('小财神：过路费减半', () => {
+    const state = makeTestState();
+    setOwner(state, 1, 'p1', 'house', 0);
+    const owner = state.players[0];
+    const visitor = state.players[1];
+    visitor.spirit = { spiritId: 'smallWealthGod', remainingDays: 7 };
+    expect(calculateRent(state.map.tiles[1], owner, state, visitor).rent).toBe(200);
+  });
+
+  it('大财神：免过路费', () => {
+    const state = makeTestState();
+    setOwner(state, 1, 'p1', 'house', 5);
+    const owner = state.players[0];
+    const visitor = state.players[1];
+    visitor.spirit = { spiritId: 'bigWealthGod', remainingDays: 7 };
+    expect(calculateRent(state.map.tiles[1], owner, state, visitor).rent).toBe(0);
+  });
+
+  it('小穷神：过路费 +50%', () => {
+    const state = makeTestState();
+    setOwner(state, 1, 'p1', 'house', 0);
+    const owner = state.players[0];
+    const visitor = state.players[1];
+    visitor.spirit = { spiritId: 'smallPovertyGod', remainingDays: 7 };
+    expect(calculateRent(state.map.tiles[1], owner, state, visitor).rent).toBe(600);
+  });
+
+  it('大穷神：过路费翻倍', () => {
+    const state = makeTestState();
+    setOwner(state, 1, 'p1', 'house', 0);
+    const owner = state.players[0];
+    const visitor = state.players[1];
+    visitor.spirit = { spiritId: 'bigPovertyGod', remainingDays: 7 };
+    expect(calculateRent(state.map.tiles[1], owner, state, visitor).rent).toBe(800);
+  });
+
+  it('涨价卡：指定路段租金翻倍', () => {
+    const state = makeTestState();
+    setOwner(state, 1, 'p1', 'house', 0);
+    setOwner(state, 3, 'p1', 'house', 0);
+    state.roadEffects.push({
+      id: 'r1',
+      type: 'priceRise',
+      group: 0,
+      multiplier: 2,
+      remainingDays: 5,
+      sourcePlayerId: 'p1',
+    });
+    const owner = state.players[0];
+    const visitor = state.players[1];
+    // 400 * 1.2 * 2
+    expect(calculateRent(state.map.tiles[1], owner, state, visitor).rent).toBe(960);
+  });
+
+  it('查封卡：指定路段无法收租', () => {
+    const state = makeTestState();
+    setOwner(state, 1, 'p1', 'house', 5);
+    state.roadEffects.push({
+      id: 'r1',
+      type: 'seal',
+      group: 0,
+      multiplier: 0,
+      remainingDays: 5,
+      sourcePlayerId: 'p2',
+    });
+    const owner = state.players[0];
+    const visitor = state.players[1];
+    expect(calculateRent(state.map.tiles[1], owner, state, visitor).rent).toBe(0);
+  });
+
+  it('同盟卡：彼此不收过路费', () => {
+    const state = makeTestState();
+    setOwner(state, 1, 'p1', 'house', 5);
+    const owner = state.players[0];
+    const visitor = state.players[1];
+    visitor.statusEffects.push({ type: 'alliance', remainingDays: 7, sourcePlayerId: 'p1' });
+    owner.statusEffects.push({ type: 'alliance', remainingDays: 7, sourcePlayerId: 'p2' });
+    expect(calculateRent(state.map.tiles[1], owner, state, visitor).rent).toBe(0);
+  });
+
+  it('非 property 地块返回 0', () => {
+    const state = makeTestState();
+    const tile = state.map.tiles[2]; // 命运格
+    expect(calculateRent(tile, state.players[0], state, state.players[1]).rent).toBe(0);
+  });
+
+  it('未购买地块返回 0', () => {
+    const state = makeTestState();
+    const tile = state.map.tiles[1];
+    expect(calculateRent(tile, state.players[0], state, state.players[1]).rent).toBe(0);
+  });
+});
