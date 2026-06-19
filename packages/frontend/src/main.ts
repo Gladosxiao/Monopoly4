@@ -3,6 +3,7 @@ import {
   type GameState,
   type GameLog,
   type Player,
+  type Tile,
   type PublicUser,
   type CardUseTarget,
   type ItemUseTarget,
@@ -65,6 +66,31 @@ let currentUser: PublicUser | null = loadUser();
 let cleanupFns: Array<() => void> = [];
 let isStockCollapsed = false;
 let isBackpackCollapsed = false;
+let gameCanvas: HTMLCanvasElement | null = null;
+let currentHoverIndex = -1;
+let currentHoverPixel: { x: number; y: number } | undefined;
+
+/** 地图选块模式：等待用户点击地图选择目标地块 */
+let tileSelectionResolver: ((index: number) => void) | null = null;
+let tileSelectionCancel: (() => void) | null = null;
+let tileSelectionFilter: ((tile: Tile) => boolean) | null = null;
+
+function renderBoardWithSelection(state: GameState) {
+  if (!gameCanvas || !currentUser) return;
+  const opts: Parameters<typeof renderBoard>[3] = {};
+  if (currentHoverIndex >= 0) {
+    opts.hoverIndex = currentHoverIndex;
+    opts.hoverPixel = currentHoverPixel;
+  }
+  if (tileSelectionResolver) {
+    opts.isSelectingTile = true;
+    const filter = tileSelectionFilter;
+    opts.selectableTileIndexes = new Set(
+      state.map.tiles.filter((t) => (filter ? filter(t) : true)).map((t) => t.index)
+    );
+  }
+  renderBoard(gameCanvas, state, currentUser.id, opts);
+}
 
 /** 显示 Toast 通知 */
 function showToast(message: string, type: 'info' | 'error' | 'success' = 'info') {
@@ -542,12 +568,13 @@ async function navigateToGame(roomId: string): Promise<void> {
   app.appendChild(container);
 
   const boardWrap = container.querySelector<HTMLDivElement>('.board-wrap')!;
-  let canvas = createBoardCanvas();
+  const canvas = createBoardCanvas();
+  gameCanvas = canvas;
+  currentHoverIndex = -1;
+  currentHoverPixel = undefined;
   boardWrap.appendChild(canvas);
 
-  // 棋盘鼠标悬停：实时更新 hoverIndex 并触发重绘
-  let hoverIndex = -1;
-  let hoverPixel: { x: number; y: number } | undefined;
+  // 棋盘鼠标悬停与点击：实时更新 hoverIndex 并触发重绘，支持地图选块
   function attachBoardEvents(c: HTMLCanvasElement) {
     c.addEventListener('mousemove', (e) => {
       const rect = c.getBoundingClientRect();
@@ -555,18 +582,34 @@ async function navigateToGame(roomId: string): Promise<void> {
       const x = (e.clientX - rect.left) * (c.width / rect.width) / dpr;
       const y = (e.clientY - rect.top) * (c.height / rect.height) / dpr;
       const idx = getTileIndexAt(x, y);
-      if (idx !== hoverIndex) {
-        hoverIndex = idx;
-        hoverPixel = { x, y };
-        if (currentGame) renderBoard(c, currentGame, currentUser!.id, { hoverIndex, hoverPixel });
+      if (idx !== currentHoverIndex) {
+        currentHoverIndex = idx;
+        currentHoverPixel = { x, y };
+        if (currentGame) renderBoardWithSelection(currentGame);
       } else if (idx >= 0) {
-        hoverPixel = { x, y };
+        currentHoverPixel = { x, y };
       }
     });
     c.addEventListener('mouseleave', () => {
-      hoverIndex = -1;
-      hoverPixel = undefined;
-      if (currentGame) renderBoard(c, currentGame, currentUser!.id);
+      currentHoverIndex = -1;
+      currentHoverPixel = undefined;
+      if (currentGame) renderBoardWithSelection(currentGame);
+    });
+    c.addEventListener('click', (e) => {
+      if (!tileSelectionResolver || !currentGame) return;
+      const rect = c.getBoundingClientRect();
+      const dpr = Number(c.dataset.dpr || '1');
+      const x = (e.clientX - rect.left) * (c.width / rect.width) / dpr;
+      const y = (e.clientY - rect.top) * (c.height / rect.height) / dpr;
+      const idx = getTileIndexAt(x, y);
+      if (idx < 0) return;
+      const tile = currentGame.map.tiles[idx];
+      if (tileSelectionFilter && !tileSelectionFilter(tile)) return;
+      const resolver = tileSelectionResolver;
+      tileSelectionResolver = null;
+      tileSelectionCancel = null;
+      tileSelectionFilter = null;
+      resolver(idx);
     });
   }
   attachBoardEvents(canvas);
@@ -618,12 +661,12 @@ async function navigateToGame(roomId: string): Promise<void> {
       const oldCanvas = canvas;
       const newCanvas = createBoardCanvas(state.map.tiles.length);
       boardWrap.replaceChild(newCanvas, oldCanvas);
-      canvas = newCanvas;
-      attachBoardEvents(canvas);
-      hoverIndex = -1;
-      hoverPixel = undefined;
+      gameCanvas = newCanvas;
+      attachBoardEvents(newCanvas);
+      currentHoverIndex = -1;
+      currentHoverPixel = undefined;
     }
-    renderBoard(canvas, state, currentUser!.id, hoverIndex >= 0 ? { hoverIndex, hoverPixel } : {});
+    renderBoardWithSelection(state);
     renderPlayersInfo(container, state);
     renderBackpack(container, state);
     renderActions(container, state);
@@ -1093,11 +1136,45 @@ function renderLogs(container: HTMLElement, state: GameState): void {
   });
 }
 
+/** 进入地图选块模式，等待用户点击棋盘选择地块 */
+function selectTileOnBoard(state: GameState, message: string, filter?: (tile: Tile) => boolean): Promise<number> {
+  return new Promise((resolve, reject) => {
+    if (tileSelectionResolver) {
+      tileSelectionCancel?.();
+      tileSelectionResolver = null;
+      tileSelectionCancel = null;
+      tileSelectionFilter = null;
+    }
+    tileSelectionResolver = resolve;
+    tileSelectionCancel = () => reject(new Error('取消选择'));
+    tileSelectionFilter = filter ?? null;
+    showToast(message, 'info');
+    renderBoardWithSelection(state);
+
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        document.removeEventListener('keydown', onKey);
+        tileSelectionCancel?.();
+        tileSelectionResolver = null;
+        tileSelectionCancel = null;
+        tileSelectionFilter = null;
+        if (currentGame) renderBoardWithSelection(currentGame);
+      }
+    };
+    document.addEventListener('keydown', onKey);
+
+    const originalResolve = resolve;
+    tileSelectionResolver = (idx: number) => {
+      document.removeEventListener('keydown', onKey);
+      originalResolve(idx);
+    };
+  });
+}
+
 async function promptCardTarget(state: GameState, cardId: string): Promise<CardUseTarget> {
   const target: CardUseTarget = {};
   if (cardId === 'rebuild') {
-    const tileInput = await showPrompt('输入改建地块索引：');
-    target.targetTileIndex = parseInt(tileInput || '', 10);
+    target.targetTileIndex = await selectTileOnBoard(state, '请点击要改建的地块');
     const typeInput = await showPrompt('输入建筑类型（house/chainStore/park/mall/hotel/gasStation/lab）：');
     target.buildingType = typeInput as BuildingType | undefined;
   } else if (cardId === 'priceRise' || cardId === 'seal' || cardId === 'angel' || cardId === 'devil') {
@@ -1110,8 +1187,7 @@ async function promptCardTarget(state: GameState, cardId: string): Promise<CardU
     const idx = parseInt(choice || '', 10) - 1;
     target.targetPlayerId = state.players[idx]?.id;
   } else if (cardId === 'swapLand' || cardId === 'auction' || cardId === 'monster' || cardId === 'demolish' || cardId === 'swapHouse') {
-    const tileInput = await showPrompt('输入目标地块索引：');
-    target.targetTileIndex = parseInt(tileInput || '', 10);
+    target.targetTileIndex = await selectTileOnBoard(state, '请点击目标地块');
   } else if (cardId === 'summonSpirit') {
     const spiritInput = await showPrompt('输入神明 ID（如 smallWealthGod）：');
     target.targetPlayerId = spiritInput || undefined;
@@ -1125,8 +1201,7 @@ async function promptItemTarget(state: GameState, itemId: string): Promise<ItemU
     const diceInput = await showPrompt('输入要控制的骰子点数 1-6：');
     target.diceValue = parseInt(diceInput || '', 10);
   } else if (itemId === 'barrier' || itemId === 'mine' || itemId === 'timeBomb' || itemId === 'missile') {
-    const tileInput = await showPrompt('输入目标地块索引：');
-    target.targetTileIndex = parseInt(tileInput || '', 10);
+    target.targetTileIndex = await selectTileOnBoard(state, '请点击要放置道具的目标地块');
   }
   return target;
 }
