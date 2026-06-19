@@ -23,7 +23,8 @@ db.exec(`
     max_players INTEGER NOT NULL DEFAULT 4,
     map_id TEXT NOT NULL,
     config TEXT NOT NULL,
-    created_at INTEGER NOT NULL
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER
   );
 
   CREATE TABLE IF NOT EXISTS room_players (
@@ -47,6 +48,13 @@ db.exec(`
     ended_at INTEGER
   );
 `);
+
+// 兼容旧数据库：尝试新增 updated_at 列（已存在则忽略）
+try {
+  db.exec(`ALTER TABLE rooms ADD COLUMN updated_at INTEGER;`);
+} catch {
+  // 列已存在，忽略错误
+}
 
 // 同步配置文件中定义的固定用户（不删除已有用户）
 syncUsersFromConfig();

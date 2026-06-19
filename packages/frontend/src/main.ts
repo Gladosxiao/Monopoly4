@@ -791,7 +791,9 @@ function renderBackpack(container: HTMLElement, state: GameState): void {
   // --- 卡片网格 ---
   const cardsEl = container.querySelector<HTMLDivElement>('#backpack-cards')!;
   cardsEl.innerHTML = '';
-  if (myPlayer.cards.length === 0) {
+  if (state.config.enableCards === false) {
+    cardsEl.innerHTML = '<div class="backpack-empty">卡片系统已禁用</div>';
+  } else if (myPlayer.cards.length === 0) {
     cardsEl.innerHTML = '<div class="backpack-empty">暂无卡片</div>';
   } else {
     const grid = document.createElement('div');
@@ -821,7 +823,9 @@ function renderBackpack(container: HTMLElement, state: GameState): void {
   // --- 道具网格 ---
   const itemsEl = container.querySelector<HTMLDivElement>('#backpack-items')!;
   itemsEl.innerHTML = '';
-  if (myPlayer.items.length === 0) {
+  if (state.config.enableItems === false) {
+    itemsEl.innerHTML = '<div class="backpack-empty">道具系统已禁用</div>';
+  } else if (myPlayer.items.length === 0) {
     itemsEl.innerHTML = '<div class="backpack-empty">暂无道具</div>';
   } else {
     const grid = document.createElement('div');
@@ -877,31 +881,35 @@ function renderActions(container: HTMLElement, state: GameState): void {
         btn.addEventListener('click', () => buyProperty(state.roomId));
         el.appendChild(btn);
       } else if (tile.type === 'shop') {
-        const shopCardBtn = document.createElement('button');
-        shopCardBtn.textContent = '购买卡片';
-        shopCardBtn.addEventListener('click', async () => {
-          const cardChoices = Object.values(CARD_DEFINITIONS)
-            .filter((c) => c.cost > 0)
-            .map((c, i) => ({ value: String(i + 1), label: `${i + 1}. ${c.name} (${c.cost}点)` }));
-          const choice = await showPrompt('选择要购买的卡片：', { choices: cardChoices });
-          const idx = parseInt(choice || '', 10) - 1;
-          const card = Object.values(CARD_DEFINITIONS).filter((c) => c.cost > 0)[idx];
-          if (card) buyCard(state.roomId, card.id);
-        });
-        el.appendChild(shopCardBtn);
+        if (state.config.enableCards !== false) {
+          const shopCardBtn = document.createElement('button');
+          shopCardBtn.textContent = '购买卡片';
+          shopCardBtn.addEventListener('click', async () => {
+            const cardChoices = Object.values(CARD_DEFINITIONS)
+              .filter((c) => c.cost > 0)
+              .map((c, i) => ({ value: String(i + 1), label: `${i + 1}. ${c.name} (${c.cost}点)` }));
+            const choice = await showPrompt('选择要购买的卡片：', { choices: cardChoices });
+            const idx = parseInt(choice || '', 10) - 1;
+            const card = Object.values(CARD_DEFINITIONS).filter((c) => c.cost > 0)[idx];
+            if (card) buyCard(state.roomId, card.id);
+          });
+          el.appendChild(shopCardBtn);
+        }
 
-        const shopItemBtn = document.createElement('button');
-        shopItemBtn.textContent = '购买道具';
-        shopItemBtn.addEventListener('click', async () => {
-          const itemChoices = Object.values(ITEM_DEFINITIONS)
-            .filter((i) => i.cost > 0)
-            .map((it, i) => ({ value: String(i + 1), label: `${i + 1}. ${it.name} (${it.cost}点)` }));
-          const choice = await showPrompt('选择要购买的道具：', { choices: itemChoices });
-          const idx = parseInt(choice || '', 10) - 1;
-          const item = Object.values(ITEM_DEFINITIONS).filter((i) => i.cost > 0)[idx];
-          if (item) buyItem(state.roomId, item.id);
-        });
-        el.appendChild(shopItemBtn);
+        if (state.config.enableItems !== false) {
+          const shopItemBtn = document.createElement('button');
+          shopItemBtn.textContent = '购买道具';
+          shopItemBtn.addEventListener('click', async () => {
+            const itemChoices = Object.values(ITEM_DEFINITIONS)
+              .filter((i) => i.cost > 0)
+              .map((it, i) => ({ value: String(i + 1), label: `${i + 1}. ${it.name} (${it.cost}点)` }));
+            const choice = await showPrompt('选择要购买的道具：', { choices: itemChoices });
+            const idx = parseInt(choice || '', 10) - 1;
+            const item = Object.values(ITEM_DEFINITIONS).filter((i) => i.cost > 0)[idx];
+            if (item) buyItem(state.roomId, item.id);
+          });
+          el.appendChild(shopItemBtn);
+        }
       } else if (tile.type === 'property' && tile.ownerId === currentPlayer.id) {
         const bt = tile.buildingType ?? 'house';
         const canUp = bt !== 'chainStore' && bt !== 'park' && bt !== 'gasStation' && tile.level < 5;
@@ -1028,6 +1036,12 @@ function renderActions(container: HTMLElement, state: GameState): void {
 function renderStockMarket(container: HTMLElement, state: GameState): void {
   const el = container.querySelector<HTMLDivElement>('#stock-market')!;
   el.innerHTML = '';
+
+  if (state.config.enableStock === false) {
+    el.style.display = 'none';
+    return;
+  }
+  el.style.display = '';
 
   const currentPlayer = state.players.find((p) => p.id === currentUser?.id);
   const table = document.createElement('table');

@@ -38,7 +38,7 @@ export const DEFAULT_TEMPLATE: MapTemplate = {
     coupon50: 0,
     miniGame: 0,
   },
-  basePriceRange: [800, 6000],
+  basePriceRange: [80, 600],
   priceCurve: 'sigmoid',
 };
 
@@ -63,7 +63,7 @@ export const FAST_TEMPLATE: MapTemplate = {
     coupon50: 1,
     coupon10: 2,
   },
-  basePriceRange: [1000, 5000],
+  basePriceRange: [100, 500],
 };
 
 /**
@@ -94,7 +94,7 @@ export const ECONOMY_TEMPLATE: MapTemplate = {
     company: 0,
     miniGame: 0,
   },
-  basePriceRange: [1200, 7000],
+  basePriceRange: [120, 700],
 };
 
 /**
@@ -127,7 +127,7 @@ export const PLAYER4_TEMPLATE: MapTemplate = {
     company: 0,
     miniGame: 0,
   },
-  basePriceRange: [1000, 5500],
+  basePriceRange: [100, 550],
   priceCurve: 'sigmoid',
 };
 
@@ -162,7 +162,7 @@ export const MAP80_TEMPLATE: MapTemplate = {
     news: 0,
     company: 0,
   },
-  basePriceRange: [1000, 8000],
+  basePriceRange: [100, 800],
   priceCurve: 'sigmoid',
 };
 
@@ -556,7 +556,7 @@ function assignPrices(slots: (Tile | null)[], template: MapTemplate): void {
   properties.forEach((tile, i) => {
     if (nameToPrice.has(tile.name)) {
       tile.basePrice = nameToPrice.get(tile.name)!;
-      tile.baseRent = Math.round(tile.basePrice * 0.05 / 100) * 100;
+      tile.baseRent = Math.round(tile.basePrice * 0.1);
       return;
     }
 
@@ -569,10 +569,10 @@ function assignPrices(slots: (Tile | null)[], template: MapTemplate): void {
     }
     const price = minPrice + normalized * (maxPrice - minPrice);
     const sizeMultiplier = tile.size === 'large' ? 1.3 : 1;
-    const basePrice = Math.round((price * sizeMultiplier) / 1000) * 1000;
+    const basePrice = Math.max(1, Math.round(price * sizeMultiplier));
     nameToPrice.set(tile.name, basePrice);
     tile.basePrice = basePrice;
-    tile.baseRent = Math.round(tile.basePrice * 0.05 / 100) * 100;
+    tile.baseRent = Math.round(tile.basePrice * 0.1);
   });
 }
 

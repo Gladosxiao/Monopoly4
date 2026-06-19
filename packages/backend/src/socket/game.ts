@@ -33,6 +33,7 @@ import {
   drawLottery,
   castMagicSpell,
   endTurn,
+  applyMiniGameResult,
   canRoll,
   canBuy,
   canUpgrade,
@@ -46,6 +47,7 @@ import {
 } from '../game/engine.js';
 import { getShopCards, canBuyCard } from '../game/cardSystem/index.js';
 import { getShopItems, canBuyItem } from '../game/itemSystem/index.js';
+import { saveGameRecord } from '../gameRecords.js';
 import * as testMode from '../game/testMode/index.js';
 import { runAITurn, startAIAuto } from '../game/testMode/aiPlayer.js';
 
@@ -197,6 +199,7 @@ export function setupSocketIO(httpServer: HttpServer): SocketIOServer<ClientToSe
       saveRoomToDb(room);
       const state = createGame(roomId, { ...DEFAULT_GAME_CONFIG, ...room.config }, room.players);
       games.set(roomId, state);
+      saveGameRecord(state);
       io.to(roomId).emit('room:updated', room);
       io.to(roomId).emit('game:state', state);
       scheduleAITurn(roomId); // 检查是否需要 AI 自动行动
@@ -480,6 +483,22 @@ export function setupSocketIO(httpServer: HttpServer): SocketIOServer<ClientToSe
       const result = castMagicSpell(state, user.id, targetPlayerId, spell);
       if (!result.success) {
         socket.emit('error', result.message);
+        return;
+      }
+      io.to(roomId).emit('game:state', state);
+    });
+
+    socket.on('game:miniGameResult', (roomId, result) => {
+      const state = games.get(roomId);
+      if (!state) return;
+      const player = state.players[state.currentPlayerIndex];
+      if (!player || player.id !== user.id || state.status !== 'minigame') {
+        socket.emit('error', '现在不能提交小游戏结果');
+        return;
+      }
+      const applyResult = applyMiniGameResult(state, user.id, result);
+      if (!applyResult.success) {
+        socket.emit('error', applyResult.message);
         return;
       }
       io.to(roomId).emit('game:state', state);

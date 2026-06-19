@@ -82,6 +82,7 @@ import {
   applyCompanyProfit,
   claimInsurance,
 } from './financialSystem/index.js';
+import { saveGameRecord } from '../gameRecords.js';
 
 
 /**
@@ -96,6 +97,7 @@ export function createGame(roomId: string, config: GameConfig, roomPlayers: Room
       characterId: char.id,
       seatIndex: rp.seatIndex,
       color: char.color,
+      avatar: char.avatar,
       cash: config.totalFunds,
       deposit: 0,
       loan: 0,
@@ -125,6 +127,7 @@ export function createGame(roomId: string, config: GameConfig, roomPlayers: Room
     day: 1,
     month: 1,
     priceIndex: 1,
+    startedAt: Date.now(),
     roadEffects: [],
     spirits: [],
     npcs: [],
@@ -1882,6 +1885,7 @@ export function endTurn(state: GameState): GameState {
       type: 'game:end',
       message: `游戏结束，${activePlayers[0]?.username} 获胜！`,
     });
+    saveGameRecord(state);
     return state;
   }
 
@@ -1896,6 +1900,7 @@ export function endTurn(state: GameState): GameState {
       type: 'game:end',
       message: `游戏结束，${winner?.username || '未知'} 获胜！${victory.reason}`,
     });
+    saveGameRecord(state);
     return state;
   }
 

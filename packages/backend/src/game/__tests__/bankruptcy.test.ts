@@ -21,6 +21,7 @@ describe('rent payment bankruptcy', () => {
   it('支付过路费导致破产并将地产转移给债主', () => {
     const state = makeTestState();
     setOwner(state, 1, 'p2', 'house', 0);
+    state.map.tiles[1].baseRent = 50;
     state.players[0].cash = 10;
     state.players[0].deposit = 10;
     state.currentPlayerIndex = 0;
@@ -40,6 +41,7 @@ describe('rent payment bankruptcy', () => {
   it('部分支付后破产，债主获得剩余全部资金', () => {
     const state = makeTestState();
     setOwner(state, 1, 'p2', 'house', 5); // 高租金
+    state.map.tiles[1].baseRent = 500;
     state.players[0].cash = 100;
     state.players[0].deposit = 0;
     state.currentPlayerIndex = 0;
@@ -148,14 +150,14 @@ describe('property transfer after bankruptcy', () => {
     setOwner(state, 23, 'p1', 'house', 0);
     // 让地块价值极低，三次法拍也无法覆盖高租金
     for (const idx of [1, 3, 21, 23]) {
-      state.map.tiles[idx].basePrice = 1000;
+      state.map.tiles[idx].basePrice = 100;
     }
     state.players[0].cash = 0;
     state.players[0].deposit = 0;
     state.currentPlayerIndex = 0;
     state.pendingTileIndex = 5;
     setOwner(state, 5, 'p2', 'house', 0);
-    state.map.tiles[5].baseRent = 50000;
+    state.map.tiles[5].baseRent = 5000;
 
     handleTileEffect(state);
 

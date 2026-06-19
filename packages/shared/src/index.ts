@@ -22,21 +22,23 @@ export interface Character {
   name: string;
   origin: string;
   color: string;
+  /** 角色头像 URL 或资源路径 */
+  avatar?: string;
 }
 
 export const CHARACTERS: Character[] = [
-  { id: 'sun', name: '孙小美', origin: '中国', color: '#ff6b6b' },
-  { id: 'atu', name: '阿土伯', origin: '中国', color: '#4ecdc4' },
-  { id: 'qian', name: '钱夫人', origin: '中国', color: '#f1c40f' },
-  { id: 'gongben', name: '宫本宝藏', origin: '日本', color: '#1a535c' },
-  { id: 'john', name: '约翰乔', origin: '美国', color: '#3498db' },
-  { id: 'salon', name: '沙隆巴斯', origin: '阿拉伯', color: '#9b59b6' },
-  { id: 'nin', name: '忍太郎', origin: '日本', color: '#c0392b' },
-  { id: 'sara', name: '莎拉公主', origin: '英国', color: '#ff9ff3' },
-  { id: 'tang', name: '糖糖', origin: '中国', color: '#ff6b9d' },
-  { id: 'wumi', name: '乌咪', origin: '印第安', color: '#27ae60' },
-  { id: 'danny', name: '小丹尼', origin: '澳大利亚', color: '#f39c12' },
-  { id: 'beibei', name: '金贝贝', origin: '中国', color: '#1abc9c' },
+  { id: 'sun', name: '孙小美', origin: '中国', color: '#ff6b6b', avatar: '/assets/characters/sun.png' },
+  { id: 'atu', name: '阿土伯', origin: '中国', color: '#4ecdc4', avatar: '/assets/characters/atu.png' },
+  { id: 'qian', name: '钱夫人', origin: '中国', color: '#f1c40f', avatar: '/assets/characters/qian.png' },
+  { id: 'gongben', name: '宫本宝藏', origin: '日本', color: '#1a535c', avatar: '/assets/characters/gongben.png' },
+  { id: 'john', name: '约翰乔', origin: '美国', color: '#3498db', avatar: '/assets/characters/john.png' },
+  { id: 'salon', name: '沙隆巴斯', origin: '阿拉伯', color: '#9b59b6', avatar: '/assets/characters/salon.png' },
+  { id: 'nin', name: '忍太郎', origin: '日本', color: '#c0392b', avatar: '/assets/characters/nin.png' },
+  { id: 'sara', name: '莎拉公主', origin: '英国', color: '#ff9ff3', avatar: '/assets/characters/sara.png' },
+  { id: 'tang', name: '糖糖', origin: '中国', color: '#ff6b9d', avatar: '/assets/characters/tang.png' },
+  { id: 'wumi', name: '乌咪', origin: '印第安', color: '#27ae60', avatar: '/assets/characters/wumi.png' },
+  { id: 'danny', name: '小丹尼', origin: '澳大利亚', color: '#f39c12', avatar: '/assets/characters/danny.png' },
+  { id: 'beibei', name: '金贝贝', origin: '中国', color: '#1abc9c', avatar: '/assets/characters/beibei.png' },
 ];
 
 // ==================== 房间 ====================
@@ -63,6 +65,7 @@ export interface Room {
   config: GameConfig;
   players: RoomPlayer[];
   createdAt: number;
+  updatedAt?: number;
 }
 
 // ==================== 游戏配置 ====================
@@ -266,6 +269,8 @@ export interface Player {
   characterId: string;
   seatIndex: number;
   color: string;
+  /** 角色头像 URL 或资源路径 */
+  avatar?: string;
   cash: number;
   deposit: number;
   loan: number;
@@ -378,6 +383,7 @@ export interface GameState {
   day: number;
   month: number;
   priceIndex: number;
+  startedAt: number;
   winnerId?: string;
   logs: GameLog[];
   roadEffects: RoadEffect[];

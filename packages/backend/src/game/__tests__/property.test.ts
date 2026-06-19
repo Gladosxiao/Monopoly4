@@ -260,7 +260,7 @@ describe('calculateRent', () => {
     setOwner(state, 1, 'p1', 'house', 1);
     const owner = state.players[0];
     const visitor = state.players[1];
-    expect(calculateRent(state.map.tiles[1], owner, state, visitor).rent).toBe(45);
+    expect(calculateRent(state.map.tiles[1], owner, state, visitor).rent).toBe(4);
   });
 
   it('住宅：同组 2 块加成 20%', () => {
@@ -269,7 +269,7 @@ describe('calculateRent', () => {
     setOwner(state, 3, 'p1', 'house', 0);
     const owner = state.players[0];
     const visitor = state.players[1];
-    expect(calculateRent(state.map.tiles[1], owner, state, visitor).rent).toBe(36);
+    expect(calculateRent(state.map.tiles[1], owner, state, visitor).rent).toBe(3);
   });
 
   it('住宅：同组 3 块加成 50%', () => {
@@ -286,7 +286,7 @@ describe('calculateRent', () => {
     setOwner(state, 5, 'p1', 'house', 0);
     const owner = state.players[0];
     const visitor = state.players[1];
-    expect(calculateRent(state.map.tiles[1], owner, state, visitor).rent).toBe(45);
+    expect(calculateRent(state.map.tiles[1], owner, state, visitor).rent).toBe(4);
   });
 
   it('连锁店：按全图连锁店数量联合收费', () => {
@@ -296,7 +296,7 @@ describe('calculateRent', () => {
     setOwner(state, 5, 'p1', 'chainStore', 1);
     const owner = state.players[0];
     const visitor = state.players[1];
-    expect(calculateRent(state.map.tiles[1], owner, state, visitor).rent).toBe(90);
+    expect(calculateRent(state.map.tiles[1], owner, state, visitor).rent).toBe(9);
   });
 
   it('商场：baseRent * level * 转盘倍数', () => {
@@ -304,7 +304,7 @@ describe('calculateRent', () => {
     setOwner(state, 21, 'p1', 'mall', 2);
     const owner = state.players[0];
     const visitor = state.players[1];
-    expect(calculateRent(state.map.tiles[21], owner, state, visitor).rent).toBe(240);
+    expect(calculateRent(state.map.tiles[21], owner, state, visitor).rent).toBe(24);
   });
 
   it('旅馆：baseRent * level * 天数，并附带休息天数', () => {
@@ -313,7 +313,7 @@ describe('calculateRent', () => {
     const owner = state.players[0];
     const visitor = state.players[1];
     const result = calculateRent(state.map.tiles[21], owner, state, visitor);
-    expect(result.rent).toBe(240);
+    expect(result.rent).toBe(24);
     expect(result.hotelDays).toBe(1);
   });
 
@@ -340,7 +340,7 @@ describe('calculateRent', () => {
     const owner = state.players[0];
     const visitor = state.players[1];
     visitor.spirit = { spiritId: 'smallPovertyGod', remainingDays: 7 };
-    expect(calculateRent(state.map.tiles[1], owner, state, visitor).rent).toBe(45);
+    expect(calculateRent(state.map.tiles[1], owner, state, visitor).rent).toBe(4);
   });
 
   it('大穷神：过路费翻倍', () => {
@@ -349,7 +349,7 @@ describe('calculateRent', () => {
     const owner = state.players[0];
     const visitor = state.players[1];
     visitor.spirit = { spiritId: 'bigPovertyGod', remainingDays: 7 };
-    expect(calculateRent(state.map.tiles[1], owner, state, visitor).rent).toBe(60);
+    expect(calculateRent(state.map.tiles[1], owner, state, visitor).rent).toBe(6);
   });
 
   it('小财神：过路费减半', () => {
@@ -358,7 +358,7 @@ describe('calculateRent', () => {
     const owner = state.players[0];
     const visitor = state.players[1];
     visitor.spirit = { spiritId: 'smallWealthGod', remainingDays: 7 };
-    expect(calculateRent(state.map.tiles[1], owner, state, visitor).rent).toBe(15);
+    expect(calculateRent(state.map.tiles[1], owner, state, visitor).rent).toBe(1);
   });
 
   it('大财神：免过路费', () => {
@@ -377,7 +377,7 @@ describe('calculateRent', () => {
     state.roadEffects.push({ id: 'r1', type: 'priceRise', group: 0, multiplier: 2, remainingDays: 5, sourcePlayerId: 'p1' });
     const owner = state.players[0];
     const visitor = state.players[1];
-    expect(calculateRent(state.map.tiles[1], owner, state, visitor).rent).toBe(72); // 400 * 1.2 * 2
+    expect(calculateRent(state.map.tiles[1], owner, state, visitor).rent).toBe(7); // 400 * 1.2 * 2
   });
 
   it('查封卡：指定路段无法收租', () => {

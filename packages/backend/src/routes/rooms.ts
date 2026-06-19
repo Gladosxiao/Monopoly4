@@ -16,6 +16,7 @@ function rowToRoom(row: {
   map_id: string;
   config: string;
   created_at: number;
+  updated_at?: number | null;
 }): Room {
   const players = db
     .prepare(
@@ -49,6 +50,7 @@ function rowToRoom(row: {
       })
     ),
     createdAt: row.created_at,
+    updatedAt: row.updated_at ?? undefined,
   };
 }
 
@@ -63,6 +65,7 @@ export function loadRoomFromDb(roomId: string): Room | undefined {
         map_id: string;
         config: string;
         created_at: number;
+        updated_at?: number | null;
       }
     | undefined;
   if (!row) return undefined;
@@ -72,9 +75,11 @@ export function loadRoomFromDb(roomId: string): Room | undefined {
 }
 
 export function saveRoomToDb(room: Room): void {
+  const now = Date.now();
+  room.updatedAt = now;
   db.prepare(
-    'INSERT OR REPLACE INTO rooms (id, name, host_id, status, max_players, map_id, config, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
-  ).run(room.id, room.name, room.hostId, room.status, room.maxPlayers, room.mapId, JSON.stringify(room.config), room.createdAt);
+    'INSERT OR REPLACE INTO rooms (id, name, host_id, status, max_players, map_id, config, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
+  ).run(room.id, room.name, room.hostId, room.status, room.maxPlayers, room.mapId, JSON.stringify(room.config), room.createdAt, now);
 
   db.prepare('DELETE FROM room_players WHERE room_id = ?').run(room.id);
   const insert = db.prepare(
