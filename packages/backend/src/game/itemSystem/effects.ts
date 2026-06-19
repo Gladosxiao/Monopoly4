@@ -78,9 +78,16 @@ function addStatusEffect(
 function setVehicle(player: Player, itemId: 'bike' | 'car' | undefined): void {
   // 移除现有交通工具
   player.items = player.items.filter((i) => i.itemId !== 'bike' && i.itemId !== 'car');
+  // 同步更新玩家载具状态，确保 getMaxDiceCount() 读取到最新值
+  player.vehicle = itemId ?? 'walk';
   if (itemId) {
     player.items.push({ instanceId: generateId(), itemId, quantity: 1 });
   }
+}
+
+function destroyVehicle(player: Player): void {
+  player.items = player.items.filter((i) => i.itemId !== 'bike' && i.itemId !== 'car');
+  player.vehicle = 'walk';
 }
 
 function placeTrap(state: GameState, user: Player, itemId: 'barrier' | 'mine' | 'timeBomb', tileIndex: number): ItemEffectResult {
@@ -182,10 +189,17 @@ const missile: ItemEffect = (state, user, ctx) => {
     hit = true;
   }
 
-  // 对站在目标地块的玩家造成住院效果
+  // 对站在目标地块的玩家造成住院效果，并摧毁其载具
   state.players.forEach((p) => {
     if (p.position === centerIndex && !p.isBankrupt) {
       addStatusEffect(p, 'hospital', 3, user.id);
+      state.logs.push({
+        timestamp: Date.now(),
+        type: 'status:added',
+        actorId: p.id,
+        message: `${p.username} 获得状态: hospital，持续 3 天`,
+      });
+      destroyVehicle(p);
       log(state, 'item:missileHit', user.id, `${p.username} 被飞弹击中，住院 3 天`, p.id);
     }
   });

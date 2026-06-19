@@ -14,8 +14,7 @@ import { authMiddleware, type AuthRequest } from '../auth.js';
 import { saveRoomToDb, loadRoomFromDb } from '../routes/rooms.js';
 import {
   createGame,
-  getDiceCount,
-  rollDice,
+  roll,
   movePlayer,
   buyProperty,
   upgradeProperty,
@@ -33,6 +32,8 @@ import {
   canBuy,
   canUpgrade,
   canRebuild,
+  canUseCard,
+  canUseItem,
 } from '../game/engine.js';
 import { getShopCards, canBuyCard } from '../game/cardSystem/index.js';
 import { getShopItems, canBuyItem } from '../game/itemSystem/index.js';
@@ -158,8 +159,14 @@ export function setupSocketIO(httpServer: HttpServer): void {
         socket.emit('error', '现在不能掷骰');
         return;
       }
-      const steps = diceCount ? rollDice(diceCount) : rollDice(getDiceCount(state.config.moveMode));
-      movePlayer(state, steps);
+      const result = roll(state, diceCount);
+      if (!result.success) {
+        socket.emit('error', result.message);
+        return;
+      }
+      if (result.steps !== undefined && result.steps !== 0) {
+        movePlayer(state, result.steps);
+      }
       io.to(roomId).emit('game:state', state);
     });
 
@@ -212,8 +219,7 @@ export function setupSocketIO(httpServer: HttpServer): void {
     socket.on('game:useCard', (roomId, cardId, target) => {
       const state = games.get(roomId);
       if (!state) return;
-      const player = state.players[state.currentPlayerIndex];
-      if (player.id !== user.id || state.status !== 'acting') {
+      if (!canUseCard(state, user.id)) {
         socket.emit('error', '现在不能使用卡片');
         return;
       }
@@ -271,8 +277,7 @@ export function setupSocketIO(httpServer: HttpServer): void {
     socket.on('game:useItem', (roomId, itemId, target) => {
       const state = games.get(roomId);
       if (!state) return;
-      const player = state.players[state.currentPlayerIndex];
-      if (player.id !== user.id || state.status !== 'acting') {
+      if (!canUseItem(state, user.id)) {
         socket.emit('error', '现在不能使用道具');
         return;
       }
