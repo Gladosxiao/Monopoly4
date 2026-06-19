@@ -2,6 +2,7 @@ import {
   type Room,
   type GameState,
   type GameLog,
+  type Player,
   type PublicUser,
   type CardUseTarget,
   type ItemUseTarget,
@@ -63,6 +64,7 @@ let currentGame: GameState | null = null;
 let currentUser: PublicUser | null = loadUser();
 let cleanupFns: Array<() => void> = [];
 let isStockCollapsed = false;
+let isBackpackCollapsed = false;
 
 /** 显示 Toast 通知 */
 function showToast(message: string, type: 'info' | 'error' | 'success' = 'info') {
@@ -498,32 +500,38 @@ async function navigateToGame(roomId: string): Promise<void> {
       <h1>游戏中 - 房间 ${roomId}</h1>
       <button id="btn-exit">退出</button>
     </header>
+    <div class="stock-top-panel">
+      <div class="stock-top-header">
+        <h2>股市与公司</h2>
+        <button id="btn-toggle-stock" class="btn-icon" title="展开/折叠">−</button>
+      </div>
+      <div id="stock-market"></div>
+    </div>
     <div class="game-layout">
       <div class="board-wrap"></div>
       <div class="side-panel">
-        <div class="info-card stock-card">
-          <div class="stock-card-header">
-            <h2>股市与公司</h2>
-            <button id="btn-toggle-stock" class="btn-icon" title="展开/折叠">−</button>
-          </div>
-          <div id="stock-market"></div>
-        </div>
-        <div class="info-card">
+        <div class="info-card player-info-card">
           <h2>玩家信息</h2>
           <div id="players-info"></div>
         </div>
-        <div class="info-card backpack-card">
-          <div class="backpack-tabs">
-            <button class="backpack-tab active" data-tab="cards">卡片</button>
-            <button class="backpack-tab" data-tab="items">道具</button>
-          </div>
-          <div id="backpack-cards" class="backpack-panel active"></div>
-          <div id="backpack-items" class="backpack-panel"></div>
-        </div>
-        <div class="info-card">
+        <div class="info-card actions-card">
           <h2>操作</h2>
           <div id="game-actions"></div>
         </div>
+      </div>
+    </div>
+    <div class="backpack-wide-panel">
+      <div class="backpack-wide-header">
+        <h2>卡片 / 道具</h2>
+        <button id="btn-toggle-backpack" class="btn-icon" title="展开/折叠">−</button>
+      </div>
+      <div id="backpack-wide-content">
+        <div class="backpack-tabs">
+          <button class="backpack-tab active" data-tab="cards">卡片</button>
+          <button class="backpack-tab" data-tab="items">道具</button>
+        </div>
+        <div id="backpack-cards" class="backpack-panel active"></div>
+        <div id="backpack-items" class="backpack-panel"></div>
       </div>
     </div>
     <div class="game-logs-panel">
@@ -568,27 +576,39 @@ async function navigateToGame(roomId: string): Promise<void> {
   });
 
   // 背包 Tab 切换
-  container.querySelectorAll<HTMLButtonElement>('.backpack-tab').forEach((tab) => {
+  const backpackWideContent = container.querySelector<HTMLDivElement>('#backpack-wide-content')!;
+  backpackWideContent.querySelectorAll<HTMLButtonElement>('.backpack-tab').forEach((tab) => {
     tab.addEventListener('click', () => {
-      container.querySelectorAll('.backpack-tab').forEach((t) => t.classList.remove('active'));
-      container.querySelectorAll('.backpack-panel').forEach((p) => p.classList.remove('active'));
+      backpackWideContent.querySelectorAll('.backpack-tab').forEach((t) => t.classList.remove('active'));
+      backpackWideContent.querySelectorAll('.backpack-panel').forEach((p) => p.classList.remove('active'));
       tab.classList.add('active');
       const target = tab.dataset.tab;
-      const panel = container.querySelector(`#backpack-${target}`);
+      const panel = backpackWideContent.querySelector(`#backpack-${target}`);
       if (panel) panel.classList.add('active');
     });
   });
 
   // 股市面板折叠切换
+  const stockPanel = container.querySelector('.stock-top-panel')!;
   const toggleStockBtn = container.querySelector<HTMLButtonElement>('#btn-toggle-stock')!;
-  const stockCard = container.querySelector('.stock-card')!;
-  stockCard.classList.toggle('collapsed', isStockCollapsed);
+  stockPanel.classList.toggle('collapsed', isStockCollapsed);
   toggleStockBtn.textContent = isStockCollapsed ? '+' : '−';
   toggleStockBtn.addEventListener('click', () => {
     isStockCollapsed = !isStockCollapsed;
-    stockCard.classList.toggle('collapsed', isStockCollapsed);
+    stockPanel.classList.toggle('collapsed', isStockCollapsed);
     toggleStockBtn.textContent = isStockCollapsed ? '+' : '−';
     if (currentGame) renderStockMarket(container, currentGame);
+  });
+
+  // 卡片/道具面板折叠切换
+  const backpackPanel = container.querySelector('.backpack-wide-panel')!;
+  const toggleBackpackBtn = container.querySelector<HTMLButtonElement>('#btn-toggle-backpack')!;
+  backpackPanel.classList.toggle('collapsed', isBackpackCollapsed);
+  toggleBackpackBtn.textContent = isBackpackCollapsed ? '+' : '−';
+  toggleBackpackBtn.addEventListener('click', () => {
+    isBackpackCollapsed = !isBackpackCollapsed;
+    backpackPanel.classList.toggle('collapsed', isBackpackCollapsed);
+    toggleBackpackBtn.textContent = isBackpackCollapsed ? '+' : '−';
   });
 
   function renderGame(state: GameState): void {
@@ -625,24 +645,66 @@ async function navigateToGame(roomId: string): Promise<void> {
   }
 }
 
+function renderPlayerInfoCard(player: Player, state: GameState, isSelf = false): HTMLDivElement {
+  const div = document.createElement('div');
+  div.className = `player-info ${isSelf ? 'player-info-self' : ''}`;
+  const isCurrent = state.players[state.currentPlayerIndex].id === player.id;
+  div.innerHTML = `
+    <div class="player-info-header">
+      <strong style="color:${player.color}">${player.username}</strong>
+      ${isCurrent ? '<span class="current-turn">← 当前回合</span>' : ''}
+      ${player.isAI ? '<span class="badge bot">AI</span>' : ''}
+    </div>
+    <div class="info-section">现金: $${player.cash} | 存款: $${player.deposit} | 贷款: $${player.loan} | 点券: ${player.coupons}</div>
+    <div class="info-section">地产: ${player.properties.length} 处 | 保险: ${player.insuranceDays} 天</div>
+    <div class="info-section">卡片: ${player.cards.length}/15 | 道具: ${player.items.reduce((s, i) => s + i.quantity, 0)}</div>
+    ${player.spirit ? `<div class="info-section">神明: ${player.spirit.spiritId}</div>` : ''}
+    ${player.isBankrupt ? '<div class="bankrupt">已破产</div>' : ''}
+  `;
+  return div;
+}
+
 function renderPlayersInfo(container: HTMLElement, state: GameState): void {
   const el = container.querySelector<HTMLDivElement>('#players-info')!;
   el.innerHTML = '';
-  state.players.forEach((p) => {
-    const div = document.createElement('div');
-    div.className = 'player-info';
-    const isCurrent = state.players[state.currentPlayerIndex].id === p.id;
-    div.innerHTML = `
-      <strong style="color:${p.color}">${p.username}</strong>
-      ${isCurrent ? ' ← 当前回合' : ''}
-      <div class="info-section">现金: $${p.cash} | 存款: $${p.deposit} | 贷款: $${p.loan} | 点券: ${p.coupons}</div>
-      <div class="info-section">地产: ${p.properties.length} 处 | 保险: ${p.insuranceDays} 天</div>
-      <div class="info-section">卡片: ${p.cards.length}/15 | 道具: ${p.items.reduce((s, i) => s + i.quantity, 0)}</div>
-      ${p.spirit ? `<div class="info-section">神明: ${p.spirit.spiritId}</div>` : ''}
-      ${p.isBankrupt ? '<div class="bankrupt">已破产</div>' : ''}
-    `;
-    el.appendChild(div);
-  });
+
+  const self = state.players.find((p) => p.id === currentUser?.id);
+  const others = state.players.filter((p) => p.id !== currentUser?.id);
+
+  if (self) {
+    el.appendChild(renderPlayerInfoCard(self, state, true));
+  }
+
+  if (others.length > 0) {
+    const selectWrap = document.createElement('div');
+    selectWrap.className = 'player-info-select-wrap';
+    const select = document.createElement('select');
+    select.className = 'player-info-select';
+    select.innerHTML = `<option value="">其他玩家 (${others.length})</option>` +
+      others.map((p) => `<option value="${p.id}">${p.username}</option>`).join('');
+    selectWrap.appendChild(select);
+
+    const otherPanel = document.createElement('div');
+    otherPanel.className = 'player-info-other';
+    otherPanel.style.display = 'none';
+
+    select.addEventListener('change', () => {
+      otherPanel.innerHTML = '';
+      if (select.value) {
+        const player = others.find((p) => p.id === select.value);
+        if (player) {
+          otherPanel.appendChild(renderPlayerInfoCard(player, state));
+          otherPanel.style.display = 'block';
+        }
+      } else {
+        otherPanel.style.display = 'none';
+      }
+    });
+
+    el.appendChild(selectWrap);
+    el.appendChild(otherPanel);
+  }
+
   const monthInfo = document.createElement('div');
   monthInfo.className = 'month-info';
   monthInfo.textContent = `第 ${state.month} 月 第 ${state.day} 天 | 物价指数: ${state.priceIndex.toFixed(2)} | 乐透奖池: $${state.lotteryJackpot}`;
@@ -887,44 +949,6 @@ function renderActions(container: HTMLElement, state: GameState): void {
           if (spell) castMagicSpell(state.roomId, target.id, spell);
         });
         el.appendChild(magicBtn);
-      }
-
-      // 使用卡片按钮
-      if (currentPlayer.cards.length > 0) {
-        const cardBtn = document.createElement('button');
-        cardBtn.textContent = `使用卡片 (${currentPlayer.cards.length})`;
-        cardBtn.addEventListener('click', async () => {
-          const cardChoices = currentPlayer.cards.map((c, i) => {
-            const def = CARD_DEFINITIONS[c.cardId];
-            return { value: String(i + 1), label: `${i + 1}. ${def?.name ?? c.cardId}` };
-          });
-          const choice = await showPrompt('选择卡片：', { choices: cardChoices });
-          const idx = parseInt(choice || '', 10) - 1;
-          const card = currentPlayer.cards[idx];
-          if (!card) return;
-          const target = await promptCardTarget(state, card.cardId);
-          useCard(state.roomId, card.instanceId, target);
-        });
-        el.appendChild(cardBtn);
-      }
-
-      // 使用道具按钮
-      if (currentPlayer.items.length > 0) {
-        const itemBtn = document.createElement('button');
-        itemBtn.textContent = `使用道具 (${currentPlayer.items.reduce((s, i) => s + i.quantity, 0)})`;
-        itemBtn.addEventListener('click', async () => {
-          const itemChoices = currentPlayer.items.map((it, i) => {
-            const def = ITEM_DEFINITIONS[it.itemId];
-            return { value: String(i + 1), label: `${i + 1}. ${def?.name ?? it.itemId} ×${it.quantity}` };
-          });
-          const choice = await showPrompt('选择道具：', { choices: itemChoices });
-          const idx = parseInt(choice || '', 10) - 1;
-          const item = currentPlayer.items[idx];
-          if (!item) return;
-          const target = await promptItemTarget(state, item.itemId);
-          useItem(state.roomId, item.itemId, target);
-        });
-        el.appendChild(itemBtn);
       }
 
       // 理赔按钮

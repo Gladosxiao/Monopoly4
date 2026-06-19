@@ -539,32 +539,26 @@ select:focus {
 .game-layout {
   display: grid;
   grid-template-columns: 2fr 1fr;
-  grid-template-rows: 1fr auto;
-  grid-template-areas:
-    "board side"
-    "logs logs";
   gap: var(--space-md);
-  align-items: start;
+  align-items: stretch;
 }
 
 .board-wrap {
-  grid-area: board;
   display: flex;
   justify-content: center;
+  align-items: flex-start;
 }
 
 .side-panel {
-  grid-area: side;
   display: flex;
   flex-direction: column;
   gap: var(--space-md);
-  max-height: calc(100vh - 280px);
+  min-height: 0;
   overflow-y: auto;
   padding-right: 4px;
 }
 
 .game-logs-panel {
-  grid-area: logs;
   background: var(--color-panel);
   padding: var(--space-md);
   border-radius: var(--radius-md);
@@ -604,9 +598,62 @@ select:focus {
   border-radius: var(--radius-sm);
 }
 
+.player-info-self {
+  border: 1px solid var(--color-primary);
+  background: rgba(233, 69, 96, 0.08);
+}
+
+.player-info-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.player-info-header strong {
+  font-size: var(--font-size-base);
+}
+
+.current-turn {
+  font-size: var(--font-size-sm);
+  color: var(--color-success);
+}
+
+.player-info-select-wrap {
+  margin-top: var(--space-xs);
+}
+
+.player-info-select {
+  width: 100%;
+}
+
+.player-info-other {
+  margin-top: var(--space-xs);
+}
+
 .player-info .bankrupt {
   color: var(--color-error);
   font-weight: bold;
+}
+
+.actions-card {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.actions-card h2 {
+  flex-shrink: 0;
+}
+
+#game-actions {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  padding-right: 4px;
 }
 
 .info-section {
@@ -720,15 +767,6 @@ select:focus {
   font-size: var(--font-size-sm);
 }
 
-#game-actions {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-sm);
-  max-height: 320px;
-  overflow-y: auto;
-  padding-right: 4px;
-}
-
 #game-actions button {
   width: 100%;
   text-align: left;
@@ -767,33 +805,61 @@ select:focus {
   border-radius: var(--radius-md);
 }
 
-/* 股市面板：置顶、可折叠 */
-.stock-card {
-  position: sticky;
-  top: 0;
-  z-index: 10;
+/* 顶部/底部全宽面板：股市、卡片道具、日志 */
+.stock-top-panel,
+.backpack-wide-panel,
+.game-logs-panel {
   background: var(--color-panel);
-  max-height: 70vh;
+  padding: var(--space-md);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+  display: flex;
+  flex-direction: column;
+}
+
+.stock-top-panel {
+  max-height: 240px;
   overflow-y: auto;
   transition: max-height 0.25s ease;
 }
 
-.stock-card.collapsed {
+.stock-top-panel.collapsed {
   max-height: none;
   overflow-y: visible;
 }
 
-.stock-card-header {
+.backpack-wide-panel {
+  max-height: 280px;
+  overflow-y: auto;
+  transition: max-height 0.25s ease;
+}
+
+.backpack-wide-panel.collapsed {
+  max-height: none;
+  overflow-y: visible;
+}
+
+.stock-top-panel > #stock-market,
+.backpack-wide-panel > #backpack-wide-content {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.stock-top-header,
+.backpack-wide-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
   gap: var(--space-sm);
+  margin-bottom: var(--space-sm);
 }
 
-.stock-card-header h2 {
+.stock-top-header h2,
+.backpack-wide-header h2,
+.game-logs-panel h2 {
   margin: 0;
-  border-bottom: none;
-  padding-bottom: 0;
+  font-size: var(--font-size-lg);
 }
 
 .btn-icon {

@@ -359,6 +359,27 @@ export function setupSocketIO(httpServer: HttpServer): SocketIOServer<ClientToSe
         socket.emit('error', result.message);
         return;
       }
+
+      // 遥控骰子在掷骰阶段直接使用，立即掷出并移动
+      if (itemId === 'remoteDice' && state.status === 'rolling') {
+        const rollResult = roll(state);
+        if (rollResult.success && rollResult.steps !== undefined && rollResult.steps !== 0) {
+          movePlayer(state, rollResult.steps);
+        }
+        const player = state.players[state.currentPlayerIndex];
+        const tile = state.map.tiles[player.position];
+        const shouldWait = tile.type === 'property' && (
+          !tile.ownerId ||
+          (tile.ownerId === player.id && tile.level < 5 && tile.buildingType !== 'chainStore' && tile.buildingType !== 'park' && tile.buildingType !== 'gasStation')
+        );
+        if (!shouldWait) {
+          endTurn(state);
+          io.to(roomId).emit('game:state', state);
+          scheduleAITurn(roomId);
+          return;
+        }
+      }
+
       io.to(roomId).emit('game:state', state);
     });
 
