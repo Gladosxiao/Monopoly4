@@ -124,4 +124,20 @@ describe('selectCharacter', () => {
     const result = selectCharacter(room.id, 'p3', 'sun');
     expect(result).toBeNull();
   });
+
+  it('游戏已开始时无法切换准备状态', () => {
+    const room = makeTestRoom({ status: 'playing' });
+    rooms.set(room.id, room);
+    const result = toggleReady(room.id, 'p2', true);
+    expect(result).toBeNull();
+    expect(room.players[1].isReady).toBe(false);
+  });
+
+  it('游戏已开始时无法选择角色', () => {
+    const room = makeTestRoom({ status: 'playing' });
+    rooms.set(room.id, room);
+    const result = selectCharacter(room.id, 'p2', 'qian');
+    expect(result).toBeNull();
+    expect(room.players[1].characterId).toBe('atu');
+  });
 });

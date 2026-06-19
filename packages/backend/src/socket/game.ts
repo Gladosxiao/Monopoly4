@@ -54,10 +54,12 @@ import { runAITurn, startAIAuto } from '../game/testMode/aiPlayer.js';
 const JWT_SECRET = process.env.JWT_SECRET || 'monopoly4-dev-secret';
 
 /** 是否启用测试模式 Socket 事件（默认关闭）。 */
-const TEST_MODE_ENABLED = process.env.ENABLE_TEST_MODE === 'true';
+function isTestModeEnabled(): boolean {
+  return process.env.ENABLE_TEST_MODE === 'true';
+}
 
 function assertTestModeEnabled(socket: Socket): boolean {
-  if (!TEST_MODE_ENABLED) {
+  if (!isTestModeEnabled()) {
     socket.emit('error', '测试模式未启用');
     return false;
   }
