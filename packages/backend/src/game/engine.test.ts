@@ -15,13 +15,25 @@ import {
   rebuildTile,
   useCard,
   endTurn,
+  getAllowedDiceCounts,
 } from './engine.js';
 
 function makeTestState(): GameState {
-  const state = createGame('room-1', { totalFunds: 100000, moveMode: 'walk', winCondition: 'unlimited', mapId: 'simple' }, [
-    { userId: 'p1', username: '玩家1', characterId: 'sun', isReady: true, isHost: true, seatIndex: 0 },
-    { userId: 'p2', username: '玩家2', characterId: 'atu', isReady: true, isHost: false, seatIndex: 1 },
-  ]);
+  const state = createGame(
+    'room-1',
+    {
+      totalFunds: 100000,
+      moveMode: 'walk',
+      landLease: 'perpetual',
+      gameTime: 'perpetual',
+      winCondition: 'unlimited',
+      mapId: 'simple',
+    },
+    [
+      { userId: 'p1', username: '玩家1', characterId: 'sun', isReady: true, isHost: true, seatIndex: 0 },
+      { userId: 'p2', username: '玩家2', characterId: 'atu', isReady: true, isHost: false, seatIndex: 1 },
+    ]
+  );
   // 固定物价指数便于断言
   state.priceIndex = 1;
   return state;
@@ -290,13 +302,14 @@ describe('useCard', () => {
     expect(p1.spirit).toBeUndefined();
   });
 
-  it('使用请神符可召唤神明', () => {
+  it('使用请神符可召唤最近的神明', () => {
     const state = makeTestState();
     const p1 = state.players[0];
+    p1.position = 21;
     const instanceId = giveCard(p1, 'summonSpirit');
-    const result = useCard(state, 'p1', instanceId, { targetPlayerId: 'bigWealthGod' });
+    const result = useCard(state, 'p1', instanceId);
     expect(result.success).toBe(true);
-    expect(p1.spirit?.spiritId).toBe('bigWealthGod');
+    expect(p1.spirit?.spiritId).toBe('smallPovertyGod');
   });
 });
 
@@ -317,5 +330,123 @@ describe('endTurn 状态递减', () => {
     endTurn(state);
     endTurn(state);
     expect(state.players[0].spirit).toBeUndefined();
+  });
+});
+
+describe('免费卡阈值', () => {
+  it('小额过路费不自动消耗免费卡', () => {
+    const state = makeTestState();
+    state.priceIndex = 1;
+    const visitor = state.players[1];
+    visitor.statusEffects.push({ type: 'freePass', remainingDays: 1 });
+    visitor.cash = 100000;
+    visitor.deposit = 0;
+    setOwner(state, 1, 'p1', 'house', 0);
+    const owner = state.players[0];
+    // 住宅 baseRent=400，未超过 2000 阈值
+    const { rent } = calculateRent(state.map.tiles[1], owner, state, visitor);
+    expect(rent).toBe(400);
+    // 通过真实回合流程触发支付
+    visitor.position = 1;
+    state.pendingTileIndex = 1;
+    state.currentPlayerIndex = 1;
+    state.status = 'acting';
+    endTurn(state);
+    // 免费卡未用于抵扣，因此现金减少；免费卡可能因天数递减被移除
+    expect(visitor.cash).toBe(100000 - 400);
+  });
+
+  it('高额过路费自动消耗免费卡', () => {
+    const state = makeTestState();
+    state.priceIndex = 1;
+    const visitor = state.players[1];
+    visitor.statusEffects.push({ type: 'freePass', remainingDays: 1 });
+    visitor.cash = 100000;
+    visitor.deposit = 0;
+    setOwner(state, 1, 'p1', 'house', 5);
+    const owner = state.players[0];
+    // 住宅 5 级 baseRent=400，rent=400*(1+5*0.5)=1400，仍低于 2000；通过涨价卡让租金超过阈值
+    useCard(state, 'p1', giveCard(state.players[0], 'priceRise'), { targetGroup: 0 });
+    const { rent } = calculateRent(state.map.tiles[1], owner, state, visitor);
+    expect(rent).toBeGreaterThan(2000);
+    visitor.position = 1;
+    state.pendingTileIndex = 1;
+    state.currentPlayerIndex = 1;
+    state.status = 'acting';
+    endTurn(state);
+    expect(visitor.statusEffects.some((e) => e.type === 'freePass')).toBe(false);
+    expect(visitor.cash).toBe(100000);
+  });
+});
+
+describe('破产法拍', () => {
+  it('资金不足时先进行法拍而非直接破产', () => {
+    const state = makeTestState();
+    const visitor = state.players[1];
+    visitor.cash = 0;
+    visitor.deposit = 0;
+    // 给 visitor 一块地用于法拍
+    setOwner(state, 9, 'p2', 'house', 2);
+    setOwner(state, 1, 'p1', 'house', 5);
+    const owner = state.players[0];
+    // 触发高额过路费
+    const { rent } = calculateRent(state.map.tiles[1], owner, state, visitor);
+    expect(rent).toBeGreaterThan(0);
+    // 通过 applyRentPayment 内部会触发法拍；由于 applyRentPayment 未导出，
+    // 这里通过移动到该格并结束回合触发
+    visitor.position = 1;
+    state.pendingTileIndex = 1;
+    state.currentPlayerIndex = 1;
+    state.status = 'acting';
+    endTurn(state);
+    expect(visitor.isBankrupt).toBe(false);
+    expect(visitor.liquidationCount).toBe(1);
+    expect(state.map.tiles[9].ownerId).toBeUndefined();
+  });
+});
+
+describe('地图系统格', () => {
+  it('经过卡片格可获得随机卡片', () => {
+    const state = makeTestState();
+    const player = state.players[0];
+    player.position = 6;
+    state.pendingTileIndex = 6;
+    state.status = 'acting';
+    endTurn(state);
+    expect(player.cards.length).toBeGreaterThan(0);
+  });
+
+  it('踩到得点券格可获得对应点券', () => {
+    const state = makeTestState();
+    const player = state.players[0];
+    player.position = 14;
+    state.pendingTileIndex = 14;
+    state.status = 'acting';
+    const before = player.coupons;
+    endTurn(state);
+    expect(player.coupons).toBe(before + 10);
+  });
+});
+
+describe('月度结算', () => {
+  it('无贷款者获得 10% 存款利息', () => {
+    const state = makeTestState();
+    const player = state.players[0];
+    player.deposit = 10000;
+    player.loan = 0;
+    state.month = 1;
+    state.day = 30;
+    // 推进到跨天触发月度结算
+    endTurn(state);
+    endTurn(state);
+    expect(player.deposit).toBe(11000);
+  });
+});
+
+describe('骰子选择', () => {
+  it('汽车可选 1-3 颗骰子', () => {
+    expect(getAllowedDiceCounts('car')).toEqual([1, 2, 3]);
+    expect(getAllowedDiceCounts('bike')).toEqual([1, 2]);
+    expect(getAllowedDiceCounts('walk')).toEqual([1]);
   });
 });
