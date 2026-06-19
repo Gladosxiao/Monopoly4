@@ -89,7 +89,9 @@ export type TileType =
   | 'shop'
   | 'card'
   | 'coupon'
-  | 'tax';
+  | 'tax'
+  | 'news'
+  | 'company';
 
 export type PropertySize = 'small' | 'large';
 
@@ -109,6 +111,7 @@ export interface Tile {
   size?: PropertySize; // 仅 property 类型，区分小块/大块土地
   group?: number; // 连接式路段分组，property 类型使用
   couponValue?: number; // 仅 coupon 类型，点券数值
+  companyId?: string; // 仅 company 类型，对应公司 ID
   basePrice: number;
   baseRent: number;
   level: number;
@@ -121,6 +124,41 @@ export interface GameMap {
   name: string;
   path: number[];
   tiles: Tile[];
+}
+
+// ==================== 股票、公司与保险 ====================
+
+export interface Stock {
+  id: string;
+  name: string;
+  companyId: string;
+  price: number;
+  basePrice: number;
+  totalShares: number;
+  availableShares: number;
+  suspendedDays: number;
+  fluctuation: number; // 当日涨跌幅百分比
+}
+
+export type CompanyType =
+  | 'airline'
+  | 'computer'
+  | 'insurance'
+  | 'automobile'
+  | 'petroleum'
+  | 'hotel'
+  | 'restaurant'
+  | 'departmentStore'
+  | 'construction';
+
+export interface Company {
+  id: string;
+  name: string;
+  type: CompanyType;
+  tileIndex: number;
+  profit: number;
+  totalProfit: number;
+  chairmanPlayerId?: string;
 }
 
 // ==================== 玩家与游戏状态 ====================
@@ -172,6 +210,8 @@ export interface Player {
   items: ItemInstance[];
   spirit?: PlayerSpirit;
   statusEffects: StatusEffect[];
+  stockHoldings: Record<string, number>;
+  insuranceDays: number;
   isBankrupt: boolean;
   isAI: boolean;
   liquidationCount: number;
@@ -232,6 +272,12 @@ export interface GameState {
   logs: GameLog[];
   roadEffects: RoadEffect[];
   spirits: SpiritOnMap[];
+  stocks: Stock[];
+  companies: Company[];
+  marketStatus: {
+    loanFrozenDays: number;
+    lastEvent?: string;
+  };
   // 当前回合临时状态
   lastRoll?: number;
   pendingTileIndex?: number;
@@ -299,6 +345,8 @@ export interface ClientToServerEvents {
   'game:upgrade': (roomId: string) => void;
   'game:rebuild': (roomId: string, tileIndex: number, buildingType: BuildingType) => void;
   'game:useCard': (roomId: string, cardId: string, target?: CardUseTarget) => void;
+  'game:stockTrade': (roomId: string, stockId: string, quantity: number) => void;
+  'game:claimInsurance': (roomId: string) => void;
   'game:skip': (roomId: string) => void;
   'game:start': (roomId: string) => void;
 }
@@ -318,28 +366,28 @@ export const SIMPLE_MAP: GameMap = {
     { index: 3, name: '青青草原', type: 'property', size: 'small', group: 0, basePrice: 10000, baseRent: 500, level: 0 },
     { index: 4, name: '机会', type: 'chance', basePrice: 0, baseRent: 0, level: 0 },
     { index: 5, name: '石板路', type: 'property', size: 'small', group: 1, basePrice: 12000, baseRent: 600, level: 0 },
-    { index: 6, name: '卡片格', type: 'card', basePrice: 0, baseRent: 0, level: 0 },
+    { index: 6, name: '电脑公司', type: 'company', companyId: 'computer', basePrice: 0, baseRent: 0, level: 0 },
     { index: 7, name: '小河边', type: 'property', size: 'small', group: 1, basePrice: 14000, baseRent: 700, level: 0 },
     // 监狱
     { index: 8, name: '监狱', type: 'prison', basePrice: 0, baseRent: 0, level: 0 },
     // 第二组（小块土地）
     { index: 9, name: '风车镇', type: 'property', size: 'small', group: 2, basePrice: 16000, baseRent: 800, level: 0 },
-    { index: 10, name: '税务', type: 'tax', basePrice: 0, baseRent: 0, level: 0 },
+    { index: 10, name: '建设公司', type: 'company', companyId: 'construction', basePrice: 0, baseRent: 0, level: 0 },
     { index: 11, name: '苹果园', type: 'property', size: 'small', group: 2, basePrice: 18000, baseRent: 900, level: 0 },
     { index: 12, name: '命运', type: 'fate', basePrice: 0, baseRent: 0, level: 0 },
     { index: 13, name: '橡树林', type: 'property', size: 'small', group: 3, basePrice: 20000, baseRent: 1000, level: 0 },
-    { index: 14, name: '得点券 10', type: 'coupon', couponValue: 10, basePrice: 0, baseRent: 0, level: 0 },
+    { index: 14, name: '保险公司', type: 'company', companyId: 'insurance', basePrice: 0, baseRent: 0, level: 0 },
     { index: 15, name: '枫叶林', type: 'property', size: 'small', group: 3, basePrice: 22000, baseRent: 1100, level: 0 },
     // 医院
     { index: 16, name: '医院', type: 'hospital', basePrice: 0, baseRent: 0, level: 0 },
     // 第三组（小块土地）
     { index: 17, name: '港口', type: 'property', size: 'small', group: 4, basePrice: 24000, baseRent: 1200, level: 0 },
-    { index: 18, name: '卡片格', type: 'card', basePrice: 0, baseRent: 0, level: 0 },
+    { index: 18, name: '航空公司', type: 'company', companyId: 'airline', basePrice: 0, baseRent: 0, level: 0 },
     { index: 19, name: '渔人码头', type: 'property', size: 'small', group: 4, basePrice: 26000, baseRent: 1300, level: 0 },
     { index: 20, name: '命运', type: 'fate', basePrice: 0, baseRent: 0, level: 0 },
     // 第四组（大块土地）
     { index: 21, name: '商业街', type: 'property', size: 'large', group: 5, basePrice: 28000, baseRent: 1400, level: 0 },
-    { index: 22, name: '机会', type: 'chance', basePrice: 0, baseRent: 0, level: 0 },
+    { index: 22, name: '新闻点', type: 'news', basePrice: 0, baseRent: 0, level: 0 },
     { index: 23, name: '集市', type: 'property', size: 'large', group: 5, basePrice: 30000, baseRent: 1500, level: 0 },
     // 商店
     { index: 24, name: '商店', type: 'shop', basePrice: 0, baseRent: 0, level: 0 },
@@ -347,19 +395,19 @@ export const SIMPLE_MAP: GameMap = {
     { index: 25, name: '钟楼', type: 'property', size: 'large', group: 6, basePrice: 32000, baseRent: 1600, level: 0 },
     { index: 26, name: '命运', type: 'fate', basePrice: 0, baseRent: 0, level: 0 },
     { index: 27, name: '市政厅', type: 'property', size: 'large', group: 6, basePrice: 34000, baseRent: 1700, level: 0 },
-    { index: 28, name: '卡片格', type: 'card', basePrice: 0, baseRent: 0, level: 0 },
+    { index: 28, name: '百货公司', type: 'company', companyId: 'departmentStore', basePrice: 0, baseRent: 0, level: 0 },
     { index: 29, name: '剧院', type: 'property', size: 'large', group: 7, basePrice: 36000, baseRent: 1800, level: 0 },
-    { index: 30, name: '得点券 30', type: 'coupon', couponValue: 30, basePrice: 0, baseRent: 0, level: 0 },
+    { index: 30, name: '饭店', type: 'company', companyId: 'hotel', basePrice: 0, baseRent: 0, level: 0 },
     { index: 31, name: '歌剧院', type: 'property', size: 'large', group: 7, basePrice: 38000, baseRent: 1900, level: 0 },
-    // 税务
-    { index: 32, name: '税务', type: 'tax', basePrice: 0, baseRent: 0, level: 0 },
+    // 石油公司
+    { index: 32, name: '石油公司', type: 'company', companyId: 'petroleum', basePrice: 0, baseRent: 0, level: 0 },
     // 第六组（高价区，大块土地）
     { index: 33, name: '水晶湖', type: 'property', size: 'large', group: 8, basePrice: 40000, baseRent: 2000, level: 0 },
     { index: 34, name: '命运', type: 'fate', basePrice: 0, baseRent: 0, level: 0 },
     { index: 35, name: '云顶宫', type: 'property', size: 'large', group: 8, basePrice: 45000, baseRent: 2250, level: 0 },
-    { index: 36, name: '卡片格', type: 'card', basePrice: 0, baseRent: 0, level: 0 },
+    { index: 36, name: '餐饮公司', type: 'company', companyId: 'restaurant', basePrice: 0, baseRent: 0, level: 0 },
     { index: 37, name: '钻石大道', type: 'property', size: 'large', group: 9, basePrice: 50000, baseRent: 2500, level: 0 },
-    { index: 38, name: '得点券 50', type: 'coupon', couponValue: 50, basePrice: 0, baseRent: 0, level: 0 },
+    { index: 38, name: '汽车公司', type: 'company', companyId: 'automobile', basePrice: 0, baseRent: 0, level: 0 },
     { index: 39, name: '黄金广场', type: 'property', size: 'large', group: 9, basePrice: 60000, baseRent: 3000, level: 0 },
   ],
 };
@@ -382,6 +430,14 @@ export {
   type ItemDefinition,
   type ItemType,
 } from './data/items.js';
+
+export {
+  DEFAULT_COMPANIES,
+  DEFAULT_STOCKS,
+  getCompanyById,
+  getStockById,
+  getStockByCompanyId,
+} from './data/companies.js';
 
 export {
   ASSET_BASE_URL,

@@ -26,9 +26,24 @@ import {
   type ItemUseTarget,
   SIMPLE_MAP,
   CHARACTERS,
+  DEFAULT_COMPANIES,
+  DEFAULT_STOCKS,
   getSpiritDefinition,
   getCardDefinition,
 } from '@monopoly4/shared';
+import { triggerFateEvent, triggerNewsEvent, type EventEffect, type EventOutcome } from './eventSystem/index.js';
+import {
+  tradeStock as tradeStockImpl,
+  sellAllStocks,
+  updateStockPrices,
+  updateChairmen,
+  dividendPayout,
+  getStockMarketValue,
+  handleCompanyArrival,
+  applyCompanyFine,
+  applyCompanyProfit,
+  claimInsurance,
+} from './financialSystem/index.js';
 
 
 /**
@@ -47,13 +62,17 @@ export function createGame(roomId: string, config: GameConfig, roomPlayers: Room
       deposit: 0,
       loan: 0,
       coupons: 300,
+      vehicle: 'walk',
       position: 0,
       properties: [],
       cards: [],
       items: [],
       statusEffects: [],
+      stockHoldings: {},
+      insuranceDays: 0,
       isBankrupt: false,
       isAI: false,
+      liquidationCount: 0,
     };
   });
 
@@ -68,6 +87,10 @@ export function createGame(roomId: string, config: GameConfig, roomPlayers: Room
     month: 1,
     priceIndex: 1,
     roadEffects: [],
+    spirits: [],
+    stocks: JSON.parse(JSON.stringify(DEFAULT_STOCKS)),
+    companies: JSON.parse(JSON.stringify(DEFAULT_COMPANIES)),
+    marketStatus: { loanFrozenDays: 0 },
     logs: [
       {
         timestamp: Date.now(),
@@ -89,12 +112,40 @@ export function getDiceCount(moveMode: GameConfig['moveMode']): number {
   }
 }
 
+/**
+ * 兼容 socket 层的别名。
+ */
+export function getMaxDiceCount(moveMode: GameConfig['moveMode']): number {
+  return getDiceCount(moveMode);
+}
+
 export function rollDice(count: number): number {
   let sum = 0;
   for (let i = 0; i < count; i++) {
     sum += Math.floor(Math.random() * 6) + 1;
   }
   return sum;
+}
+
+/**
+ * 当前玩家掷骰，供 socket 层调用。
+ * 若传入 diceCount 则使用该骰子数，否则使用载具允许的最大骰子数。
+ */
+export function roll(
+  state: GameState,
+  diceCount?: number
+): { success: boolean; steps?: number; message?: string } {
+  const player = getCurrentPlayer(state);
+  const max = getDiceCount(state.config.moveMode);
+  const count = Math.max(1, Math.min(diceCount ?? max, max));
+  const steps = rollDice(count);
+  state.logs.push({
+    timestamp: Date.now(),
+    type: 'player:roll',
+    actorId: player.id,
+    message: `${player.username} 使用 ${count} 颗骰子，掷出 ${steps} 点`,
+  });
+  return { success: true, steps };
 }
 
 export function spinWheel(sides: number): number {
@@ -301,7 +352,9 @@ export function movePlayer(state: GameState, steps: number): GameState {
  * - property：买地/升级/支付过路费
  * - tax：缴纳税款
  * - card/coupon30：获得点券
- * - fate/chance：随机金钱事件
+ * - fate/chance：触发命运事件
+ * - news：触发全局新闻事件
+ * - company：触发公司特效
  */
 export function handleTileEffect(state: GameState): GameState {
   const player = getCurrentPlayer(state);
@@ -348,24 +401,26 @@ export function handleTileEffect(state: GameState): GameState {
       actorId: player.id,
       message: `${player.username} 获得 30 点券`,
     });
-  } else if (tile.type === 'coupon30') {
-    player.coupons += 30;
+  } else if (tile.type === 'coupon') {
+    const value = tile.couponValue ?? 30;
+    player.coupons += value;
     state.logs.push({
       timestamp: Date.now(),
       type: 'player:coupon',
       actorId: player.id,
-      message: `${player.username} 获得 30 点券`,
+      message: `${player.username} 获得 ${value} 点券`,
     });
   } else if (tile.type === 'fate' || tile.type === 'chance') {
-    // MVP 简化为随机小额金钱事件
-    const amount = Math.floor(Math.random() * 5000) - 2000;
-    player.cash += amount;
-    state.logs.push({
-      timestamp: Date.now(),
-      type: 'player:fate',
-      actorId: player.id,
-      message: `${player.username} 触发${tile.type === 'fate' ? '命运' : '机会'}事件，${amount >= 0 ? '获得' : '损失'} $${Math.abs(amount)}`,
-    });
+    const outcome = triggerFateEvent(state, player, tile, tile.type);
+    applyEventOutcome(state, player, outcome);
+  } else if (tile.type === 'news') {
+    const outcome = triggerNewsEvent(state, player, tile);
+    applyEventOutcome(state, player, outcome);
+  } else if (tile.type === 'company') {
+    const company = state.companies.find((c) => c.id === tile.companyId);
+    if (company) {
+      handleCompanyArrival(state, player, company);
+    }
   }
 
   return state;
@@ -534,6 +589,266 @@ export function transferMoney(
     targetId: to.id,
     message: `${from.username} 向 ${to.username} 支付 ${reason} $${amount}`,
   });
+}
+
+/**
+ * 将事件结果应用到游戏状态。
+ * 命运/新闻事件返回的效果描述符在此统一执行，避免事件系统反向依赖引擎。
+ */
+function applyEventOutcome(state: GameState, player: Player, outcome: EventOutcome): void {
+  if (!outcome.result.success) return;
+  applyEventEffects(state, player, outcome.effects);
+  state.logs.push({
+    timestamp: Date.now(),
+    type: 'event:triggered',
+    actorId: player.id,
+    message: `${player.username} 触发「${outcome.eventName}」：${outcome.description}`,
+  });
+}
+
+function applyEventEffects(state: GameState, player: Player, effects: EventEffect[]): void {
+  for (const effect of effects) {
+    switch (effect.type) {
+      case 'cash': {
+        if (effect.amount >= 0) {
+          player.cash += effect.amount;
+          state.logs.push({
+            timestamp: Date.now(),
+            type: 'event:cash',
+            actorId: player.id,
+            message: `${player.username} ${effect.reason}，获得 $${effect.amount}`,
+          });
+        } else {
+          payMoney(state, player, -effect.amount, effect.reason);
+        }
+        break;
+      }
+      case 'loan': {
+        player.loan += effect.amount;
+        state.logs.push({
+          timestamp: Date.now(),
+          type: 'event:loan',
+          actorId: player.id,
+          message: `${player.username} ${effect.reason}，贷款增加 $${effect.amount}`,
+        });
+        break;
+      }
+      case 'status': {
+        player.statusEffects.push({
+          type: effect.status,
+          remainingDays: effect.days,
+          data: { reason: effect.reason },
+        });
+        state.logs.push({
+          timestamp: Date.now(),
+          type: 'event:status',
+          actorId: player.id,
+          message: `${player.username} ${effect.reason}，获得 ${effect.status} 状态 ${effect.days} 天`,
+        });
+        break;
+      }
+      case 'sellAllStocks': {
+        const cash = sellAllStocks(state, player.id);
+        state.logs.push({
+          timestamp: Date.now(),
+          type: 'event:sellStocks',
+          actorId: player.id,
+          message: `${player.username} ${effect.reason}，变卖股票获得 $${cash}`,
+        });
+        break;
+      }
+      case 'takeRandomCardFromEach': {
+        let taken = 0;
+        for (const other of state.players) {
+          if (other.id === player.id || other.cards.length === 0) continue;
+          const idx = Math.floor(Math.random() * other.cards.length);
+          const [card] = other.cards.splice(idx, 1);
+          player.cards.push(card);
+          taken++;
+        }
+        state.logs.push({
+          timestamp: Date.now(),
+          type: 'event:birthday',
+          actorId: player.id,
+          message: `${player.username} ${effect.reason}，共收取 ${taken} 张卡片`,
+        });
+        break;
+      }
+      case 'loseVehicle': {
+        player.vehicle = 'walk';
+        state.logs.push({
+          timestamp: Date.now(),
+          type: 'event:loseVehicle',
+          actorId: player.id,
+          message: `${player.username} ${effect.reason}，交通工具恢复步行`,
+        });
+        break;
+      }
+      case 'companyFine': {
+        applyCompanyFine(state, effect.companyId, effect.amount);
+        break;
+      }
+      case 'companyProfit': {
+        applyCompanyProfit(state, effect.companyId, effect.amount);
+        break;
+      }
+      case 'stockMarketMove': {
+        for (const stock of state.stocks) {
+          if (effect.direction === 'up') {
+            stock.price = Math.max(1, Math.floor(stock.price * (1 + effect.percent / 100)));
+          } else {
+            stock.price = Math.max(1, Math.floor(stock.price * (1 - effect.percent / 100)));
+          }
+        }
+        state.logs.push({
+          timestamp: Date.now(),
+          type: 'event:stockMarket',
+          message: `股市${effect.direction === 'up' ? '上涨' : '下跌'} ${effect.percent}%`,
+        });
+        break;
+      }
+      case 'suspendStock': {
+        const stock = state.stocks.find((s) => s.id === effect.stockId);
+        if (stock) {
+          stock.suspendedDays = Math.max(stock.suspendedDays, effect.days);
+          state.logs.push({
+            timestamp: Date.now(),
+            type: 'event:suspendStock',
+            targetId: stock.id,
+            message: `${stock.name} 停牌 ${effect.days} 天`,
+          });
+        }
+        break;
+      }
+      case 'releaseAll': {
+        for (const p of state.players) {
+          p.statusEffects = p.statusEffects.filter((e) => e.type !== effect.status);
+        }
+        state.logs.push({
+          timestamp: Date.now(),
+          type: 'event:releaseAll',
+          message: `所有${effect.status === 'jail' ? '在狱' : '住院'}玩家被${effect.status === 'jail' ? '释放' : '提前出院'}`,
+        });
+        break;
+      }
+      case 'extendAll': {
+        for (const p of state.players) {
+          const target = p.statusEffects.find((e) => e.type === effect.status);
+          if (target) target.remainingDays += effect.days;
+        }
+        state.logs.push({
+          timestamp: Date.now(),
+          type: 'event:extendAll',
+          message: `所有${effect.status === 'jail' ? '在狱' : '住院'}玩家${effect.status === 'jail' ? '刑期' : '住院天数'} +${effect.days} 天`,
+        });
+        break;
+      }
+      case 'taxAll': {
+        for (const p of state.players) {
+          if (p.isBankrupt) continue;
+          let base = 0;
+          if (effect.taxType === 'income') base = p.cash;
+          else if (effect.taxType === 'land') {
+            base = p.properties.reduce((sum, idx) => sum + state.map.tiles[idx].basePrice, 0);
+          } else if (effect.taxType === 'stock') {
+            base = getStockMarketValue(state, p.id);
+          }
+          const tax = Math.floor(base * effect.rate);
+          if (tax > 0) payMoney(state, p, tax, effect.reason);
+        }
+        break;
+      }
+      case 'auctionRandomLand': {
+        const emptyTiles = state.map.tiles.filter((t) => t.type === 'property' && !t.ownerId);
+        if (emptyTiles.length > 0) {
+          const target = emptyTiles[Math.floor(Math.random() * emptyTiles.length)];
+          target.basePrice = Math.floor(target.basePrice * 1.1);
+          state.logs.push({
+            timestamp: Date.now(),
+            type: 'event:auction',
+            targetId: String(target.index),
+            message: `公开拍卖 ${target.name}，地价上涨 10%`,
+          });
+        }
+        break;
+      }
+      case 'award': {
+        let target: Player | undefined;
+        if (effect.target === 'poorest') {
+          target = [...state.players]
+            .filter((p) => !p.isBankrupt)
+            .sort((a, b) => a.properties.length - b.properties.length)[0];
+        } else if (effect.target === 'richest') {
+          target = [...state.players]
+            .filter((p) => !p.isBankrupt)
+            .sort((a, b) => b.properties.length - a.properties.length)[0];
+        } else if (effect.target === 'stockRichest') {
+          target = [...state.players]
+            .filter((p) => !p.isBankrupt)
+            .sort((a, b) => getStockMarketValue(state, b.id) - getStockMarketValue(state, a.id))[0];
+        }
+        if (target) {
+          target.cash += effect.amount;
+          state.logs.push({
+            timestamp: Date.now(),
+            type: 'event:award',
+            actorId: target.id,
+            message: `${target.username} ${effect.reason}，获得 $${effect.amount}`,
+          });
+        }
+        break;
+      }
+      case 'bankRun': {
+        state.marketStatus.loanFrozenDays = Math.max(state.marketStatus.loanFrozenDays, effect.days);
+        state.logs.push({
+          timestamp: Date.now(),
+          type: 'event:bankRun',
+          message: `银行停止放款 ${effect.days} 天`,
+        });
+        break;
+      }
+      case 'bankBonus': {
+        for (const p of state.players) {
+          if (p.isBankrupt) continue;
+          const bonus = Math.floor(p.deposit * effect.rate);
+          if (bonus > 0) p.deposit += bonus;
+        }
+        state.logs.push({
+          timestamp: Date.now(),
+          type: 'event:bankBonus',
+          message: `所有玩家获得存款 ${effect.rate * 100}% 红利`,
+        });
+        break;
+      }
+      case 'freezeVehicle': {
+        for (const p of state.players) {
+          if (p.isBankrupt || p.vehicle !== effect.vehicle) continue;
+          p.statusEffects.push({ type: 'stay', remainingDays: effect.days, data: { reason: effect.reason } });
+        }
+        state.logs.push({
+          timestamp: Date.now(),
+          type: 'event:freezeVehicle',
+          message: `${effect.vehicle === 'walk' ? '步行' : effect.vehicle === 'car' ? '汽车' : '机车'}玩家因${effect.reason}停止 ${effect.days} 天`,
+        });
+        break;
+      }
+      case 'destroyRandomBuilding': {
+        const owned = state.map.tiles.filter((t) => t.type === 'property' && t.ownerId && (t.level > 0 || t.buildingType));
+        if (owned.length > 0) {
+          const target = owned[Math.floor(Math.random() * owned.length)];
+          target.level = Math.max(0, target.level - 1);
+          if (target.level === 0) target.buildingType = 'house';
+          state.logs.push({
+            timestamp: Date.now(),
+            type: 'event:destroyBuilding',
+            targetId: String(target.index),
+            message: `${target.name} 受损，等级下降 1 级`,
+          });
+        }
+        break;
+      }
+    }
+  }
 }
 
 /**
@@ -921,6 +1236,10 @@ export function endTurn(state: GameState): GameState {
       state.month += 1;
       state.day = 1;
       state.priceIndex = Math.min(6, calculatePriceIndex(state));
+      settleMonth(state);
+    } else if (state.day === 15) {
+      // 每月 15 日发放分红
+      dividendPayout(state);
     }
   }
 
@@ -947,11 +1266,24 @@ function decrementEffects(state: GameState): void {
         player.spirit = undefined;
       }
     }
+    // 保险天数（与 insurance 状态效果同步）
+    const insurance = player.statusEffects.find((e) => e.type === 'insurance');
+    if (insurance) {
+      player.insuranceDays = insurance.remainingDays;
+    } else {
+      player.insuranceDays = 0;
+    }
   }
   // 路段效果
   state.roadEffects = state.roadEffects
     .map((e) => ({ ...e, remainingDays: e.remainingDays - 1 }))
     .filter((e) => e.remainingDays > 0);
+  // 市场状态
+  if (state.marketStatus.loanFrozenDays > 0) {
+    state.marketStatus.loanFrozenDays -= 1;
+  }
+  // 股价每日波动
+  updateStockPrices(state);
 }
 
 export function calculatePriceIndex(state: GameState): number {
@@ -962,9 +1294,83 @@ export function calculatePriceIndex(state: GameState): number {
       const tile = state.map.tiles[idx];
       return v + tile.basePrice * (1 + tile.level * 0.5);
     }, 0);
-    return sum + p.cash + p.deposit + propertyValue;
+    return sum + p.cash + p.deposit + propertyValue + getStockMarketValue(state, p.id) - p.loan;
   }, 0);
   return Math.max(1, totalAssets / totalFunds);
+}
+
+/**
+ * 计算玩家总资产 = 现金 + 存款 - 贷款 + 地产估值 + 股票市值。
+ */
+export function calculateNetAssets(state: GameState, playerId: string): number {
+  const player = state.players.find((p) => p.id === playerId);
+  if (!player || player.isBankrupt) return 0;
+  const propertyValue = player.properties.reduce((v, idx) => {
+    const tile = state.map.tiles[idx];
+    return v + tile.basePrice * (1 + tile.level * 0.5);
+  }, 0);
+  return player.cash + player.deposit - player.loan + propertyValue + getStockMarketValue(state, playerId);
+}
+
+/**
+ * 月度结算：发放存款利息、分红、重新选举董事长。
+ */
+function settleMonth(state: GameState): void {
+  for (const player of state.players) {
+    if (player.isBankrupt) continue;
+    if (player.deposit > 0) {
+      const interest = Math.floor(player.deposit * 0.1);
+      player.deposit += interest;
+      state.logs.push({
+        timestamp: Date.now(),
+        type: 'player:interest',
+        actorId: player.id,
+        message: `${player.username} 获得存款利息 $${interest}`,
+      });
+    }
+  }
+  dividendPayout(state);
+  updateChairmen(state);
+  state.logs.push({
+    timestamp: Date.now(),
+    type: 'game:month',
+    message: `进入第 ${state.month} 个月，物价指数为 ${state.priceIndex.toFixed(2)}`,
+  });
+}
+
+/**
+ * 当前玩家交易股票（正数买入，负数卖出）。
+ */
+export function tradeStock(
+  state: GameState,
+  playerId: string,
+  stockId: string,
+  quantity: number
+): { success: boolean; message?: string } {
+  const result = tradeStockImpl(state, playerId, stockId, quantity);
+  if (result.success && result.message) {
+    state.logs.push({
+      timestamp: Date.now(),
+      type: 'stock:trade',
+      actorId: playerId,
+      message: result.message,
+    });
+  }
+  return result;
+}
+
+/**
+ * 当前玩家申请保险理赔。
+ */
+export function claimPlayerInsurance(
+  state: GameState,
+  playerId: string,
+  reason = '住院理赔'
+): { success: boolean; message?: string; payout?: number } {
+  const player = state.players.find((p) => p.id === playerId);
+  if (!player) return { success: false, message: '玩家不存在' };
+  const result = claimInsurance(state, player, reason);
+  return result;
 }
 
 export function canRoll(state: GameState, playerId: string): boolean {

@@ -1,5 +1,5 @@
 import { io, Socket } from 'socket.io-client';
-import type { ClientToServerEvents, ServerToClientEvents, Room, GameState, GameLog } from '@monopoly4/shared';
+import type { ClientToServerEvents, ServerToClientEvents, Room, GameState, GameLog, BuildingType, CardUseTarget } from '@monopoly4/shared';
 
 type GameSocket = Socket<ServerToClientEvents, ClientToServerEvents>;
 
@@ -79,4 +79,20 @@ export function upgradeProperty(roomId: string): void {
 
 export function skipTurn(roomId: string): void {
   getSocket().emit('game:skip', roomId);
+}
+
+export function rebuildTile(roomId: string, tileIndex: number, buildingType: BuildingType): void {
+  getSocket().emit('game:rebuild', roomId, tileIndex, buildingType);
+}
+
+export function useCard(roomId: string, cardId: string, target?: CardUseTarget): void {
+  getSocket().emit('game:useCard', roomId, cardId, target);
+}
+
+export function tradeStock(roomId: string, stockId: string, quantity: number): void {
+  getSocket().emit('game:stockTrade', roomId, stockId, quantity);
+}
+
+export function claimInsurance(roomId: string): void {
+  getSocket().emit('game:claimInsurance', roomId);
 }

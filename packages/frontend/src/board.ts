@@ -11,6 +11,8 @@ const TILE_COLORS: Record<Tile['type'], string> = {
   card: '#34495e',
   coupon: '#16a085',
   tax: '#c0392b',
+  news: '#e84393',
+  company: '#0984e3',
 };
 
 export function renderBoard(canvas: HTMLCanvasElement, state: GameState, currentUserId: string): void {
