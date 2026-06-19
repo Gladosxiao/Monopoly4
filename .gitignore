@@ -21,3 +21,6 @@ packages/map-generator/output/
 __pycache__/
 
 tsconfig.tsbuildinfo
+
+# Coverage reports
+coverage/
