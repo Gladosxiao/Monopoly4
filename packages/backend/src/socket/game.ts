@@ -217,7 +217,24 @@ export function setupSocketIO(httpServer: HttpServer): void {
       if (result.steps !== undefined && result.steps !== 0) {
         movePlayer(state, result.steps);
       }
-      io.to(roomId).emit('game:state', state);
+
+      // 根据落地地块类型决定是否自动结束回合
+      const player = state.players[state.currentPlayerIndex];
+      const tile = state.map.tiles[player.position];
+      const shouldWait = tile.type === 'property' && (
+        !tile.ownerId || // 空地，等玩家决定是否购买
+        (tile.ownerId === player.id && tile.level < 5 && tile.buildingType !== 'chainStore' && tile.buildingType !== 'park' && tile.buildingType !== 'gasStation') // 自己的土地且可升级
+      );
+
+      if (!shouldWait) {
+        // 对手土地（过路费将在 endTurn -> handleTileEffect 中处理）、系统格、已满级土地：自动结束回合
+        endTurn(state);
+        io.to(roomId).emit('game:state', state);
+        scheduleAITurn(roomId);
+      } else {
+        // 等待玩家选择购买/升级/跳过
+        io.to(roomId).emit('game:state', state);
+      }
     });
 
     socket.on('game:buy', (roomId) => {
@@ -232,7 +249,10 @@ export function setupSocketIO(httpServer: HttpServer): void {
         socket.emit('error', result.message);
         return;
       }
+      // 购买成功后自动结束回合
+      endTurn(state);
       io.to(roomId).emit('game:state', state);
+      scheduleAITurn(roomId);
     });
 
     socket.on('game:upgrade', (roomId) => {
@@ -247,7 +267,10 @@ export function setupSocketIO(httpServer: HttpServer): void {
         socket.emit('error', result.message);
         return;
       }
+      // 升级成功后自动结束回合
+      endTurn(state);
       io.to(roomId).emit('game:state', state);
+      scheduleAITurn(roomId);
     });
 
     socket.on('game:rebuild', (roomId, tileIndex, buildingType) => {

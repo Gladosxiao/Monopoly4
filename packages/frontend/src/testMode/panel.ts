@@ -461,7 +461,8 @@ export function createTestPanel(
     state.players.forEach((p) => {
       const opt = document.createElement('option');
       opt.value = p.id;
-      opt.textContent = `${p.username} (${p.id.slice(0, 6)})`;
+      const aiPrefix = p.isAI ? '[AI] ' : '';
+      opt.textContent = `${aiPrefix}${p.username} (${p.id.slice(0, 6)})`;
       playerSelect.appendChild(opt);
     });
     if (prevPlayer && state.players.some((p) => p.id === prevPlayer)) {
@@ -478,7 +479,8 @@ export function createTestPanel(
     state.players.forEach((p) => {
       const opt = document.createElement('option');
       opt.value = p.id;
-      opt.textContent = p.username;
+      const aiPrefix = p.isAI ? '[AI] ' : '';
+      opt.textContent = `${aiPrefix}${p.username}`;
       tileOwnerSelect.appendChild(opt);
     });
     if (prevOwner && (prevOwner === '' || state.players.some((p) => p.id === prevOwner))) {
@@ -501,6 +503,9 @@ export function createTestPanel(
 
   // 暴露刷新方法到 DOM 元素上，供外部（index.ts）调用
   (panel as HTMLDivElement & { _refreshState: (s: GameState) => void })._refreshState = refreshWithState;
+
+  // 初始填充：如果已有游戏状态，立即填充玩家和地块下拉框
+  refreshWithState(getCurrentState());
 
   return panel;
 }

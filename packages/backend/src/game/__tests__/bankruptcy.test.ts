@@ -21,8 +21,8 @@ describe('rent payment bankruptcy', () => {
   it('支付过路费导致破产并将地产转移给债主', () => {
     const state = makeTestState();
     setOwner(state, 1, 'p2', 'house', 0);
-    state.players[0].cash = 100;
-    state.players[0].deposit = 100;
+    state.players[0].cash = 10;
+    state.players[0].deposit = 10;
     state.currentPlayerIndex = 0;
     state.pendingTileIndex = 1;
 

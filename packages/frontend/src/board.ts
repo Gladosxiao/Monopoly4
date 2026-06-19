@@ -28,6 +28,29 @@ const TILE_COLORS: Record<string, string> = {
   company: '#0984e3',
 };
 
+/** 地块类型对应的显示符号（用于棋盘图标） */
+const TILE_ICONS: Record<string, string> = {
+  start: 'GO',
+  property: '$',
+  fate: '?',
+  chance: '!',
+  prison: '⊞',
+  hospital: '+',
+  park: '♠',
+  shop: 'S',
+  tax: 'T',
+  lottery: 'L',
+  magic: '✦',
+  news: 'N',
+  company: 'C',
+  card: 'K',
+  coupon: '◆',
+  coupon10: '◆',
+  coupon30: '◆',
+  coupon50: '◆',
+  miniGame: 'G',
+};
+
 const GROUP_COLORS = [
   '#e74c3c',
   '#3498db',
@@ -201,10 +224,15 @@ export function renderBoard(
     const minDim = Math.min(w, h);
     const radius = Math.max(2, minDim * 0.12);
 
-    // 地产按分组着色，其他按类型着色
-    let fill = tile.ownerId ? '#2c3e50' : TILE_COLORS[tile.type] || '#95a5a6';
-    if (tile.type === 'property' && tile.group !== undefined && !tile.ownerId) {
+    // 地块着色：已购买地块显示所有者颜色（半透明），空地按类型/分组着色
+    let fill: string;
+    if (tile.ownerId) {
+      const owner = state.players.find((p) => p.id === tile.ownerId);
+      fill = owner ? owner.color + '55' : '#2c3e50';
+    } else if (tile.type === 'property' && tile.group !== undefined) {
       fill = GROUP_COLORS[tile.group % GROUP_COLORS.length] + '44';
+    } else {
+      fill = TILE_COLORS[tile.type] || '#95a5a6';
     }
 
     const isHovered = tile.index === options.hoverIndex;
@@ -221,12 +249,18 @@ export function renderBoard(
     roundRectPath(ctx, x, y, w, h, radius);
     ctx.fill();
 
-    // 边框：悬停或当前玩家所在格高亮
+    // 边框：悬停或当前玩家所在格高亮；已购买地块显示所有者颜色边框
     if (isHovered || isCurrentTile) {
       ctx.strokeStyle = isHovered ? '#ffffff' : currentPlayer?.color || '#ffffff';
       ctx.lineWidth = isHovered ? 3 : 2;
       ctx.shadowColor = isHovered ? 'rgba(255,255,255,0.6)' : 'transparent';
       ctx.shadowBlur = isHovered ? 10 : 0;
+      roundRectPath(ctx, x, y, w, h, radius);
+      ctx.stroke();
+    } else if (tile.ownerId) {
+      const owner = state.players.find((p) => p.id === tile.ownerId);
+      ctx.strokeStyle = owner ? owner.color : 'rgba(255,255,255,0.85)';
+      ctx.lineWidth = 2;
       roundRectPath(ctx, x, y, w, h, radius);
       ctx.stroke();
     } else {
@@ -250,7 +284,11 @@ export function renderBoard(
       }
     }
 
-    // 地块名称（带阴影描边提高可读性）
+    // 地块类型图标（显示在地块上方，便于一眼辨别地块种类）
+    const iconSize = Math.max(12, minDim * 0.22);
+    drawTileIcon(ctx, center.x, center.y - h * 0.28, iconSize, tile.type);
+
+    // 地块名称（带阴影描边提高可读性，字体加粗确保清晰）
     ctx.save();
     const nameFontSize = Math.max(8, minDim * 0.17);
     ctx.font = `bold ${nameFontSize}px sans-serif`;
@@ -258,7 +296,7 @@ export function renderBoard(
     ctx.textBaseline = 'middle';
     setTextShadow(ctx);
     ctx.fillStyle = tile.type === 'property' && !tile.ownerId ? '#2c3e50' : '#ffffff';
-    ctx.fillText(tile.name, center.x, center.y - h * 0.12);
+    ctx.fillText(tile.name, center.x, center.y - h * 0.05);
     clearTextShadow(ctx);
     ctx.restore();
 
@@ -545,6 +583,40 @@ function drawTrapIcon(
       ctx.fill();
     }
   }
+  ctx.restore();
+}
+
+/** 绘制地块类型图标：背景圆 + 文字符号 */
+function drawTileIcon(
+  ctx: CanvasRenderingContext2D,
+  cx: number,
+  cy: number,
+  size: number,
+  tileType: string
+): void {
+  const symbol = TILE_ICONS[tileType];
+  if (!symbol) return;
+
+  const r = size / 2;
+  ctx.save();
+
+  // 半透明背景圆，确保图标在各种底色上都可辨认
+  ctx.fillStyle = 'rgba(0,0,0,0.35)';
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(255,255,255,0.4)';
+  ctx.lineWidth = 1;
+  ctx.stroke();
+
+  // 符号文字
+  const fontSize = Math.max(7, size * 0.5);
+  ctx.font = `bold ${fontSize}px sans-serif`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = '#ffffff';
+  ctx.fillText(symbol, cx, cy);
+
   ctx.restore();
 }
 

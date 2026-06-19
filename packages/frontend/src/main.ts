@@ -463,6 +463,14 @@ async function navigateToGame(roomId: string): Promise<void> {
           <h2>玩家信息</h2>
           <div id="players-info"></div>
         </div>
+        <div class="info-card backpack-card">
+          <div class="backpack-tabs">
+            <button class="backpack-tab active" data-tab="cards">卡片</button>
+            <button class="backpack-tab" data-tab="items">道具</button>
+          </div>
+          <div id="backpack-cards" class="backpack-panel active"></div>
+          <div id="backpack-items" class="backpack-panel"></div>
+        </div>
         <div class="info-card">
           <h2>操作</h2>
           <div id="game-actions"></div>
@@ -488,6 +496,18 @@ async function navigateToGame(roomId: string): Promise<void> {
     navigateToLobby();
   });
 
+  // 背包 Tab 切换
+  container.querySelectorAll<HTMLButtonElement>('.backpack-tab').forEach((tab) => {
+    tab.addEventListener('click', () => {
+      container.querySelectorAll('.backpack-tab').forEach((t) => t.classList.remove('active'));
+      container.querySelectorAll('.backpack-panel').forEach((p) => p.classList.remove('active'));
+      tab.classList.add('active');
+      const target = tab.dataset.tab;
+      const panel = container.querySelector(`#backpack-${target}`);
+      if (panel) panel.classList.add('active');
+    });
+  });
+
   function renderGame(state: GameState): void {
     currentGame = state;
     // 当地图格数变化时重建 canvas
@@ -498,6 +518,7 @@ async function navigateToGame(roomId: string): Promise<void> {
     }
     renderBoard(canvas, state, currentUser!.id);
     renderPlayersInfo(container, state);
+    renderBackpack(container, state);
     renderActions(container, state);
     renderStockMarket(container, state);
     renderLogs(container, state);
@@ -524,15 +545,12 @@ function renderPlayersInfo(container: HTMLElement, state: GameState): void {
     const div = document.createElement('div');
     div.className = 'player-info';
     const isCurrent = state.players[state.currentPlayerIndex].id === p.id;
-    const cardNames = p.cards.map((c) => CARD_DEFINITIONS[c.cardId]?.name ?? c.cardId).join(', ');
-    const itemNames = p.items.map((i) => `${ITEM_DEFINITIONS[i.itemId]?.name ?? i.itemId}×${i.quantity}`).join(', ');
     div.innerHTML = `
       <strong style="color:${p.color}">${p.username}</strong>
       ${isCurrent ? ' ← 当前回合' : ''}
       <div class="info-section">现金: $${p.cash} | 存款: $${p.deposit} | 贷款: $${p.loan} | 点券: ${p.coupons}</div>
       <div class="info-section">地产: ${p.properties.length} 处 | 保险: ${p.insuranceDays} 天</div>
-      <div class="info-section">卡片: ${cardNames || '无'} (${p.cards.length}/15)</div>
-      <div class="info-section">道具: ${itemNames || '无'}</div>
+      <div class="info-section">卡片: ${p.cards.length}/15 | 道具: ${p.items.reduce((s, i) => s + i.quantity, 0)}</div>
       ${p.spirit ? `<div class="info-section">神明: ${p.spirit.spiritId}</div>` : ''}
       ${p.isBankrupt ? '<div class="bankrupt">已破产</div>' : ''}
     `;
@@ -542,6 +560,88 @@ function renderPlayersInfo(container: HTMLElement, state: GameState): void {
   monthInfo.className = 'month-info';
   monthInfo.textContent = `第 ${state.month} 月 第 ${state.day} 天 | 物价指数: ${state.priceIndex.toFixed(2)} | 乐透奖池: $${state.lotteryJackpot}`;
   el.appendChild(monthInfo);
+}
+
+/** 颜色映射：卡片类型 → 背景色 */
+const CARD_TYPE_COLORS: Record<string, string> = {
+  attack: '#e74c3c',
+  defense: '#3498db',
+  control: '#9b59b6',
+  special: '#f39c12',
+};
+
+/** 颜色映射：道具类型 → 背景色 */
+const ITEM_TYPE_COLORS: Record<string, string> = {
+  vehicle: '#1abc9c',
+  trap: '#e67e22',
+  tool: '#2ecc71',
+  research: '#9b59b6',
+};
+
+/** 渲染背包面板（卡片网格 + 道具网格） */
+function renderBackpack(container: HTMLElement, state: GameState): void {
+  const myPlayer = state.players.find((p) => p.id === currentUser?.id);
+  if (!myPlayer) return;
+
+  // --- 卡片网格 ---
+  const cardsEl = container.querySelector<HTMLDivElement>('#backpack-cards')!;
+  cardsEl.innerHTML = '';
+  if (myPlayer.cards.length === 0) {
+    cardsEl.innerHTML = '<div class="backpack-empty">暂无卡片</div>';
+  } else {
+    const grid = document.createElement('div');
+    grid.className = 'card-grid';
+    myPlayer.cards.forEach((c) => {
+      const def = CARD_DEFINITIONS[c.cardId];
+      const cell = document.createElement('div');
+      cell.className = 'card-cell';
+      const typeColor = CARD_TYPE_COLORS[def?.type ?? ''] || '#555';
+      cell.style.borderColor = typeColor;
+      cell.innerHTML = `
+        <div class="card-cell-name" style="background:${typeColor}">${def?.name ?? c.cardId}</div>
+        <div class="card-cell-type">${def?.type ?? ''}</div>
+      `;
+      // 悬停 tooltip
+      cell.title = def?.description ?? c.cardId;
+      // 点击使用
+      cell.addEventListener('click', async () => {
+        const target = await promptCardTarget(state, c.cardId);
+        useCard(state.roomId, c.instanceId, target);
+      });
+      grid.appendChild(cell);
+    });
+    cardsEl.appendChild(grid);
+  }
+
+  // --- 道具网格 ---
+  const itemsEl = container.querySelector<HTMLDivElement>('#backpack-items')!;
+  itemsEl.innerHTML = '';
+  if (myPlayer.items.length === 0) {
+    itemsEl.innerHTML = '<div class="backpack-empty">暂无道具</div>';
+  } else {
+    const grid = document.createElement('div');
+    grid.className = 'item-grid';
+    myPlayer.items.forEach((it) => {
+      const def = ITEM_DEFINITIONS[it.itemId];
+      const cell = document.createElement('div');
+      cell.className = 'item-cell';
+      const typeColor = ITEM_TYPE_COLORS[def?.type ?? ''] || '#555';
+      cell.style.borderColor = typeColor;
+      cell.innerHTML = `
+        <div class="item-cell-name" style="background:${typeColor}">${def?.name ?? it.itemId}</div>
+        <div class="item-cell-qty">×${it.quantity}</div>
+      `;
+      // 悬停 tooltip
+      cell.title = def?.description ?? it.itemId;
+      // 点击使用
+      cell.addEventListener('click', async () => {
+        const target = await promptItemTarget(state, it.itemId);
+        useItem(state.roomId, it.itemId, target);
+      });
+      grid.appendChild(cell);
+    });
+    itemsEl.appendChild(grid);
+  }
 }
 
 function renderActions(container: HTMLElement, state: GameState): void {
