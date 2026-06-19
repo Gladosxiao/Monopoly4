@@ -15,6 +15,7 @@ import {
   rebuildTile,
   useCard,
   endTurn,
+  handleTileEffect,
 } from './engine.js';
 
 function makeTestState(): GameState {
@@ -193,12 +194,12 @@ describe('buyProperty & upgradeProperty', () => {
     expect(state.map.tiles[1].ownerId).toBe('p1');
   });
 
-  it('购买大块土地后默认为商场', () => {
+  it('购买大块土地后默认为住宅', () => {
     const state = makeTestState();
     state.pendingTileIndex = 21;
     const result = buyProperty(state);
     expect(result.success).toBe(true);
-    expect(state.map.tiles[21].buildingType).toBe('mall');
+    expect(state.map.tiles[21].buildingType).toBe('house');
   });
 
   it('连锁店不可升级', () => {
@@ -297,6 +298,25 @@ describe('useCard', () => {
     const result = useCard(state, 'p1', instanceId, { targetPlayerId: 'bigWealthGod' });
     expect(result.success).toBe(true);
     expect(p1.spirit?.spiritId).toBe('bigWealthGod');
+  });
+});
+
+describe('handleTileEffect 过路费结算', () => {
+  it('免费卡在一次过路费结算后会被消耗', () => {
+    const state = makeTestState();
+    state.currentPlayerIndex = 0;
+    state.pendingTileIndex = 1;
+    setOwner(state, 1, 'p2', 'house', 0);
+    const p1 = state.players[0];
+    const p2 = state.players[1];
+    p1.statusEffects.push({ type: 'freePass', remainingDays: 1 });
+
+    handleTileEffect(state);
+
+    expect(p1.statusEffects.some((e) => e.type === 'freePass')).toBe(false);
+    expect(p1.cash).toBe(100000);
+    expect(p2.cash).toBe(100000);
+    expect(state.logs.some((l) => l.type === 'player:freePass')).toBe(true);
   });
 });
 

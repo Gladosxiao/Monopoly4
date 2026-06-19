@@ -157,9 +157,6 @@ export function isRentExempt(
     if (sealed) return true;
   }
 
-  // 免费卡：触发一次免租
-  if (hasStatusEffect(visitor, 'freePass')) return true;
-
   return false;
 }
 
@@ -272,8 +269,8 @@ export function movePlayer(state: GameState, steps: number): GameState {
   const newPos = (oldPos + steps) % pathLength;
   player.position = newPos;
 
-  // 经过起点奖励
-  if (newPos < oldPos) {
+  // 经过起点奖励（移动步数跨越起点时发放）
+  if (steps > 0 && oldPos + steps >= pathLength) {
     const salary = 10000;
     player.cash += salary;
     state.logs.push({
@@ -417,6 +414,14 @@ function applyRentPayment(
       player.deposit = 0;
       owner.cash += total;
       player.isBankrupt = true;
+      // 破产玩家财产转移给债主
+      for (const tile of state.map.tiles) {
+        if (tile.ownerId === player.id) {
+          tile.ownerId = owner.id;
+          owner.properties.push(tile.index);
+        }
+      }
+      player.properties = [];
       state.logs.push({
         timestamp: Date.now(),
         type: 'player:bankrupt',
@@ -553,8 +558,8 @@ export function buyProperty(state: GameState): { success: boolean; message?: str
 
   player.cash -= price;
   tile.ownerId = player.id;
-  // 小块默认住宅，大块默认商场（后续可让玩家在大块土地上选择建筑类型）
-  tile.buildingType = tile.size === 'small' ? 'house' : 'mall';
+  // 小块与大块土地默认均为住宅，大块土地后续可通过改建卡建造特殊建筑
+  tile.buildingType = 'house';
   tile.level = 0;
   player.properties.push(tileIndex);
   state.logs.push({
@@ -777,7 +782,7 @@ export function useCard(
       break;
     }
     case 'summonSpirit': {
-      const spiritId = target?.targetPlayerId;
+      const spiritId = target?.spiritId ?? target?.targetPlayerId;
       if (!spiritId) return { success: false, message: '请选择要召唤的神明' };
       const spiritDef = getSpiritDefinition(spiritId);
       if (!spiritDef) return { success: false, message: '未知神明' };
@@ -902,7 +907,13 @@ export function endTurn(state: GameState): GameState {
     return state;
   }
 
-  const dayAdvanced = nextIndex <= state.currentPlayerIndex;
+  // 判断是否跨天：下一个玩家是活跃玩家中的第一个（循环回到开头）
+  const activeIndices = state.players
+    .map((p, i) => ({ p, i }))
+    .filter(({ p }) => !p.isBankrupt)
+    .map(({ i }) => i);
+  const firstActiveIndex = activeIndices[0];
+  const dayAdvanced = nextIndex === firstActiveIndex;
   if (dayAdvanced) {
     state.day += 1;
     decrementEffects(state);

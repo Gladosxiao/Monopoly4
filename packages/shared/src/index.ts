@@ -191,6 +191,7 @@ export interface CardUseTarget {
   targetTileIndex?: number;
   targetGroup?: number;
   buildingType?: BuildingType;
+  spiritId?: string;
 }
 
 export interface ItemUseTarget {
