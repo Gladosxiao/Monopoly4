@@ -13,7 +13,7 @@ describe('住院传送', () => {
 
     triggerTrap(
       state,
-      { instanceId: 'mine-1', type: 'mine', ownerId: 'p2', remainingSteps: 0 },
+      { id: 'mine-1', type: 'mine', tileIndex: 5, ownerId: 'p2', placedAt: 1 },
       player,
       5
     );
