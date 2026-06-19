@@ -725,17 +725,16 @@ function drawTooltip(
   boardHeight: number
 ): void {
   const owner = tile.ownerId ? state.players.find((p) => p.id === tile.ownerId) : undefined;
-  const lines: string[] = [tile.name];
-  lines.push(`类型：${TILE_TYPE_LABELS[tile.type] || tile.type}`);
-  if (tile.group !== undefined) lines.push(`路段：${tile.group}`);
+  const typeLabel = TILE_TYPE_LABELS[tile.type] || tile.type;
+  const lines: string[] = [`${tile.name} (${typeLabel})`];
+  if (tile.group !== undefined) lines.push(`路段 ${tile.group}`);
   if (owner) {
     lines.push(`所有者：${owner.username}`);
-    lines.push(`建筑：${tile.buildingType ? BUILDING_LABELS[tile.buildingType] : '空地'}`);
-    lines.push(`等级：${tile.level}`);
-    lines.push(`过路费：$${formatMoney(tile.baseRent)}`);
+    lines.push(`建筑：${tile.buildingType ? BUILDING_LABELS[tile.buildingType] : '空地'} | 等级 ${tile.level}`);
+    lines.push(`当前过路费：$${formatMoney(tile.baseRent)}`);
   } else if (tile.type === 'property' || tile.type === 'company') {
     lines.push(`价格：$${formatMoney(tile.basePrice)}`);
-    if (tile.baseRent > 0) lines.push(`过路费：$${formatMoney(tile.baseRent)}`);
+    if (tile.baseRent > 0) lines.push(`当前过路费：$${formatMoney(tile.baseRent)}`);
   }
   if (tile.traps && tile.traps.length > 0) {
     const trapNames: Record<string, string> = { barrier: '路障', mine: '地雷', timeBomb: '定时炸弹' };
@@ -805,15 +804,21 @@ export function createBoardCanvas(mapTileCount = 40): HTMLCanvasElement {
   const dpr = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1;
   const size = mapTileCount <= 40 ? 800 : 1200;
   const ratio = mapTileCount <= 40 ? 1 : 0.75;
+  const cssWidth = size;
+  const cssHeight = Math.floor(size * ratio);
 
   // 实际像素按 DPR 放大，CSS 尺寸保持逻辑大小，保证高分屏清晰
-  canvas.width = Math.floor(size * dpr);
-  canvas.height = Math.floor(size * ratio * dpr);
+  canvas.width = Math.floor(cssWidth * dpr);
+  canvas.height = Math.floor(cssHeight * dpr);
   canvas.dataset.tileCount = String(mapTileCount);
   canvas.dataset.dpr = String(dpr);
-  canvas.style.width = `${size}px`;
-  canvas.style.height = `${Math.floor(size * ratio)}px`;
-  canvas.style.maxWidth = '100%';
+
+  // 使用 aspect-ratio + height:auto 保证页面长宽比变化时棋盘不被压扁/拉伸
+  canvas.style.width = '100%';
+  canvas.style.height = 'auto';
+  canvas.style.aspectRatio = `${cssWidth} / ${cssHeight}`;
+  canvas.style.maxWidth = `${cssWidth}px`;
+  canvas.style.maxHeight = `${cssHeight}px`;
   canvas.style.background = '#16213e';
   canvas.style.borderRadius = '12px';
   canvas.style.boxShadow = '0 16px 40px rgba(0,0,0,0.45)';

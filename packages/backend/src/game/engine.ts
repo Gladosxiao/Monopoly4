@@ -724,7 +724,7 @@ export function handleTileEffect(state: GameState): GameState {
             type: 'rent:detail',
             actorId: player.id,
             targetId: owner.id,
-            message: `${player.username} 向 ${owner.username} 支付过路费 $${finalRent}（地块: ${tile.name}, 等级: ${tile.level}, 物价指数: ${state.priceIndex}${spinText}）`,
+            message: `${player.username} 向 ${owner.username} 支付过路费 $${finalRent}`,
           });
         }
         if (hotelDays && finalRent > 0) {
