@@ -7,7 +7,8 @@
     "build": "tsc",
     "dev": "tsx watch src/index.ts",
     "start": "node dist/index.js",
-    "db:init": "tsx src/scripts/initDb.ts"
+    "db:init": "tsx src/scripts/initDb.ts",
+    "test": "vitest run"
   },
   "dependencies": {
     "@monopoly4/shared": "^0.1.0",
@@ -31,6 +32,7 @@
     "@types/node": "^20.12.7",
     "@types/uuid": "^9.0.8",
     "tsx": "^4.7.2",
-    "typescript": "^5.4.5"
+    "typescript": "^5.4.5",
+    "vitest": "^4.1.9"
   }
 }

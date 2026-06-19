@@ -1,0 +1,35 @@
+{
+  "name": "@monopoly4/map-generator",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "大富翁4 地图生成器：可配置、可离线/在线使用，前后端通用",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    },
+    "./generator": {
+      "import": "./dist/generator.js",
+      "types": "./dist/generator.d.ts"
+    },
+    "./simulator": {
+      "import": "./dist/simulator.js",
+      "types": "./dist/simulator.d.ts"
+    }
+  },
+  "files": [
+    "dist",
+    "src"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "simulate": "tsc && node dist/scripts/simulate.js"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.5"
+  }
+}
