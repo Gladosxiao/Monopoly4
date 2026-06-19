@@ -2,7 +2,7 @@
 
 > 评估时间：2026-06-19
 > 评估对象：`docs/design/04-game-rules.md` 与当前代码实现
-> 当前版本已实现最基础的可玩闭环（掷骰、移动、买地、升级、住宅过路费、破产判定），并在本次迭代中补全了过路费扩展（连锁店、特殊建筑、神明、卡片）与首期卡片/道具系统。大量扩展系统尚未实现。
+> 当前版本已实现最基础的可玩闭环（掷骰、移动、买地、升级、住宅过路费、破产判定），并在本次迭代中补全了过路费扩展（连锁店、特殊建筑、神明、卡片）与首期卡片/道具系统，同时整合了事件/新闻注册表、股票、公司与保险系统。大量扩展系统尚未实现。
 
 ## 总体完成度
 
@@ -16,7 +16,7 @@
 | 6 | 过路费 | 85% | 住宅/连锁店/特殊建筑/神明/卡片影响已基本实现 |
 | 7 | 破产与获胜 | 70% | 破产法拍/资金目标/时间限制胜利已实现 |
 | 8 | 行走与回合 | 65% | 掷骰可选骰子数、月度结算（物价指数+利息）已实现，移动阶段待完善 |
-| 9 | 卡片系统 | 70% | 30 张已全数定义并接入 `cardSystem`；21 张效果已落地（部分简化），9 张占位；卡片格暂发点券 |
+| 9 | 卡片系统 | 70% | 30 张已全数定义并接入 `cardSystem`；21 张效果已落地（部分简化），9 张占位；卡片格随机发卡已接入 |
 | 10 | 道具系统 | 60% | 13 种已定义并接入 `itemSystem`；交通工具/陷阱/工具类 8 种效果已落地（部分简化），5 种研究所产物占位 |
 | 11 | 神明附身系统 | 50% | 定义、租金效果、地图 NPC 与请神符寻路已实现，变身/消失待完善 |
 | 12 | 股票、公司与保险 | 70% | 股票交易/董事长/公司地块特效/保险购买理赔已实现，完整 9 家公司与复杂轮盘待细化 |
@@ -32,7 +32,7 @@
 | 游戏人数 | 2～4 人 | `Room.maxPlayers` 可配置，创建房间时默认 4 | ✅ 已实现 |
 | 角色选择 | 12 名可选角色 | 当前仅 4 名角色（孙小美、阿土伯、钱夫人、宫本宝藏） | ⚠️ 部分实现 |
 | 总资金 | 10000～300000 | `GameConfig.totalFunds` 可用 | ✅ 已实现 |
-| 行进方式 | 步行/机车/汽车 | `GameConfig.moveMode` 为 walk/bike/car，`getDiceCount` 返回骰子数 | ✅ 已实现 |
+| 行进方式 | 步行/机车/汽车 | `GameConfig.moveMode` 为 walk/bike/car，载具可通过道具变更 | ✅ 已实现 |
 | 土地权限 | 1m/3m/6m/1y/2y/perpetual | `GameConfig.landLease` 已添加，到期逻辑待实现 | ⚠️ 部分实现 |
 | 游戏时间 | 1m/3m/6m/1y/2y/perpetual | `GameConfig.gameTime` 已添加并生效 | ✅ 已实现 |
 | 胜利条件 | 原资金 3/5/10/50/100 倍 / 无限 | `GameConfig.winCondition` 已包含 50/100 倍并生效 | ✅ 已实现 |
@@ -48,14 +48,14 @@
 |---|---|---|---|
 | 现金/储蓄/贷款/点券字段 | 需要 | `Player.cash/deposit/loan/coupons` 已存在 | ✅ 已实现 |
 | 现金变动自动扣存款 | 需要 | `payMoney`、`transferMoney` 已实现现金优先、存款兜底 | ✅ 已实现 |
-| 存款利息（每月 10%） | 需要 | 月度结算中未发放 | ❌ 未实现 |
+| 存款利息（每月 10%） | 需要 | 月度结算中已发放 | ✅ 已实现 |
 | 贷款（额度=总资产，3 个月免息） | 需要 | 无 `takeLoan`/`repayLoan` | ❌ 未实现 |
-| 总资产计算 | 需要 | 无 `calculateNetAssets` | ❌ 未实现 |
+| 总资产计算 | 需要 | `calculateNetAssets` 已实现 | ✅ 已实现 |
 | 破产判定 | `cash + deposit < 0` | 在 `payMoney`/`transferMoney`/`applyRentPayment` 中已实现 | ✅ 已实现 |
-| 破产法拍（限 3 次） | 需要 | 无 `liquidate`/`forceSellProperty` | ❌ 未实现 |
-| 保险天数 | 需要 | `Player` 无 `insuranceDays` | ❌ 未实现 |
+| 破产法拍（3 次） | 需要 | 无 `liquidate`/`forceSellProperty` | ❌ 未实现 |
+| 保险天数 | 需要 | `Player.insuranceDays` 已存在 | ✅ 已实现 |
 
-**代码位置**：`packages/backend/src/game/engine.ts`（payMoney、transferMoney、applyRentPayment）
+**代码位置**：`packages/backend/src/game/engine.ts`（payMoney、transferMoney、applyRentPayment、calculateNetAssets）
 
 ---
 
@@ -97,7 +97,7 @@
 | 加油站 | 按步数及交通工具收费 | 已按玩家 `vehicle` 与步数收费 | ✅ 已实现 |
 | 研究所 | 按等级制造道具 | 不收租，但无研发逻辑 | ⚠️ 部分实现 |
 | 连锁店 | 全地图联合收费 | 已实现 | ✅ 已实现 |
-| 系统格类型 | 起点/命运/机会/监狱/医院/商店/税务/卡片格/点券格等 | 仅有简化类型子集 | ⚠️ 部分实现 |
+| 系统格类型 | 起点/命运/机会/监狱/医院/商店/税务/卡片格/点券格/新闻/公司等 | 已包含主要类型子集 | ⚠️ 部分实现 |
 
 **代码位置**：`packages/backend/src/game/engine.ts`（calculateRent、rebuildTile）
 
@@ -111,7 +111,7 @@
 | 升级费用 | `basePrice * (level+1) * 0.5 * priceIndex` | `upgradeProperty` 已实现 | ✅ 已实现 |
 | 最高 5 级 | 需要 | 已限制 | ✅ 已实现 |
 | 连锁店改建 | 改建卡，固定 1 级 | `rebuildTile` + `useCard(rebuild)` 已实现 | ✅ 已实现 |
-| 大块土地建筑选择 | 购买后选择建造类型 | 当前默认建商场，前端有改建按钮 | ⚠️ 临时方案 |
+| 大块土地建筑选择 | 购买后选择建造类型 | 当前默认建住宅，前端有改建按钮 | ⚠️ 临时方案 |
 | 建造费用 | basePrice × 建筑系数 | 当前改建免费 | ❌ 未实现 |
 
 **代码位置**：`packages/backend/src/game/engine.ts`（buyProperty、upgradeProperty、rebuildTile）
@@ -172,7 +172,7 @@
 |---|---|---|---|
 | 卡片定义 | 30 张 | `packages/shared/src/data/cards.ts` 完整定义 | ✅ 已实现 |
 | 商店购买 | 点券购买，15 张上限，需在商店格 | `cardSystem.buyCard` 已实现，受 `tile.type === 'shop'` 限制 | ✅ 已实现 |
-| 卡片格获得 | 经过获得随机卡片 | 当前仅发放 30 点券，随机获得卡片未接入 | ⚠️ 临时实现 |
+| 卡片格获得 | 经过获得随机卡片 | `handleTileEffect` 在 `tile.type === 'card'` 时随机发卡 | ✅ 已实现 |
 | 使用卡片 | 30 张效果 | `cardSystem/effects.ts` 中 21 张已落地（部分简化），9 张占位 | ⚠️ 部分实现 |
 | 出售卡片 | 出售为点券 | `cardSystem.sellCard` 已实现 | ✅ 已实现 |
 | 卡片效果注册表 | `CardEffectRegistry` | `CARD_EFFECT_REGISTRY` 已实现于 `cardSystem/effects.ts` | ✅ 已实现 |
@@ -240,10 +240,10 @@
 | 公司格 | 9 家公司地块特效 | ✅ 已实现 |
 | 税务格 | 固定 -5000 | ⚠️ 临时实现 |
 | 卡片格 | 经过随机获得一张卡片 | ✅ 已实现 |
-| 得点券格 | 10/30/50 三种 | ✅ 已实现 |
-| 商店格 | 无商店功能 | ❌ 未实现 |
+| 得点券格 | 30 点券 | ⚠️ 临时实现 |
+| 商店格 | 可购买卡片/道具 | ✅ 已实现 |
 | 医院/监狱 | 仅作为普通格，无住院/坐牢逻辑 | ❌ 未实现 |
-| 乐透/魔法屋/新闻/小游戏 | 未实现 | ❌ 未实现 |
+| 乐透/魔法屋/小游戏 | 未实现 | ❌ 未实现 |
 | 特殊 NPC（四大恶人/恶犬/乞丐） | 未实现 | ❌ 未实现 |
 
 **代码位置**：`packages/backend/src/game/engine.ts`（handleTileEffect）
@@ -272,6 +272,6 @@
 1. **近期优先**：
    - 将 `@monopoly4/map-generator` 接入前端 `board.ts`，替换硬编码 `SIMPLE_MAP`。
    - 使用 `ringLayout` + `interpolatePosition` 实现棋子移动动画。
-   - 完善行走阶段（`moving` 状态、经过效果）、卡片格随机获得卡片、卡片与道具剩余占位效果（均富/查税/抢夺/红黑卡/研发产物等）。
+   - 完善行走阶段（`moving` 状态、经过效果）、卡片与道具剩余占位效果（均富/查税/红黑卡/研发产物等）。
 2. **中期目标**：实现土地权限到期（`landLease`、`purchasedAt`、`expiresAt`）、胜利条件完整检查、月度结算（利息、分红）。
-3. **长期扩展**：股票/公司/保险、命运新闻事件注册表、小游戏、神明 NPC 与寻路。
+3. **长期扩展**：小游戏、神明 NPC 与寻路、特殊 NPC。

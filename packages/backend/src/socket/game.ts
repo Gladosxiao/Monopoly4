@@ -14,8 +14,8 @@ import { authMiddleware, type AuthRequest } from '../auth.js';
 import { saveRoomToDb, loadRoomFromDb } from '../routes/rooms.js';
 import {
   createGame,
-  getDiceCount,
-  rollDice,
+  getMaxDiceCount,
+  roll,
   movePlayer,
   buyProperty,
   upgradeProperty,
@@ -158,8 +158,12 @@ export function setupSocketIO(httpServer: HttpServer): void {
         socket.emit('error', '现在不能掷骰');
         return;
       }
-      const steps = diceCount ? rollDice(diceCount) : rollDice(getDiceCount(state.config.moveMode));
-      movePlayer(state, steps);
+      const rollResult = roll(state, diceCount);
+      if (!rollResult.success) {
+        socket.emit('error', rollResult.message);
+        return;
+      }
+      movePlayer(state, rollResult.steps!);
       io.to(roomId).emit('game:state', state);
     });
 
@@ -196,8 +200,7 @@ export function setupSocketIO(httpServer: HttpServer): void {
     socket.on('game:rebuild', (roomId, tileIndex, buildingType) => {
       const state = games.get(roomId);
       if (!state) return;
-      const player = state.players[state.currentPlayerIndex];
-      if (player.id !== user.id || state.status !== 'acting') {
+      if (!canRebuild(state, user.id)) {
         socket.emit('error', '现在不能改建');
         return;
       }
@@ -233,18 +236,6 @@ export function setupSocketIO(httpServer: HttpServer): void {
         return;
       }
       const result = buyCard(state, user.id, cardId);
-      if (!result.success) {
-        socket.emit('error', result.message);
-        return;
-      }
-      io.to(roomId).emit('game:state', state);
-    });
-
-    socket.on('game:stockTrade', (roomId, stockId, quantity) => {
-      const state = games.get(roomId);
-      if (!state) return;
-      // 股票交易可在任意阶段进行
-      const result = tradeStock(state, user.id, stockId, quantity);
       if (!result.success) {
         socket.emit('error', result.message);
         return;
@@ -308,6 +299,18 @@ export function setupSocketIO(httpServer: HttpServer): void {
         return;
       }
       const result = sellItem(state, user.id, itemId, quantity ?? 1);
+      if (!result.success) {
+        socket.emit('error', result.message);
+        return;
+      }
+      io.to(roomId).emit('game:state', state);
+    });
+
+    socket.on('game:stockTrade', (roomId, stockId, quantity) => {
+      const state = games.get(roomId);
+      if (!state) return;
+      // 股票交易可在任意阶段进行
+      const result = tradeStock(state, user.id, stockId, quantity);
       if (!result.success) {
         socket.emit('error', result.message);
         return;

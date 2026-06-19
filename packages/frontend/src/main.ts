@@ -519,40 +519,6 @@ function renderActions(container: HTMLElement, state: GameState): void {
         el.appendChild(itemBtn);
       }
 
-      // 改建按钮（自己的地）
-      if (tile.type === 'property' && tile.ownerId === currentPlayer.id) {
-        const rebuildBtn = document.createElement('button');
-        rebuildBtn.textContent = '改建';
-        rebuildBtn.addEventListener('click', () => {
-          const choices = tile.size === 'small'
-            ? [{ id: 'house', name: '住宅' }, { id: 'chainStore', name: '连锁店' }]
-            : [
-                { id: 'park', name: '公园' },
-                { id: 'mall', name: '商场' },
-                { id: 'hotel', name: '旅馆' },
-                { id: 'gasStation', name: '加油站' },
-                { id: 'lab', name: '研究所' },
-              ];
-          const choice = window.prompt(
-            '选择建筑类型：' + choices.map((c) => `${c.id}=${c.name}`).join('，')
-          );
-          if (choice) rebuildTile(state.roomId, tileIndex, choice as any);
-        });
-        el.appendChild(rebuildBtn);
-      }
-
-      // 使用卡片按钮
-      if (currentPlayer.cards.length > 0) {
-        const cardBtn = document.createElement('button');
-        cardBtn.textContent = '使用卡片';
-        cardBtn.addEventListener('click', () => {
-          const card = currentPlayer.cards[0];
-          const def = currentPlayer.cards.find((c) => c.cardId === card.cardId);
-          useCard(state.roomId, card.instanceId);
-        });
-        el.appendChild(cardBtn);
-      }
-
       // 理赔按钮
       if (currentPlayer.insuranceDays > 0) {
         const claimBtn = document.createElement('button');
@@ -646,12 +612,12 @@ function promptCardTarget(state: GameState, cardId: string): CardUseTarget {
     ) as BuildingType | undefined;
   } else if (cardId === 'priceRise' || cardId === 'seal' || cardId === 'angel' || cardId === 'devil') {
     target.targetGroup = parseInt(window.prompt('输入目标路段 group 编号：') || '', 10);
-  } else if (cardId === 'alliance' || cardId === 'turnAround' || cardId === 'stay' || cardId === 'turtle' || cardId === 'sleepwalk' || cardId === 'frame') {
+  } else if (cardId === 'alliance' || cardId === 'turnAround' || cardId === 'stay' || cardId === 'turtle' || cardId === 'sleepwalk' || cardId === 'frame' || cardId === 'snatch' || cardId === 'equalPoverty') {
     const lines = state.players.map((p, i) => `${i + 1}. ${p.username}`);
     const choice = window.prompt(`选择目标玩家：\n${lines.join('\n')}`);
     const idx = parseInt(choice || '', 10) - 1;
     target.targetPlayerId = state.players[idx]?.id;
-  } else if (cardId === 'swapLand' || cardId === 'auction' || cardId === 'monster' || cardId === 'demolish') {
+  } else if (cardId === 'swapLand' || cardId === 'auction' || cardId === 'monster' || cardId === 'demolish' || cardId === 'swapHouse') {
     target.targetTileIndex = parseInt(window.prompt('输入目标地块索引：') || '', 10);
   } else if (cardId === 'summonSpirit') {
     target.targetPlayerId = window.prompt('输入神明 ID（如 smallWealthGod）：') || undefined;

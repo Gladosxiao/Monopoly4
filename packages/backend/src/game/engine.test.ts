@@ -34,6 +34,10 @@ function giveCard(player: Player, cardId: string): string {
   return instanceId;
 }
 
+function giveItem(player: Player, itemId: string, quantity = 1): void {
+  player.items.push({ instanceId: `${itemId}-${Math.random().toString(36).slice(2)}`, itemId, quantity });
+}
+
 function setOwner(state: GameState, tileIndex: number, playerId: string, buildingType?: Tile['buildingType'], level = 0): void {
   const tile = state.map.tiles[tileIndex];
   tile.ownerId = playerId;
@@ -337,5 +341,79 @@ describe('endTurn 状态递减', () => {
     endTurn(state);
     endTurn(state);
     expect(state.players[0].spirit).toBeUndefined();
+  });
+});
+
+describe('抢夺卡 snatch', () => {
+  it('从目标玩家抢夺一张卡片', () => {
+    const state = makeTestState();
+    const caster = state.players[0];
+    const target = state.players[1];
+    giveCard(target, 'freePass');
+    const snatchId = giveCard(caster, 'snatch');
+
+    const result = useCard(state, 'p1', snatchId, { targetPlayerId: 'p2' });
+
+    expect(result.success).toBe(true);
+    expect(target.cards).toHaveLength(0);
+    expect(caster.cards.some((c) => c.cardId === 'freePass')).toBe(true);
+    expect(state.logs.some((l) => l.type === 'card:snatch')).toBe(true);
+  });
+
+  it('从目标玩家抢夺一个道具', () => {
+    const state = makeTestState();
+    const caster = state.players[0];
+    const target = state.players[1];
+    giveItem(target, 'remoteDice', 2);
+    const snatchId = giveCard(caster, 'snatch');
+
+    const result = useCard(state, 'p1', snatchId, { targetPlayerId: 'p2' });
+
+    expect(result.success).toBe(true);
+    expect(target.items[0].quantity).toBe(1);
+    expect(caster.items.some((i) => i.itemId === 'remoteDice' && i.quantity === 1)).toBe(true);
+    expect(state.logs.some((l) => l.type === 'card:snatch')).toBe(true);
+  });
+
+  it('目标没有卡片和道具时抢夺失败', () => {
+    const state = makeTestState();
+    const caster = state.players[0];
+    const snatchId = giveCard(caster, 'snatch');
+
+    const result = useCard(state, 'p1', snatchId, { targetPlayerId: 'p2' });
+
+    expect(result.success).toBe(false);
+    // 使用失败时不消耗卡片
+    expect(caster.cards.some((c) => c.cardId === 'snatch')).toBe(true);
+  });
+});
+
+describe('卡片格 handleTileEffect', () => {
+  it('到达卡片格获得随机卡片', () => {
+    const state = makeTestState();
+    state.currentPlayerIndex = 0;
+    state.pendingTileIndex = 4; // 卡片格
+    state.status = 'acting';
+
+    handleTileEffect(state);
+
+    expect(state.players[0].cards.length).toBe(1);
+    expect(state.logs.some((l) => l.type === 'player:card')).toBe(true);
+  });
+
+  it('卡片背包满 15 张时无法获得', () => {
+    const state = makeTestState();
+    const player = state.players[0];
+    for (let i = 0; i < 15; i++) {
+      player.cards.push({ instanceId: `c-${i}`, cardId: 'freePass' });
+    }
+    state.currentPlayerIndex = 0;
+    state.pendingTileIndex = 4;
+    state.status = 'acting';
+
+    handleTileEffect(state);
+
+    expect(player.cards.length).toBe(15);
+    expect(state.logs.some((l) => l.type === 'player:cardFull')).toBe(true);
   });
 });

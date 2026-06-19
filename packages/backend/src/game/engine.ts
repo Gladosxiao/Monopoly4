@@ -7,9 +7,9 @@
  * - 土地购买、升级、改建
  * - 过路费计算（住宅 / 连锁店 / 特殊建筑 / 神明 / 卡片 / 路段效果）
  * - 卡片与道具的使用入口
+ * - 命运/新闻/公司事件结算
+ * - 股票、保险等金融系统入口
  * - 回合结束与状态效果递减
- *
- * 详细设计见：docs/design/09-rent-system.md
  */
 
 import {
@@ -24,18 +24,14 @@ import {
   type RoadEffect,
   type CardUseTarget,
   type ItemUseTarget,
+  type VehicleType,
   SIMPLE_MAP,
   CHARACTERS,
   DEFAULT_COMPANIES,
   DEFAULT_STOCKS,
   CARD_IDS,
-  CARD_DEFINITIONS,
   getSpiritDefinition,
 } from '@monopoly4/shared';
-import { useCard as useCardSystem, type CardContext } from './cardSystem/index.js';
-import { buyCard as buyCardFromSystem, sellCard as sellCardFromSystem } from './cardSystem/index.js';
-import { useItem as useItemSystem, type ItemContext } from './itemSystem/index.js';
-import { buyItem as buyItemFromSystem, sellItem as sellItemFromSystem } from './itemSystem/index.js';
 import { triggerFateEvent, triggerNewsEvent, type EventEffect, type EventOutcome } from './eventSystem/index.js';
 import {
   tradeStock as tradeStockImpl,
@@ -49,7 +45,14 @@ import {
   applyCompanyProfit,
   claimInsurance,
 } from './financialSystem/index.js';
+import { useCard as useCardSystem, type CardContext } from './cardSystem/index.js';
+import { buyCard as buyCardFromSystem, sellCard as sellCardFromSystem } from './cardSystem/index.js';
+import { useItem as useItemSystem, type ItemContext } from './itemSystem/index.js';
+import { buyItem as buyItemFromSystem, sellItem as sellItemFromSystem } from './itemSystem/index.js';
 
+function generateId(): string {
+  return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+}
 
 /**
  * 根据房间配置创建一局新游戏。
@@ -106,12 +109,8 @@ export function createGame(roomId: string, config: GameConfig, roomPlayers: Room
   };
 }
 
-export function getDiceCount(moveMode: GameConfig['moveMode']): number {
-  return getMaxDiceCount(moveMode);
-}
-
-export function getMaxDiceCount(moveMode: GameConfig['moveMode']): number {
-  switch (moveMode) {
+export function getMaxDiceCount(vehicle: VehicleType): number {
+  switch (vehicle) {
     case 'bike':
       return 2;
     case 'car':
@@ -121,9 +120,16 @@ export function getMaxDiceCount(moveMode: GameConfig['moveMode']): number {
   }
 }
 
+/**
+ * 兼容旧接口的别名。
+ */
+export function getDiceCount(moveMode: VehicleType): number {
+  return getMaxDiceCount(moveMode);
+}
+
 /** 根据当前载具获取可选骰子数范围 */
-export function getAllowedDiceCounts(moveMode: GameConfig['moveMode']): number[] {
-  const max = getMaxDiceCount(moveMode);
+export function getAllowedDiceCounts(vehicle: VehicleType): number[] {
+  const max = getMaxDiceCount(vehicle);
   return Array.from({ length: max }, (_, i) => i + 1);
 }
 
@@ -144,7 +150,7 @@ export function roll(
   diceCount?: number
 ): { success: boolean; steps?: number; message?: string } {
   const player = getCurrentPlayer(state);
-  const max = getMaxDiceCount(state.config.moveMode);
+  const max = getMaxDiceCount(player.vehicle);
   const count = diceCount ?? max;
   if (count < 1 || count > max) {
     return { success: false, message: `当前载具最多可投 ${max} 颗骰子` };
@@ -295,7 +301,7 @@ export function calculateRent(
     case 'gasStation': {
       // 仅对乘坐交通工具的玩家生效；步行时只收象征性费用
       const steps = state.lastRoll ?? 1;
-      const rate = state.config.moveMode === 'walk' ? 50 : 200;
+      const rate = visitor.vehicle === 'walk' ? 50 : 200;
       base = steps * rate;
       break;
     }
@@ -363,7 +369,8 @@ export function movePlayer(state: GameState, steps: number): GameState {
  * 处理玩家到达当前地块后的效果。
  * - property：买地/升级/支付过路费
  * - tax：缴纳税款
- * - card/coupon30：获得点券
+ * - card：随机获得一张卡片（最多 15 张）
+ * - coupon：获得点券
  * - fate/chance：触发命运事件
  * - news：触发全局新闻事件
  * - company：触发公司特效
@@ -406,23 +413,21 @@ export function handleTileEffect(state: GameState): GameState {
     const tax = 5000;
     payMoney(state, player, tax, '税款');
   } else if (tile.type === 'card') {
-    if (player.cards.length >= 15) {
-      state.logs.push({
-        timestamp: Date.now(),
-        type: 'player:cardFull',
-        actorId: player.id,
-        message: `${player.username} 经过卡片格，但卡片已满 15 张`,
-      });
-    } else {
+    if (player.cards.length < 15) {
       const cardId = CARD_IDS[Math.floor(Math.random() * CARD_IDS.length)];
-      const def = CARD_DEFINITIONS[cardId];
-      const instanceId = `${cardId}-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
-      player.cards.push({ instanceId, cardId });
+      player.cards.push({ instanceId: generateId(), cardId });
       state.logs.push({
         timestamp: Date.now(),
         type: 'player:card',
         actorId: player.id,
-        message: `${player.username} 经过卡片格，获得 ${def.name}`,
+        message: `${player.username} 在卡片格获得一张卡片`,
+      });
+    } else {
+      state.logs.push({
+        timestamp: Date.now(),
+        type: 'player:cardFull',
+        actorId: player.id,
+        message: `${player.username} 的卡片背包已满，无法获得更多卡片`,
       });
     }
   } else if (tile.type === 'coupon') {
