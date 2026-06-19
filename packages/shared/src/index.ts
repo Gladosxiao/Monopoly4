@@ -1,4 +1,5 @@
 import type { NpcType } from './data/npcs.js';
+import type { MiniGameType } from './data/minigames.js';
 
 // ==================== 用户 ====================
 
@@ -152,6 +153,7 @@ export interface Tile {
   position?: { x: number; y: number }; // 可选渲染坐标
   couponValue?: number; // 仅 coupon 类型，点券数值
   companyId?: string; // 仅 company 类型，对应公司 ID
+  miniGameType?: MiniGameType; // 仅 miniGame 类型，小游戏类型
   basePrice: number;
   baseRent: number;
   level: number;
@@ -261,6 +263,8 @@ export interface Player {
   spirit?: PlayerSpirit;
   statusEffects: StatusEffect[];
   stockHoldings: Record<string, number>;
+  /** 每只股票的加权平均买入成本（仓位） */
+  stockCostBasis: Record<string, number>;
   insuranceDays: number;
   isBankrupt: boolean;
   isAI: boolean;
@@ -281,7 +285,7 @@ export interface ItemInstance {
   quantity: number;
 }
 
-export type GamePhase = 'waiting' | 'rolling' | 'moving' | 'acting' | 'ended';
+export type GamePhase = 'waiting' | 'rolling' | 'moving' | 'acting' | 'minigame' | 'ended';
 
 export interface RoadEffect {
   id: string;
@@ -339,6 +343,7 @@ export interface TurnSnapshot {
     | 'statusEffects'
     | 'stockHoldings'
     | 'insuranceDays'
+    | 'stockCostBasis'
     | 'isBankrupt'
     | 'liquidationCount'
     | 'spirit'
@@ -378,6 +383,7 @@ export interface GameState {
   lastRoll?: number;
   pendingTileIndex?: number;
   selectedDiceCount?: number;
+  pendingMiniGame?: MiniGameType;
 }
 
 export interface GameLog {
@@ -461,6 +467,7 @@ export interface ClientToServerEvents {
   // 乐透与魔法屋
   'game:lotteryBet': (roomId: string, number: number) => void;
   'game:magicSpell': (roomId: string, targetPlayerId: string, spell: 'swapCash' | 'dismissSpirit' | 'stealCard' | 'jail') => void;
+  'game:miniGameResult': (roomId: string, result: { coupons: number }) => void;
   // 测试模式事件
   'test:addBot': (roomId: string) => void;
   'test:getSnapshot': (roomId: string) => void;
