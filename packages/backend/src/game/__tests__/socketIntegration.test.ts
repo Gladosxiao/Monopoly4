@@ -48,8 +48,7 @@ describe('Socket 房间与游戏流程', () => {
     const app = express();
     app.use(express.json());
     httpServer = createServer(app);
-    io = new SocketIOServer<ClientToServerEvents, ServerToClientEvents>(httpServer);
-    setupSocketIO(httpServer);
+    io = setupSocketIO(httpServer);
     await new Promise<void>((resolve) => {
       httpServer.listen(0, () => {
         const addr = httpServer.address();

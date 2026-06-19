@@ -298,7 +298,16 @@ async function navigateToLobby(error?: string): Promise<void> {
       list.appendChild(li);
     });
   } catch (e: any) {
-    navigateToLogin(e.message);
+    // 房间列表失败通常不是认证问题，直接在大厅显示错误，避免误跳登录页
+    const errorEl = container.querySelector('.error');
+    if (errorEl) {
+      errorEl.textContent = e.message;
+    } else {
+      const div = document.createElement('div');
+      div.className = 'error';
+      div.textContent = e.message;
+      container.insertBefore(div, container.firstChild);
+    }
   }
 }
 

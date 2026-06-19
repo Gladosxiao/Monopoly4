@@ -51,7 +51,7 @@ import { runAITurn, startAIAuto } from '../game/testMode/aiPlayer.js';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'monopoly4-dev-secret';
 
-export function setupSocketIO(httpServer: HttpServer): void {
+export function setupSocketIO(httpServer: HttpServer): SocketIOServer<ClientToServerEvents, ServerToClientEvents> {
   const io = new SocketIOServer<ClientToServerEvents, ServerToClientEvents>(httpServer, {
     cors: { origin: '*' },
   });
@@ -704,6 +704,8 @@ export function setupSocketIO(httpServer: HttpServer): void {
       socketRoomMap.delete(socket.id);
     });
   });
+
+  return io;
 }
 
 // REST 路由中也需要这个函数来切换准备状态

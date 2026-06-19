@@ -12,10 +12,11 @@ export function getSocket(): GameSocket {
       auth: { token },
       transports: ['websocket', 'polling'],
     });
-    // 连接失败时尝试刷新 token 并重连
+    // 连接失败时尝试刷新 token 并重连，最多重试一次
+    let refreshAttempted = false;
     socket.on('connect_error', (err) => {
-      if (err.message === 'Unauthorized' && !socket?.connected) {
-        // token 可能过期，尝试刷新
+      if (err.message === 'Unauthorized' && !socket?.connected && !refreshAttempted) {
+        refreshAttempted = true;
         const refreshToken = localStorage.getItem('refreshToken');
         if (refreshToken) {
           fetch('/api/auth/refresh', {
@@ -26,12 +27,21 @@ export function getSocket(): GameSocket {
             if (data.accessToken) {
               localStorage.setItem('accessToken', data.accessToken);
               if (data.refreshToken) localStorage.setItem('refreshToken', data.refreshToken);
-              // 用新 token 重连
               socket?.disconnect();
               socket = null;
               getSocket();
+            } else {
+              // 刷新失败，清理 token 避免无限重连
+              localStorage.removeItem('accessToken');
+              localStorage.removeItem('refreshToken');
+              localStorage.removeItem('user');
+              socket?.disconnect();
+              socket = null;
             }
-          }).catch(() => {});
+          }).catch(() => {
+            socket?.disconnect();
+            socket = null;
+          });
         }
       }
     });

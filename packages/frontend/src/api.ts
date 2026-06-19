@@ -32,46 +32,60 @@ async function tryRefreshToken(): Promise<string | null> {
   return refreshPromise;
 }
 
+function isAuthEndpoint(path: string): boolean {
+  return path === '/auth/login' || path === '/auth/register' || path === '/auth/refresh';
+}
+
 export async function api<T>(path: string, options?: RequestInit): Promise<T> {
   const token = localStorage.getItem('accessToken');
+  // 登录/注册/刷新接口不应携带旧的 accessToken，避免服务端误解析或干扰
+  const shouldAttachToken = !isAuthEndpoint(path);
   const res = await fetch(`${API_BASE}${path}`, {
     ...options,
     headers: {
       'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(shouldAttachToken && token ? { Authorization: `Bearer ${token}` } : {}),
       ...options?.headers,
     },
   });
 
-  // 401 时尝试刷新 token 并重试一次
-  if (res.status === 401) {
-    const newToken = await tryRefreshToken();
-    if (newToken) {
-      const retryRes = await fetch(`${API_BASE}${path}`, {
-        ...options,
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${newToken}`,
-          ...options?.headers,
-        },
-      });
-      if (!retryRes.ok) {
-        const err = await retryRes.json().catch(() => ({}));
-        throw new Error(err.error || `Request failed: ${retryRes.status}`);
-      }
-      return retryRes.json();
-    }
-    // 刷新失败，清除登录状态
-    localStorage.removeItem('accessToken');
-    localStorage.removeItem('refreshToken');
-    localStorage.removeItem('user');
-    throw new Error('登录已过期，请重新登录');
-  }
-
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
-    throw new Error(err.error || `Request failed: ${res.status}`);
+    const message = err.error || `Request failed: ${res.status}`;
+
+    // 登录/注册/刷新端点直接透传后端错误，不要尝试刷新 token
+    if (isAuthEndpoint(path)) {
+      throw new Error(message);
+    }
+
+    // 401 时尝试刷新 token 并重试一次
+    if (res.status === 401) {
+      const newToken = await tryRefreshToken();
+      if (newToken) {
+        const retryRes = await fetch(`${API_BASE}${path}`, {
+          ...options,
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${newToken}`,
+            ...options?.headers,
+          },
+        });
+        if (!retryRes.ok) {
+          const retryErr = await retryRes.json().catch(() => ({}));
+          throw new Error(retryErr.error || `Request failed: ${retryRes.status}`);
+        }
+        return retryRes.json();
+      }
+      // 刷新失败，清除登录状态
+      localStorage.removeItem('accessToken');
+      localStorage.removeItem('refreshToken');
+      localStorage.removeItem('user');
+      throw new Error('登录已过期，请重新登录');
+    }
+
+    throw new Error(message);
   }
+
   return res.json();
 }
 
