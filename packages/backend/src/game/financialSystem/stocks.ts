@@ -20,25 +20,29 @@ export function getStockMarketValue(state: GameState, playerId: string): number 
 }
 
 /**
- * 更新每家公司董事长：持股最多者担任，张数相同则保留原董事长。
+ * 更新每家公司董事长：持股最多且超过总股本 10% 者担任，张数相同则保留原董事长。
  */
 export function updateChairmen(state: GameState): void {
   for (const company of state.companies) {
     const stock = state.stocks.find((s) => s.companyId === company.id);
     if (!stock) continue;
 
+    const threshold = stock.totalShares * 0.1;
     let maxShares = -1;
-    let chairmanId: string | undefined;
+    let chairmanId: string | undefined = company.chairmanPlayerId;
     for (const player of state.players) {
       if (player.isBankrupt) continue;
       const shares = player.stockHoldings[stock.id] ?? 0;
       if (shares > maxShares) {
         maxShares = shares;
         chairmanId = player.id;
+      } else if (shares === maxShares && player.id === company.chairmanPlayerId) {
+        // 平局时保留原董事长
+        chairmanId = player.id;
       }
     }
 
-    if (maxShares > 0 && chairmanId) {
+    if (maxShares > threshold && chairmanId) {
       company.chairmanPlayerId = chairmanId;
     } else {
       company.chairmanPlayerId = undefined;
@@ -84,7 +88,12 @@ export function tradeStock(
       player.cash = 0;
       player.deposit -= fromDeposit;
     }
-    player.stockHoldings[stock.id] = (player.stockHoldings[stock.id] ?? 0) + quantity;
+    const prevHolding = player.stockHoldings[stock.id] ?? 0;
+    const prevCost = player.stockCostBasis[stock.id] ?? 0;
+    const newHolding = prevHolding + quantity;
+    const newCost = (prevCost * prevHolding + totalPrice) / newHolding;
+    player.stockHoldings[stock.id] = newHolding;
+    player.stockCostBasis[stock.id] = Math.floor(newCost);
     stock.availableShares -= quantity;
     updateChairmen(state);
     return {
@@ -105,6 +114,7 @@ export function tradeStock(
   player.stockHoldings[stock.id] = holding - sellQuantity;
   if (player.stockHoldings[stock.id] === 0) {
     delete player.stockHoldings[stock.id];
+    delete player.stockCostBasis[stock.id];
   }
   player.cash += totalPrice;
   stock.availableShares += sellQuantity;
@@ -135,6 +145,7 @@ export function sellAllStocks(state: GameState, playerId: string): number {
     totalCash += value;
   }
   player.stockHoldings = {};
+  player.stockCostBasis = {};
   updateChairmen(state);
   return totalCash;
 }

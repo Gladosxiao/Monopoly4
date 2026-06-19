@@ -53,7 +53,7 @@ import {
   onError,
   disconnectSocket,
 } from './socket.js';
-import { createBoardCanvas, renderBoard } from './board.js';
+import { createBoardCanvas, renderBoard, getTileIndexAt } from './board.js';
 import { createTestPanel, destroyTestPanel, isTestMode, enableTestMode } from './testMode/index.js';
 
 const app = document.getElementById('app')!;
@@ -537,6 +537,32 @@ async function navigateToGame(roomId: string): Promise<void> {
   let canvas = createBoardCanvas();
   boardWrap.appendChild(canvas);
 
+  // 棋盘鼠标悬停：实时更新 hoverIndex 并触发重绘
+  let hoverIndex = -1;
+  let hoverPixel: { x: number; y: number } | undefined;
+  function attachBoardEvents(c: HTMLCanvasElement) {
+    c.addEventListener('mousemove', (e) => {
+      const rect = c.getBoundingClientRect();
+      const dpr = Number(c.dataset.dpr || '1');
+      const x = (e.clientX - rect.left) * (c.width / rect.width) / dpr;
+      const y = (e.clientY - rect.top) * (c.height / rect.height) / dpr;
+      const idx = getTileIndexAt(x, y);
+      if (idx !== hoverIndex) {
+        hoverIndex = idx;
+        hoverPixel = { x, y };
+        if (currentGame) renderBoard(c, currentGame, currentUser!.id, { hoverIndex, hoverPixel });
+      } else if (idx >= 0) {
+        hoverPixel = { x, y };
+      }
+    });
+    c.addEventListener('mouseleave', () => {
+      hoverIndex = -1;
+      hoverPixel = undefined;
+      if (currentGame) renderBoard(c, currentGame, currentUser!.id);
+    });
+  }
+  attachBoardEvents(canvas);
+
   container.querySelector('#btn-exit')!.addEventListener('click', () => {
     navigateToLobby();
   });
@@ -569,11 +595,15 @@ async function navigateToGame(roomId: string): Promise<void> {
     currentGame = state;
     // 当地图格数变化时重建 canvas
     if (String(state.map.tiles.length) !== canvas.dataset.tileCount) {
+      const oldCanvas = canvas;
       const newCanvas = createBoardCanvas(state.map.tiles.length);
-      boardWrap.replaceChild(newCanvas, canvas);
+      boardWrap.replaceChild(newCanvas, oldCanvas);
       canvas = newCanvas;
+      attachBoardEvents(canvas);
+      hoverIndex = -1;
+      hoverPixel = undefined;
     }
-    renderBoard(canvas, state, currentUser!.id);
+    renderBoard(canvas, state, currentUser!.id, hoverIndex >= 0 ? { hoverIndex, hoverPixel } : {});
     renderPlayersInfo(container, state);
     renderBackpack(container, state);
     renderActions(container, state);
@@ -929,6 +959,7 @@ function renderStockMarket(container: HTMLElement, state: GameState): void {
         <th>股价</th>
         <th>涨跌</th>
         <th>持有</th>
+        <th>成本价（仓位）</th>
         <th>操作</th>
       </tr>
     </thead>
@@ -951,17 +982,22 @@ function renderStockMarket(container: HTMLElement, state: GameState): void {
   filteredStocks.forEach((stock) => {
     const company = state.companies.find((c) => c.id === stock.companyId);
     const holding = currentPlayer?.stockHoldings[stock.id] ?? 0;
+    const costBasis = currentPlayer?.stockCostBasis[stock.id] ?? 0;
     const chairman = company?.chairmanPlayerId
       ? state.players.find((p) => p.id === company.chairmanPlayerId)?.username
       : '无';
     const tr = document.createElement('tr');
     const fluctuationClass = stock.fluctuation >= 0 ? 'stock-up' : 'stock-down';
     const fluctuationSign = stock.fluctuation >= 0 ? '+' : '';
+    const unrealized = holding > 0 ? (stock.price - costBasis) * holding : 0;
+    const plClass = unrealized >= 0 ? 'stock-up' : 'stock-down';
+    const plSign = unrealized >= 0 ? '+' : '';
     tr.innerHTML = `
-      <td>${stock.name}<br><small>董事长：${chairman}</small></td>
+      <td>${stock.name}<br><small>董事长：${chairman}（需>10%）</small></td>
       <td>$${stock.price}</td>
       <td class="${fluctuationClass}">${fluctuationSign}${stock.fluctuation}%</td>
       <td>${holding}</td>
+      <td>$${costBasis}<br><small class="${plClass}">${plSign}$${unrealized}</small></td>
       <td></td>
     `;
     const actions = tr.querySelector('td:last-child')!;
