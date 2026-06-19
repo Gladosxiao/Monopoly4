@@ -28,6 +28,8 @@ import {
   CHARACTERS,
   DEFAULT_COMPANIES,
   DEFAULT_STOCKS,
+  CARD_IDS,
+  CARD_DEFINITIONS,
   getSpiritDefinition,
 } from '@monopoly4/shared';
 import { useCard as useCardSystem, type CardContext } from './cardSystem/index.js';
@@ -404,13 +406,25 @@ export function handleTileEffect(state: GameState): GameState {
     const tax = 5000;
     payMoney(state, player, tax, '税款');
   } else if (tile.type === 'card') {
-    player.coupons += 30;
-    state.logs.push({
-      timestamp: Date.now(),
-      type: 'player:coupon',
-      actorId: player.id,
-      message: `${player.username} 获得 30 点券`,
-    });
+    if (player.cards.length >= 15) {
+      state.logs.push({
+        timestamp: Date.now(),
+        type: 'player:cardFull',
+        actorId: player.id,
+        message: `${player.username} 经过卡片格，但卡片已满 15 张`,
+      });
+    } else {
+      const cardId = CARD_IDS[Math.floor(Math.random() * CARD_IDS.length)];
+      const def = CARD_DEFINITIONS[cardId];
+      const instanceId = `${cardId}-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+      player.cards.push({ instanceId, cardId });
+      state.logs.push({
+        timestamp: Date.now(),
+        type: 'player:card',
+        actorId: player.id,
+        message: `${player.username} 经过卡片格，获得 ${def.name}`,
+      });
+    }
   } else if (tile.type === 'coupon') {
     const value = tile.couponValue ?? 30;
     player.coupons += value;

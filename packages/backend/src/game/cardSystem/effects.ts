@@ -7,10 +7,11 @@ import type {
   Player,
   Tile,
   CardInstance,
+  ItemInstance,
   CardDefinition,
   BuildingType,
 } from '@monopoly4/shared';
-import { CARD_DEFINITIONS, CARD_IDS, getSpiritDefinition } from '@monopoly4/shared';
+import { CARD_DEFINITIONS, CARD_IDS, ITEM_DEFINITIONS, getSpiritDefinition } from '@monopoly4/shared';
 import { getCurrentPlayer, payMoney, transferMoney } from '../engine.js';
 
 export interface CardContext {
@@ -60,6 +61,10 @@ function removeCard(player: Player, cardId: string): CardInstance | undefined {
 
 function consumeCard(player: Player, cardId: string): boolean {
   return removeCard(player, cardId) !== undefined;
+}
+
+function generateId(): string {
+  return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 }
 
 function addStatusEffect(
@@ -327,7 +332,59 @@ export const CARD_EFFECT_REGISTRY: Record<string, CardEffect> = {
     log(state, 'card:alliance', caster.id, `${caster.username} 与 ${target.username} 结盟 7 天`, target.id);
     return { success: true };
   },
-  snatch: (state, caster, ctx) => placeholder(state, caster, ctx, 'snatch'),
+  snatch: (state, caster, ctx) => {
+    const target = findPlayer(state, ctx.targetPlayerId);
+    if (!target || target.id === caster.id) {
+      return { success: false, message: '需要指定其他玩家' };
+    }
+    if (target.cards.length === 0 && target.items.length === 0) {
+      return { success: false, message: '目标没有可抢夺的卡片或道具' };
+    }
+
+    const options: Array<{ kind: 'card'; value: CardInstance } | { kind: 'item'; value: ItemInstance }> = [];
+    target.cards.forEach((c) => options.push({ kind: 'card', value: c }));
+    target.items.forEach((i) => options.push({ kind: 'item', value: i }));
+
+    const pick = options[Math.floor(Math.random() * options.length)];
+    if (pick.kind === 'card') {
+      const idx = target.cards.indexOf(pick.value);
+      if (idx >= 0) target.cards.splice(idx, 1);
+      caster.cards.push(pick.value);
+      const def = CARD_DEFINITIONS[pick.value.cardId];
+      log(
+        state,
+        'card:snatch',
+        caster.id,
+        `${caster.username} 使用抢夺卡，从 ${target.username} 抢到 ${def?.name ?? '卡片'}`,
+        target.id
+      );
+    } else {
+      const idx = target.items.indexOf(pick.value);
+      let itemId = pick.value.itemId;
+      if (idx >= 0) {
+        const item = target.items[idx];
+        item.quantity -= 1;
+        if (item.quantity === 0) {
+          target.items.splice(idx, 1);
+        }
+      }
+      const def = ITEM_DEFINITIONS[itemId];
+      const existing = caster.items.find((i) => i.itemId === itemId);
+      if (existing) {
+        existing.quantity += 1;
+      } else {
+        caster.items.push({ instanceId: generateId(), itemId, quantity: 1 });
+      }
+      log(
+        state,
+        'card:snatch',
+        caster.id,
+        `${caster.username} 使用抢夺卡，从 ${target.username} 抢到 ${def?.name ?? '道具'}`,
+        target.id
+      );
+    }
+    return { success: true };
+  },
   hibernation: (state, caster) => {
     state.players.forEach((p) => {
       if (p.id !== caster.id && !p.isBankrupt) {
