@@ -7,6 +7,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import authRoutes from './routes/auth.js';
 import roomRoutes from './routes/rooms.js';
+import mapRoutes from './routes/maps.js';
 import { setupSocketIO } from './socket/game.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -19,6 +20,7 @@ app.use(cookieParser());
 
 app.use('/api/auth', authRoutes);
 app.use('/api/rooms', roomRoutes);
+app.use('/api/maps', mapRoutes);
 
 // 生产环境托管前端构建产物
 const distPath = path.resolve(__dirname, '../../frontend/dist');

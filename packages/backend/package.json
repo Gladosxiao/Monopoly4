@@ -11,6 +11,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@monopoly4/map-generator": "^0.1.0",
     "@monopoly4/shared": "^0.1.0",
     "bcryptjs": "^2.4.3",
     "better-sqlite3": "^9.4.3",

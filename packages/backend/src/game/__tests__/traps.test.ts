@@ -74,4 +74,23 @@ describe('陷阱放置', () => {
     expect(p1.statusEffects.some((e) => e.type === 'bomb')).toBe(false);
     expect(p1.statusEffects.some((e) => e.type === 'hospital')).toBe(true);
   });
+
+  it('已投保玩家触发地雷住院时自动理赔', () => {
+    const state = makeTestState();
+    const p1 = state.players[0];
+    p1.vehicle = 'car';
+    p1.insuranceDays = 30;
+    p1.statusEffects.push({ type: 'insurance', remainingDays: 30, data: { premium: 1000 } });
+    const beforeCash = p1.cash;
+    prepareActingState(state);
+    giveItem(p1, 'mine');
+    useItem(state, 'p1', 'mine', { targetTileIndex: 5 });
+
+    p1.position = state.map.path[(state.map.path.indexOf(5) - 1 + state.map.path.length) % state.map.path.length];
+    movePlayer(state, 1);
+
+    expect(p1.statusEffects.some((e) => e.type === 'hospital')).toBe(true);
+    expect(p1.cash).toBeGreaterThan(beforeCash);
+    expect(state.logs.some((l) => l.type === 'insurance:claim')).toBe(true);
+  });
 });

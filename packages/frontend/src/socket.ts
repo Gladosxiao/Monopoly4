@@ -113,6 +113,22 @@ export function claimInsurance(roomId: string): void {
   getSocket().emit('game:claimInsurance', roomId);
 }
 
+export function takeLoan(roomId: string, amount: number): void {
+  getSocket().emit('game:loan', roomId, amount);
+}
+
+export function repayLoan(roomId: string, amount: number): void {
+  getSocket().emit('game:repay', roomId, amount);
+}
+
+export function placeLotteryBet(roomId: string, number: number): void {
+  getSocket().emit('game:lotteryBet', roomId, number);
+}
+
+export function castMagicSpell(roomId: string, targetPlayerId: string, spell: 'swapCash' | 'dismissSpirit' | 'stealCard' | 'jail'): void {
+  getSocket().emit('game:magicSpell', roomId, targetPlayerId, spell);
+}
+
 export function skipTurn(roomId: string): void {
   getSocket().emit('game:skip', roomId);
 }

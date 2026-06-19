@@ -24,14 +24,15 @@ import {
   type RoadEffect,
   type CardUseTarget,
   type ItemUseTarget,
-  SIMPLE_MAP,
   CHARACTERS,
   DEFAULT_COMPANIES,
   DEFAULT_STOCKS,
   CARD_IDS,
   CARD_DEFINITIONS,
+  LAND_LEASE_DAYS,
   getSpiritDefinition,
 } from '@monopoly4/shared';
+import { loadGameMap } from './mapLoader.js';
 import { useCard as useCardSystem, type CardContext } from './cardSystem/index.js';
 import { buyCard as buyCardFromSystem, sellCard as sellCardFromSystem } from './cardSystem/index.js';
 import { useItem as useItemSystem, type ItemContext } from './itemSystem/index.js';
@@ -39,6 +40,29 @@ import { buyItem as buyItemFromSystem, sellItem as sellItemFromSystem } from './
 import { triggerTrap, tickBomb, type TriggerResult } from './itemSystem/trapSystem.js';
 import { triggerFateEvent, triggerNewsEvent, type EventEffect, type EventOutcome } from './eventSystem/index.js';
 import { spawnNpcs, moveNpcs, triggerNpcEffect } from './npcSystem/index.js';
+
+/** 神明到期变身映射：小神 <-> 大神，天使 <-> 恶魔；未列出的神明到期后消失。 */
+const GAME_TIME_MONTHS: Record<GameConfig['gameTime'], number | null> = {
+  '1m': 1,
+  '3m': 3,
+  '6m': 6,
+  '1y': 12,
+  '2y': 24,
+  perpetual: null,
+};
+
+const SPIRIT_TRANSFORM: Record<string, string> = {
+  smallWealthGod: 'bigWealthGod',
+  bigWealthGod: 'smallWealthGod',
+  smallPovertyGod: 'bigPovertyGod',
+  bigPovertyGod: 'smallPovertyGod',
+  smallFortuneGod: 'bigFortuneGod',
+  bigFortuneGod: 'smallFortuneGod',
+  smallMisfortuneGod: 'bigMisfortuneGod',
+  bigMisfortuneGod: 'smallMisfortuneGod',
+  angel: 'devil',
+  devil: 'angel',
+};
 import {
   tradeStock as tradeStockImpl,
   sellAllStocks,
@@ -87,7 +111,7 @@ export function createGame(roomId: string, config: GameConfig, roomPlayers: Room
     roomId,
     status: 'rolling',
     config,
-    map: JSON.parse(JSON.stringify(SIMPLE_MAP)),
+    map: JSON.parse(JSON.stringify(loadGameMap(config.mapId))),
     players,
     currentPlayerIndex: 0,
     day: 1,
@@ -99,6 +123,8 @@ export function createGame(roomId: string, config: GameConfig, roomPlayers: Room
     stocks: JSON.parse(JSON.stringify(DEFAULT_STOCKS)),
     companies: JSON.parse(JSON.stringify(DEFAULT_COMPANIES)),
     marketStatus: { loanFrozenDays: 0 },
+    lotteryJackpot: 0,
+    lotteryBets: {},
     logs: [
       {
         timestamp: Date.now(),
@@ -111,6 +137,64 @@ export function createGame(roomId: string, config: GameConfig, roomPlayers: Room
   spawnNpcs(state);
 
   return state;
+}
+
+/**
+ * 获取当前绝对天数（从游戏开始累计，每月 30 天）。
+ */
+export function getAbsoluteDay(state: GameState): number {
+  return (state.month - 1) * 30 + state.day;
+}
+
+function getLeaseDays(lease: GameConfig['landLease']): number | null {
+  return LAND_LEASE_DAYS[lease] ?? null;
+}
+
+/**
+ * 为新购买的土地设置土地权限到期时间。
+ */
+function setTileLease(state: GameState, tile: Tile): void {
+  const leaseDays = getLeaseDays(state.config.landLease);
+  if (leaseDays === null) {
+    tile.purchasedAt = undefined;
+    tile.expiresAt = undefined;
+    return;
+  }
+  const now = getAbsoluteDay(state);
+  tile.purchasedAt = now;
+  tile.expiresAt = now + leaseDays;
+}
+
+/**
+ * 检查并回收土地权限到期的土地。
+ */
+export function expireLandLeases(state: GameState): void {
+  if (state.config.landLease === 'perpetual') return;
+  const now = getAbsoluteDay(state);
+  const expired: { player: Player; tile: Tile; tileIndex: number }[] = [];
+  for (const player of state.players) {
+    if (player.isBankrupt) continue;
+    for (const tileIndex of [...player.properties]) {
+      const tile = state.map.tiles[tileIndex];
+      if (tile.expiresAt !== undefined && now > tile.expiresAt) {
+        expired.push({ player, tile, tileIndex });
+      }
+    }
+  }
+  for (const { player, tile, tileIndex } of expired) {
+    tile.ownerId = undefined;
+    tile.buildingType = undefined;
+    tile.level = 0;
+    tile.purchasedAt = undefined;
+    tile.expiresAt = undefined;
+    player.properties = player.properties.filter((idx) => idx !== tileIndex);
+    state.logs.push({
+      timestamp: Date.now(),
+      type: 'property:expired',
+      actorId: player.id,
+      message: `${player.username} 的 ${tile.name} 土地权限已到期，土地被政府回收`,
+    });
+  }
 }
 
 export function getDiceCount(player: Player): number {
@@ -380,7 +464,7 @@ export function calculateRent(
   owner: Player,
   state: GameState,
   visitor: Player
-): { rent: number; hotelDays?: number } {
+): { rent: number; hotelDays?: number; spin?: number } {
   if (tile.type !== 'property' || !tile.ownerId || tile.ownerId !== owner.id) {
     return { rent: 0 };
   }
@@ -391,6 +475,7 @@ export function calculateRent(
   const buildingType = tile.buildingType ?? 'house';
   let base = 0;
   let hotelDays: number | undefined;
+  let spin: number | undefined;
 
   switch (buildingType) {
     case 'house': {
@@ -412,11 +497,14 @@ export function calculateRent(
       base = tile.baseRent * chainCount;
       break;
     }
-    case 'mall':
-      base = tile.baseRent * tile.level * spinWheel(6);
+    case 'mall': {
+      spin = spinWheel(8);
+      base = tile.baseRent * tile.level * spin;
       break;
+    }
     case 'hotel': {
       hotelDays = spinWheel(6);
+      spin = hotelDays;
       base = tile.baseRent * tile.level * hotelDays;
       break;
     }
@@ -424,6 +512,7 @@ export function calculateRent(
       // 仅对乘坐交通工具的玩家生效；步行时只收象征性费用
       const steps = state.lastRoll ?? 1;
       const rate = visitor.vehicle === 'walk' ? 50 : 200;
+      spin = steps;
       base = steps * rate;
       break;
     }
@@ -450,7 +539,7 @@ export function calculateRent(
   // 神明影响
   rent *= getSpiritRentMultiplier(visitor);
 
-  return { rent: Math.floor(rent), hotelDays };
+  return { rent: Math.floor(rent), hotelDays, spin };
 }
 
 export function movePlayer(state: GameState, steps: number): GameState {
@@ -610,15 +699,16 @@ export function handleTileEffect(state: GameState): GameState {
       // 付过路费
       const owner = state.players.find((p) => p.id === tile.ownerId);
       if (owner && !owner.isBankrupt) {
-        const { rent, hotelDays } = calculateRent(tile, owner, state, player);
+        const { rent, hotelDays, spin } = calculateRent(tile, owner, state, player);
         const finalRent = applyRentPayment(state, player, owner, rent);
         if (finalRent > 0) {
+          const spinText = spin !== undefined ? `, 转盘: ${spin}` : '';
           state.logs.push({
             timestamp: Date.now(),
             type: 'rent:detail',
             actorId: player.id,
             targetId: owner.id,
-            message: `${player.username} 向 ${owner.username} 支付过路费 $${finalRent}（地块: ${tile.name}, 等级: ${tile.level}, 物价指数: ${state.priceIndex}）`,
+            message: `${player.username} 向 ${owner.username} 支付过路费 $${finalRent}（地块: ${tile.name}, 等级: ${tile.level}, 物价指数: ${state.priceIndex}${spinText}）`,
           });
         }
         if (hotelDays && finalRent > 0) {
@@ -666,8 +756,9 @@ export function handleTileEffect(state: GameState): GameState {
         message: `${player.username} 经过卡片格，获得 ${def.name}`,
       });
     }
-  } else if (tile.type === 'coupon') {
-    const value = tile.couponValue ?? 30;
+  } else if (tile.type === 'coupon' || tile.type === 'coupon10' || tile.type === 'coupon30' || tile.type === 'coupon50') {
+    const value: number =
+      tile.type === 'coupon10' ? 10 : tile.type === 'coupon30' ? 30 : tile.type === 'coupon50' ? 50 : (tile.couponValue ?? 30);
     player.coupons += value;
     state.logs.push({
       timestamp: Date.now(),
@@ -700,6 +791,185 @@ export function handleTileEffect(state: GameState): GameState {
   }
 
   return state;
+}
+
+/** 乐透单注价格。 */
+const LOTTERY_PRICE = 1000;
+/** 乐透号码范围 0-9。 */
+const LOTTERY_MAX_NUMBER = 9;
+
+/**
+ * 当前玩家在乐透格投注。
+ */
+export function placeLotteryBet(
+  state: GameState,
+  playerId: string,
+  number: number
+): { success: boolean; message?: string } {
+  if (state.status === 'ended') return { success: false, message: '游戏已结束' };
+  const player = state.players.find((p) => p.id === playerId);
+  if (!player) return { success: false, message: '玩家不存在' };
+  if (player.isBankrupt) return { success: false, message: '已破产无法投注' };
+  if (state.status !== 'acting' || state.players[state.currentPlayerIndex].id !== playerId) {
+    return { success: false, message: '现在不能投注' };
+  }
+  const tileIndex = state.pendingTileIndex ?? player.position;
+  if (state.map.tiles[tileIndex].type !== 'lottery') {
+    return { success: false, message: '当前不在乐透格' };
+  }
+  if (!Number.isInteger(number) || number < 0 || number > LOTTERY_MAX_NUMBER) {
+    return { success: false, message: `号码必须是 0-${LOTTERY_MAX_NUMBER} 的整数` };
+  }
+  if (state.lotteryBets[playerId] !== undefined) {
+    return { success: false, message: '本月已经投注过' };
+  }
+  if (player.cash < LOTTERY_PRICE) {
+    return { success: false, message: `现金不足，投注需要 $${LOTTERY_PRICE}` };
+  }
+  player.cash -= LOTTERY_PRICE;
+  state.lotteryJackpot += LOTTERY_PRICE;
+  state.lotteryBets[playerId] = number;
+  state.logs.push({
+    timestamp: Date.now(),
+    type: 'player:lotteryBet',
+    actorId: player.id,
+    message: `${player.username} 花费 $${LOTTERY_PRICE} 投注乐透号码 ${number}`,
+  });
+  return { success: true };
+}
+
+/**
+ * 每月 15 日乐透开奖。
+ */
+export function drawLottery(state: GameState): void {
+  if (state.lotteryJackpot <= 0) {
+    state.lotteryBets = {};
+    return;
+  }
+  const winningNumber = Math.floor(Math.random() * (LOTTERY_MAX_NUMBER + 1));
+  const winners = state.players.filter((p) => !p.isBankrupt && state.lotteryBets[p.id] === winningNumber);
+  if (winners.length === 0) {
+    state.logs.push({
+      timestamp: Date.now(),
+      type: 'game:lotteryDraw',
+      message: `本月乐透开奖号码 ${winningNumber}，无人中奖，奖金池累积至 $${state.lotteryJackpot}`,
+    });
+  } else {
+    const prize = Math.floor(state.lotteryJackpot / winners.length);
+    for (const winner of winners) {
+      winner.cash += prize;
+    }
+    state.logs.push({
+      timestamp: Date.now(),
+      type: 'game:lotteryDraw',
+      message: `本月乐透开奖号码 ${winningNumber}，${winners.map((w) => w.username).join('、')} 中奖，每人获得 $${prize}`,
+    });
+    state.lotteryJackpot = 0;
+  }
+  state.lotteryBets = {};
+}
+
+export function canPlaceLotteryBet(state: GameState, playerId: string): boolean {
+  if (state.status === 'ended' || state.status !== 'acting') return false;
+  const player = state.players[state.currentPlayerIndex];
+  if (!player || player.id !== playerId || player.isBankrupt) return false;
+  const tileIndex = state.pendingTileIndex ?? player.position;
+  if (state.map.tiles[tileIndex].type !== 'lottery') return false;
+  return state.lotteryBets[playerId] === undefined && player.cash >= LOTTERY_PRICE;
+}
+
+export type MagicSpell = 'swapCash' | 'dismissSpirit' | 'stealCard' | 'jail';
+
+/**
+ * 在魔法屋对指定玩家施法。
+ */
+export function castMagicSpell(
+  state: GameState,
+  playerId: string,
+  targetPlayerId: string,
+  spell: MagicSpell
+): { success: boolean; message?: string } {
+  if (state.status === 'ended') return { success: false, message: '游戏已结束' };
+  const player = state.players.find((p) => p.id === playerId);
+  const target = state.players.find((p) => p.id === targetPlayerId);
+  if (!player || !target) return { success: false, message: '玩家不存在' };
+  if (player.isBankrupt || target.isBankrupt) return { success: false, message: '已破产玩家不能参与' };
+  if (state.status !== 'acting' || state.players[state.currentPlayerIndex].id !== playerId) {
+    return { success: false, message: '现在不能施法' };
+  }
+  const tileIndex = state.pendingTileIndex ?? player.position;
+  if (state.map.tiles[tileIndex].type !== 'magic') {
+    return { success: false, message: '当前不在魔法屋' };
+  }
+  if (targetPlayerId === playerId && spell !== 'jail') {
+    return { success: false, message: '不能对自己施放该法术' };
+  }
+
+  switch (spell) {
+    case 'swapCash': {
+      const temp = player.cash;
+      player.cash = target.cash;
+      target.cash = temp;
+      state.logs.push({
+        timestamp: Date.now(),
+        type: 'player:magic',
+        actorId: player.id,
+        targetId: target.id,
+        message: `${player.username} 在魔法屋与 ${target.username} 交换现金`,
+      });
+      break;
+    }
+    case 'dismissSpirit': {
+      if (!target.spirit) return { success: false, message: '目标没有神明附身' };
+      const def = getSpiritDefinition(target.spirit.spiritId);
+      if (!def || !def.canDismiss) return { success: false, message: '该神明无法被送走' };
+      const spiritName = def.name;
+      target.spirit = undefined;
+      state.logs.push({
+        timestamp: Date.now(),
+        type: 'player:magic',
+        actorId: player.id,
+        targetId: target.id,
+        message: `${player.username} 在魔法屋送走了 ${target.username} 的 ${spiritName}`,
+      });
+      break;
+    }
+    case 'stealCard': {
+      if (target.cards.length === 0) return { success: false, message: '目标没有卡片' };
+      const idx = Math.floor(Math.random() * target.cards.length);
+      const stolen = target.cards.splice(idx, 1)[0];
+      player.cards.push(stolen);
+      const def = CARD_DEFINITIONS[stolen.cardId];
+      state.logs.push({
+        timestamp: Date.now(),
+        type: 'player:magic',
+        actorId: player.id,
+        targetId: target.id,
+        message: `${player.username} 在魔法屋从 ${target.username} 处抢走了 ${def?.name ?? stolen.cardId}`,
+      });
+      break;
+    }
+    case 'jail': {
+      target.statusEffects.push({ type: 'jail', remainingDays: 3, sourcePlayerId: player.id });
+      state.logs.push({
+        timestamp: Date.now(),
+        type: 'player:magic',
+        actorId: player.id,
+        targetId: target.id,
+        message: `${player.username} 在魔法屋将 ${target.username} 关进监狱 3 天`,
+      });
+      break;
+    }
+  }
+  return { success: true };
+}
+
+export function canCastMagicSpell(state: GameState, playerId: string): boolean {
+  if (state.status === 'ended' || state.status !== 'acting') return false;
+  const player = state.players[state.currentPlayerIndex];
+  if (!player || player.id !== playerId || player.isBankrupt) return false;
+  const tileIndex = state.pendingTileIndex ?? player.position;
+  return state.map.tiles[tileIndex].type === 'magic';
 }
 
 function consumeFreePass(player: Player): boolean {
@@ -1186,6 +1456,7 @@ export function buyProperty(state: GameState): { success: boolean; message?: str
   // 小块与大块土地默认均为住宅，大块土地后续可通过改建卡建造特殊建筑
   tile.buildingType = 'house';
   tile.level = 0;
+  setTileLease(state, tile);
   player.properties.push(tileIndex);
   state.logs.push({
     timestamp: Date.now(),
@@ -1465,6 +1736,20 @@ export function endTurn(state: GameState): GameState {
     return state;
   }
 
+  // 检查资金目标与时间限制胜利条件
+  const victory = checkVictoryConditions(state);
+  if (victory.ended) {
+    state.status = 'ended';
+    state.winnerId = victory.winnerId;
+    const winner = state.players.find((p) => p.id === victory.winnerId);
+    state.logs.push({
+      timestamp: Date.now(),
+      type: 'game:end',
+      message: `游戏结束，${winner?.username || '未知'} 获胜！${victory.reason}`,
+    });
+    return state;
+  }
+
   // 判断是否跨天：下一个玩家是活跃玩家中的第一个（循环回到开头）
   const activeIndices = state.players
     .map((p, i) => ({ p, i }))
@@ -1487,9 +1772,12 @@ export function endTurn(state: GameState): GameState {
       });
       settleMonth(state);
     } else if (state.day === 15) {
-      // 每月 15 日发放分红
+      // 每月 15 日发放分红与乐透开奖
       dividendPayout(state);
+      drawLottery(state);
     }
+    // 检查土地权限到期（按绝对天数）
+    expireLandLeases(state);
   }
 
   state.currentPlayerIndex = nextIndex;
@@ -1519,18 +1807,33 @@ function decrementEffects(state: GameState): void {
     }
     player.statusEffects = remainingStatuses;
 
-    // 神明持续天数
+    // 神明持续天数与变身规则
     if (player.spirit) {
       player.spirit.remainingDays -= 1;
       if (player.spirit.remainingDays <= 0) {
-        const spiritName = getSpiritDefinition(player.spirit.spiritId)?.name ?? player.spirit.spiritId;
-        state.logs.push({
-          timestamp: Date.now(),
-          type: 'spirit:expired',
-          actorId: player.id,
-          message: `${player.username} 的 ${spiritName} 已到期离开`,
-        });
-        player.spirit = undefined;
+        const currentId = player.spirit.spiritId;
+        const transformTarget = SPIRIT_TRANSFORM[currentId];
+        if (transformTarget) {
+          const fromName = getSpiritDefinition(currentId)?.name ?? currentId;
+          const toName = getSpiritDefinition(transformTarget)?.name ?? transformTarget;
+          const duration = getSpiritDefinition(transformTarget)?.duration ?? 7;
+          player.spirit = { spiritId: transformTarget, remainingDays: duration };
+          state.logs.push({
+            timestamp: Date.now(),
+            type: 'spirit:transform',
+            actorId: player.id,
+            message: `${player.username} 的 ${fromName} 变身为 ${toName}`,
+          });
+        } else {
+          const spiritName = getSpiritDefinition(currentId)?.name ?? currentId;
+          state.logs.push({
+            timestamp: Date.now(),
+            type: 'spirit:expired',
+            actorId: player.id,
+            message: `${player.username} 的 ${spiritName} 已到期离开`,
+          });
+          player.spirit = undefined;
+        }
       }
     }
     // 保险天数（与 insurance 状态效果同步）
@@ -1591,11 +1894,50 @@ export function calculateNetAssets(state: GameState, playerId: string): number {
 }
 
 /**
+ * 检查游戏是否因资金目标或时间限制而结束。
+ */
+function checkVictoryConditions(state: GameState): { ended: boolean; winnerId?: string; reason?: string } {
+  const activePlayers = state.players.filter((p) => !p.isBankrupt);
+
+  // 资金目标：首个总资产达到初始资金倍数的玩家获胜
+  const winMultiplier = state.config.winCondition;
+  if (typeof winMultiplier === 'number') {
+    const target = state.config.totalFunds * winMultiplier;
+    for (const player of activePlayers) {
+      if (calculateNetAssets(state, player.id) >= target) {
+        return { ended: true, winnerId: player.id, reason: `总资产达到 $${target}` };
+      }
+    }
+  }
+
+  // 时间限制：到达限定月份时总资产最高者获胜
+  const maxMonths = GAME_TIME_MONTHS[state.config.gameTime];
+  if (maxMonths !== null && state.month > maxMonths) {
+    const ranked = [...activePlayers].sort(
+      (a, b) => calculateNetAssets(state, b.id) - calculateNetAssets(state, a.id)
+    );
+    return { ended: true, winnerId: ranked[0]?.id, reason: '游戏时间到达限制' };
+  }
+
+  return { ended: false };
+}
+
+/**
  * 月度结算：发放存款利息、分红、重新选举董事长。
  */
 function settleMonth(state: GameState): void {
   for (const player of state.players) {
     if (player.isBankrupt) continue;
+    // 有贷款期间停发存款利息
+    if (player.loan > 0) {
+      state.logs.push({
+        timestamp: Date.now(),
+        type: 'player:interestSkipped',
+        actorId: player.id,
+        message: `${player.username} 因有未还清贷款，本月不发放存款利息`,
+      });
+      continue;
+    }
     if (player.deposit > 0) {
       const interest = Math.floor(player.deposit * 0.1);
       player.deposit += interest;
@@ -1649,6 +1991,95 @@ export function claimPlayerInsurance(
   if (!player) return { success: false, message: '玩家不存在' };
   const result = claimInsurance(state, player, reason);
   return result;
+}
+
+function calculatePropertyValue(state: GameState, player: Player): number {
+  return player.properties.reduce((sum, idx) => {
+    const tile = state.map.tiles[idx];
+    return sum + tile.basePrice * (1 + tile.level * 0.5);
+  }, 0);
+}
+
+/**
+ * 计算玩家当前可贷款额度。
+ * 规则：以存款、地产估值与股票市值作为抵押，扣除已贷金额。
+ * （现金不计入额度，避免重复借贷循环）
+ */
+export function calculateLoanLimit(state: GameState, playerId: string): number {
+  const player = state.players.find((p) => p.id === playerId);
+  if (!player || player.isBankrupt) return 0;
+  const collateral = player.deposit + calculatePropertyValue(state, player) + getStockMarketValue(state, playerId);
+  return Math.max(0, Math.floor(collateral - player.loan));
+}
+
+/**
+ * 当前玩家向银行贷款。
+ * - 贷款额度受抵押资产限制
+ * - 新闻事件“银行挤兑”期间无法贷款
+ * - 3 个月免息（后续未实现额外利息）
+ */
+export function takeLoan(
+  state: GameState,
+  playerId: string,
+  amount: number
+): { success: boolean; message?: string } {
+  if (state.status === 'ended') return { success: false, message: '游戏已结束' };
+  const player = state.players.find((p) => p.id === playerId);
+  if (!player) return { success: false, message: '玩家不存在' };
+  if (player.isBankrupt) return { success: false, message: '已破产无法贷款' };
+  if (state.marketStatus.loanFrozenDays > 0) return { success: false, message: '银行挤兑，暂停放款' };
+  if (!Number.isFinite(amount) || amount <= 0) return { success: false, message: '贷款金额必须大于 0' };
+  const limit = calculateLoanLimit(state, playerId);
+  if (amount > limit) return { success: false, message: `贷款额度不足，当前可贷 $${limit}` };
+  player.cash += amount;
+  player.loan += amount;
+  state.logs.push({
+    timestamp: Date.now(),
+    type: 'player:loan',
+    actorId: player.id,
+    message: `${player.username} 向银行贷款 $${amount}，当前负债 $${player.loan}`,
+  });
+  return { success: true };
+}
+
+/**
+ * 当前玩家偿还贷款（使用现金）。
+ */
+export function repayLoan(
+  state: GameState,
+  playerId: string,
+  amount: number
+): { success: boolean; message?: string } {
+  if (state.status === 'ended') return { success: false, message: '游戏已结束' };
+  const player = state.players.find((p) => p.id === playerId);
+  if (!player) return { success: false, message: '玩家不存在' };
+  if (player.isBankrupt) return { success: false, message: '已破产无法还款' };
+  if (!Number.isFinite(amount) || amount <= 0) return { success: false, message: '还款金额必须大于 0' };
+  if (amount > player.loan) return { success: false, message: `还款金额超过负债 $${player.loan}` };
+  if (amount > player.cash) return { success: false, message: '现金不足，无法还款' };
+  player.cash -= amount;
+  player.loan -= amount;
+  state.logs.push({
+    timestamp: Date.now(),
+    type: 'player:repay',
+    actorId: player.id,
+    message: `${player.username} 偿还贷款 $${amount}，剩余负债 $${player.loan}`,
+  });
+  return { success: true };
+}
+
+export function canTakeLoan(state: GameState, playerId: string): boolean {
+  if (state.status === 'ended' || state.marketStatus.loanFrozenDays > 0) return false;
+  const player = state.players.find((p) => p.id === playerId);
+  if (!player || player.isBankrupt) return false;
+  return calculateLoanLimit(state, playerId) > 0;
+}
+
+export function canRepayLoan(state: GameState, playerId: string): boolean {
+  if (state.status === 'ended') return false;
+  const player = state.players.find((p) => p.id === playerId);
+  if (!player || player.isBankrupt) return false;
+  return player.loan > 0 && player.cash > 0;
 }
 
 export function canRoll(state: GameState, playerId: string): boolean {

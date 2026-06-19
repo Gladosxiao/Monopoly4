@@ -72,11 +72,19 @@ export function claimInsurance(
   const payout = Math.floor(basePayout * Math.min(days / 30, 2)); // 最高 2 倍
 
   player.cash += payout;
+
+  // 每次理赔消耗 7 天保险天数（简化：防止无限骗保）
+  const consumeDays = Math.min(days, 7);
+  player.insuranceDays = Math.max(0, player.insuranceDays - consumeDays);
+  if (insuranceEffect) {
+    insuranceEffect.remainingDays = Math.max(0, insuranceEffect.remainingDays - consumeDays);
+  }
+
   state.logs.push({
     timestamp: Date.now(),
     type: 'insurance:claim',
     actorId: player.id,
-    message: `${player.username} 因 ${reason} 获得保险理赔 $${payout}`,
+    message: `${player.username} 因 ${reason} 获得保险理赔 $${payout}（消耗保险 ${consumeDays} 天）`,
   });
 
   // 理赔后保险天数清零（一次性赔付）

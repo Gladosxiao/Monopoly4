@@ -17,6 +17,7 @@ import {
   getMe,
   createRoom,
   listRooms,
+  listMaps,
   getRoom,
   saveAuth,
   loadUser,
@@ -41,6 +42,10 @@ import {
   sellItem,
   tradeStock,
   claimInsurance,
+  takeLoan,
+  repayLoan,
+  placeLotteryBet,
+  castMagicSpell,
   skipTurn,
   onRoomUpdated,
   onGameState,
@@ -132,6 +137,7 @@ async function navigateToLobby(error?: string): Promise<void> {
     ${error ? `<div class="error">${error}</div>` : ''}
     <div class="lobby-actions">
       <input type="text" id="room-name" placeholder="房间名" />
+      <select id="map-select"></select>
       <button id="btn-create">创建房间</button>
       <input type="text" id="join-id" placeholder="输入房间号加入" />
       <button id="btn-join">加入</button>
@@ -148,10 +154,27 @@ async function navigateToLobby(error?: string): Promise<void> {
     navigateToLogin();
   });
 
+  const mapSelect = container.querySelector<HTMLSelectElement>('#map-select')!;
+  try {
+    const maps = await listMaps();
+    maps.forEach((m) => {
+      const opt = document.createElement('option');
+      opt.value = m.id;
+      opt.textContent = m.name;
+      mapSelect.appendChild(opt);
+    });
+  } catch {
+    // 即使地图列表加载失败也允许创建默认房间
+  }
+
   container.querySelector('#btn-create')!.addEventListener('click', async () => {
     const name = container.querySelector<HTMLInputElement>('#room-name')!.value || '新房間';
     try {
-      const room = await createRoom({ name, maxPlayers: 4 });
+      const room = await createRoom({
+        name,
+        maxPlayers: 4,
+        config: { mapId: mapSelect.value },
+      });
       navigateToRoom(room.id);
     } catch (e: any) {
       navigateToLobby(e.message);
@@ -387,7 +410,7 @@ function renderPlayersInfo(container: HTMLElement, state: GameState): void {
     div.innerHTML = `
       <strong style="color:${p.color}">${p.username}</strong>
       ${isCurrent ? ' ← 当前回合' : ''}
-      <div>现金: $${p.cash} | 存款: $${p.deposit} | 点券: ${p.coupons}</div>
+      <div>现金: $${p.cash} | 存款: $${p.deposit} | 贷款: $${p.loan} | 点券: ${p.coupons}</div>
       <div>地产: ${p.properties.length} 处 | 保险: ${p.insuranceDays} 天</div>
       <div>卡片: ${cardNames || '无'} (${p.cards.length}/15)</div>
       <div>道具: ${itemNames || '无'}</div>
@@ -398,7 +421,7 @@ function renderPlayersInfo(container: HTMLElement, state: GameState): void {
   });
   const monthInfo = document.createElement('div');
   monthInfo.className = 'month-info';
-  monthInfo.textContent = `第 ${state.month} 月 第 ${state.day} 天 | 物价指数: ${state.priceIndex.toFixed(2)}`;
+  monthInfo.textContent = `第 ${state.month} 月 第 ${state.day} 天 | 物价指数: ${state.priceIndex.toFixed(2)} | 乐透奖池: $${state.lotteryJackpot}`;
   el.appendChild(monthInfo);
 }
 
@@ -491,6 +514,67 @@ function renderActions(container: HTMLElement, state: GameState): void {
           }
         });
         el.appendChild(rebuildBtn);
+      }
+
+      // 银行贷款与还款（起点/银行格可贷款，有贷款时随时可还款）
+      if (tile.type === 'start') {
+        const loanBtn = document.createElement('button');
+        loanBtn.textContent = '银行贷款';
+        loanBtn.addEventListener('click', () => {
+          const input = window.prompt('输入贷款金额：');
+          const amount = parseInt(input || '', 10);
+          if (amount > 0) takeLoan(state.roomId, amount);
+        });
+        el.appendChild(loanBtn);
+      }
+      if (currentPlayer.loan > 0) {
+        const repayBtn = document.createElement('button');
+        repayBtn.textContent = '偿还贷款';
+        repayBtn.addEventListener('click', () => {
+          const input = window.prompt(`输入还款金额（最大 $${Math.min(currentPlayer.cash, currentPlayer.loan)}）：`);
+          const amount = parseInt(input || '', 10);
+          if (amount > 0) repayLoan(state.roomId, amount);
+        });
+        el.appendChild(repayBtn);
+      }
+
+      // 乐透格投注
+      if (tile.type === 'lottery') {
+        const lotteryBtn = document.createElement('button');
+        lotteryBtn.textContent = '投注乐透 ($1000)';
+        lotteryBtn.addEventListener('click', () => {
+          const input = window.prompt('选择 0-9 的号码：');
+          const number = parseInt(input || '', 10);
+          if (!Number.isNaN(number)) placeLotteryBet(state.roomId, number);
+        });
+        el.appendChild(lotteryBtn);
+      }
+
+      // 魔法屋施法
+      if (tile.type === 'magic') {
+        const magicBtn = document.createElement('button');
+        magicBtn.textContent = '魔法屋施法';
+        magicBtn.addEventListener('click', () => {
+          const targets = state.players.filter((p) => !p.isBankrupt);
+          const targetLines = targets.map((p, i) => `${i + 1}. ${p.username}`).join('\n');
+          const targetChoice = window.prompt(`选择目标：\n${targetLines}`);
+          const targetIdx = parseInt(targetChoice || '', 10) - 1;
+          const target = targets[targetIdx];
+          if (!target) return;
+          const spellChoice = window.prompt(
+            '选择法术：\n1. 交换现金\n2. 送走神明\n3. 抢夺卡片\n4. 关进监狱3天'
+          );
+          const spellIdx = parseInt(spellChoice || '', 10);
+          const spells: ('swapCash' | 'dismissSpirit' | 'stealCard' | 'jail')[] = [
+            'swapCash',
+            'dismissSpirit',
+            'stealCard',
+            'jail',
+          ];
+          const spell = spells[spellIdx - 1];
+          if (spell) castMagicSpell(state.roomId, target.id, spell);
+        });
+        el.appendChild(magicBtn);
       }
 
       // 使用卡片按钮

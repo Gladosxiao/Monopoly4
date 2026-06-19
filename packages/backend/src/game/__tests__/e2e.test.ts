@@ -511,13 +511,13 @@ describe('endTurn', () => {
     expect(state.day).toBe(2);
   });
 
-  it('神明持续天数每天减少', () => {
+  it('神明持续天数每天减少并变身', () => {
     const state = makeTestState();
     state.players[0].spirit = { spiritId: 'smallPovertyGod', remainingDays: 1 };
     state.pendingTileIndex = 0;
     endTurn(state);
     endTurn(state);
-    expect(state.players[0].spirit).toBeUndefined();
+    expect(state.players[0].spirit?.spiritId).toBe('bigPovertyGod');
   });
 
   it('玩家状态效果每天递减', () => {

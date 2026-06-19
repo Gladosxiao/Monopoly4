@@ -69,6 +69,15 @@ export type LandLease = '1m' | '3m' | '6m' | '1y' | '2y' | 'perpetual';
 export type GameTime = '1m' | '3m' | '6m' | '1y' | '2y' | 'perpetual';
 export type WinCondition = 3 | 5 | 10 | 50 | 100 | 'unlimited';
 
+export const LAND_LEASE_DAYS: Record<LandLease, number | null> = {
+  '1m': 30,
+  '3m': 90,
+  '6m': 180,
+  '1y': 360,
+  '2y': 720,
+  perpetual: null,
+};
+
 export interface GameConfig {
   totalFunds: number;
   moveMode: 'walk' | 'bike' | 'car';
@@ -99,9 +108,16 @@ export type TileType =
   | 'shop'
   | 'card'
   | 'coupon'
+  | 'coupon10'
+  | 'coupon30'
+  | 'coupon50'
   | 'tax'
   | 'news'
-  | 'company';
+  | 'company'
+  | 'park'
+  | 'lottery'
+  | 'magic'
+  | 'miniGame';
 
 export type PropertySize = 'small' | 'large';
 
@@ -130,7 +146,9 @@ export interface Tile {
   name: string;
   type: TileType;
   size?: PropertySize; // 仅 property 类型，区分小块/大块土地
+  span?: number; // 占地格数，大地产默认 2，小地产默认 1
   group?: number; // 连接式路段分组，property 类型使用
+  position?: { x: number; y: number }; // 可选渲染坐标
   couponValue?: number; // 仅 coupon 类型，点券数值
   companyId?: string; // 仅 company 类型，对应公司 ID
   basePrice: number;
@@ -138,12 +156,16 @@ export interface Tile {
   level: number;
   ownerId?: string;
   buildingType?: BuildingType; // 当前建筑类型，未购买时为 undefined
+  purchasedAt?: number; // 购买时的绝对天数（用于土地权限到期）
+  expiresAt?: number; // 土地权限到期绝对天数（perpetual 时无此字段）
   traps?: Trap[]; // 道路上的陷阱
 }
 
 export interface GameMap {
   id: string;
   name: string;
+  width?: number;
+  height?: number;
   path: number[];
   tiles: Tile[];
 }
@@ -347,6 +369,10 @@ export interface GameState {
     loanFrozenDays: number;
     lastEvent?: string;
   };
+  /** 乐透累积奖金池 */
+  lotteryJackpot: number;
+  /** 本月玩家投注号码：玩家 ID -> 号码（0-9） */
+  lotteryBets: Record<string, number | undefined>;
   // 当前回合临时状态
   lastRoll?: number;
   pendingTileIndex?: number;
@@ -425,6 +451,12 @@ export interface ClientToServerEvents {
   // 股票与保险
   'game:stockTrade': (roomId: string, stockId: string, quantity: number) => void;
   'game:claimInsurance': (roomId: string) => void;
+  // 贷款与还款
+  'game:loan': (roomId: string, amount: number) => void;
+  'game:repay': (roomId: string, amount: number) => void;
+  // 乐透与魔法屋
+  'game:lotteryBet': (roomId: string, number: number) => void;
+  'game:magicSpell': (roomId: string, targetPlayerId: string, spell: 'swapCash' | 'dismissSpirit' | 'stealCard' | 'jail') => void;
 }
 
 // ==================== 简化地图 ====================

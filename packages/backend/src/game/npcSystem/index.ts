@@ -3,6 +3,7 @@
 
 import type { GameState, Player, NpcInstance, NpcType, Tile } from '@monopoly4/shared';
 import { NPC_DEFINITIONS, NPC_TYPES, getNpcDefinition } from '@monopoly4/shared';
+import { claimInsurance } from '../financialSystem/index.js';
 
 function generateId(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
@@ -19,17 +20,18 @@ function log(state: GameState, type: string, actorId: string, message: string, t
 }
 
 function hospitalize(state: GameState, player: Player, days: number, reason: string): void {
-  player.statusEffects = player.statusEffects.filter((e) => e.type !== 'hospital' && e.type !== 'insurance');
+  player.statusEffects = player.statusEffects.filter((e) => e.type !== 'hospital');
   player.statusEffects.push({
     type: 'hospital',
     remainingDays: days,
     data: { reason },
   });
-  player.insuranceDays = 0;
   const hospitalIndex = state.map.tiles.findIndex((t) => t.type === 'hospital');
   if (hospitalIndex >= 0) {
     player.position = state.map.path[hospitalIndex];
   }
+  // 若已投保则自动申请理赔（骗保联动点）
+  claimInsurance(state, player, reason);
 }
 
 function randomCardFrom(player: Player): { idx: number; cardId: string } | undefined {

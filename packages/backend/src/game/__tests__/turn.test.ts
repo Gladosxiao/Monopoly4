@@ -95,9 +95,17 @@ describe('状态效果每日递减', () => {
     expect(state.players[0].statusEffects.some((e) => e.type === 'stay')).toBe(false);
   });
 
-  it('神明天数减少并在到期后清除', () => {
+  it('神明天数减少并在到期后变身', () => {
     const state = makeTestState();
     state.players[0].spirit = { spiritId: 'smallWealthGod', remainingDays: 1 };
+    advanceToNextDay(state);
+    expect(state.players[0].spirit?.spiritId).toBe('bigWealthGod');
+    expect(state.players[0].spirit?.remainingDays).toBe(7);
+  });
+
+  it('土地公公到期后离开', () => {
+    const state = makeTestState();
+    state.players[0].spirit = { spiritId: 'landGod', remainingDays: 1 };
     advanceToNextDay(state);
     expect(state.players[0].spirit).toBeUndefined();
   });

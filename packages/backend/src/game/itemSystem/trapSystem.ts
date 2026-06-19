@@ -3,6 +3,7 @@
 
 import type { GameState, Player, Tile, Trap } from '@monopoly4/shared';
 import { ITEM_DEFINITIONS } from '@monopoly4/shared';
+import { claimInsurance } from '../financialSystem/index.js';
 
 function log(state: GameState, type: string, actorId: string, message: string, targetId?: string): void {
   state.logs.push({
@@ -23,19 +24,20 @@ function findHospitalTileIndex(state: GameState): number {
 }
 
 function hospitalize(state: GameState, player: Player, days: number, reason: string): void {
-  // 移除已有的 hospital/insurance 状态，统一刷新
-  player.statusEffects = player.statusEffects.filter((e) => e.type !== 'hospital' && e.type !== 'insurance');
+  // 移除已有的 hospital 状态并刷新住院天数
+  player.statusEffects = player.statusEffects.filter((e) => e.type !== 'hospital');
   player.statusEffects.push({
     type: 'hospital',
     remainingDays: days,
     data: { reason },
   });
-  player.insuranceDays = 0;
   // 移动到最近的医院格
   const hospitalIndex = findHospitalTileIndex(state);
   if (hospitalIndex >= 0) {
     player.position = state.map.path[hospitalIndex];
   }
+  // 若已投保则自动申请理赔（骗保联动点）
+  claimInsurance(state, player, reason);
 }
 
 export interface TriggerResult {

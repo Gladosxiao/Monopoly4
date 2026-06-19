@@ -27,6 +27,11 @@ import {
   sellItem,
   tradeStock,
   claimPlayerInsurance,
+  takeLoan,
+  repayLoan,
+  placeLotteryBet,
+  drawLottery,
+  castMagicSpell,
   endTurn,
   canRoll,
   canBuy,
@@ -34,6 +39,10 @@ import {
   canRebuild,
   canUseCard,
   canUseItem,
+  canTakeLoan,
+  canRepayLoan,
+  canPlaceLotteryBet,
+  canCastMagicSpell,
 } from '../game/engine.js';
 import { getShopCards, canBuyCard } from '../game/cardSystem/index.js';
 import { getShopItems, canBuyItem } from '../game/itemSystem/index.js';
@@ -324,6 +333,66 @@ export function setupSocketIO(httpServer: HttpServer): void {
       const state = games.get(roomId);
       if (!state) return;
       const result = claimPlayerInsurance(state, user.id);
+      if (!result.success) {
+        socket.emit('error', result.message);
+        return;
+      }
+      io.to(roomId).emit('game:state', state);
+    });
+
+    socket.on('game:loan', (roomId, amount) => {
+      const state = games.get(roomId);
+      if (!state) return;
+      if (!canTakeLoan(state, user.id)) {
+        socket.emit('error', '现在不能贷款');
+        return;
+      }
+      const result = takeLoan(state, user.id, amount);
+      if (!result.success) {
+        socket.emit('error', result.message);
+        return;
+      }
+      io.to(roomId).emit('game:state', state);
+    });
+
+    socket.on('game:repay', (roomId, amount) => {
+      const state = games.get(roomId);
+      if (!state) return;
+      if (!canRepayLoan(state, user.id)) {
+        socket.emit('error', '现在不能还款');
+        return;
+      }
+      const result = repayLoan(state, user.id, amount);
+      if (!result.success) {
+        socket.emit('error', result.message);
+        return;
+      }
+      io.to(roomId).emit('game:state', state);
+    });
+
+    socket.on('game:lotteryBet', (roomId, number) => {
+      const state = games.get(roomId);
+      if (!state) return;
+      if (!canPlaceLotteryBet(state, user.id)) {
+        socket.emit('error', '现在不能投注乐透');
+        return;
+      }
+      const result = placeLotteryBet(state, user.id, number);
+      if (!result.success) {
+        socket.emit('error', result.message);
+        return;
+      }
+      io.to(roomId).emit('game:state', state);
+    });
+
+    socket.on('game:magicSpell', (roomId, targetPlayerId, spell) => {
+      const state = games.get(roomId);
+      if (!state) return;
+      if (!canCastMagicSpell(state, user.id)) {
+        socket.emit('error', '现在不能施法');
+        return;
+      }
+      const result = castMagicSpell(state, user.id, targetPlayerId, spell);
       if (!result.success) {
         socket.emit('error', result.message);
         return;

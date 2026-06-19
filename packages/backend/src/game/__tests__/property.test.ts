@@ -431,14 +431,14 @@ describe('endTurn', () => {
     expect(state.day).toBe(2);
   });
 
-  it('跨天时递减神明持续天数', () => {
+  it('跨天时递减神明持续天数并变身', () => {
     const state = makeTestState();
     state.players[0].spirit = { spiritId: 'smallWealthGod', remainingDays: 1 };
 
     endTurn(state);
     endTurn(state);
 
-    expect(state.players[0].spirit).toBeUndefined();
+    expect(state.players[0].spirit?.spiritId).toBe('bigWealthGod');
   });
 
   it('跨月时重新计算物价指数并发放存款利息', () => {

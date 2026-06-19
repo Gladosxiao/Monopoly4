@@ -41,6 +41,10 @@ export function listRooms(): Promise<Room[]> {
   return api<Room[]>('/rooms');
 }
 
+export function listMaps(): Promise<{ id: string; name: string }[]> {
+  return api<{ id: string; name: string }[]>('/maps');
+}
+
 export function createRoom(data: CreateRoomRequest): Promise<Room> {
   return api<Room>('/rooms', {
     method: 'POST',
