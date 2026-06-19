@@ -1,6 +1,7 @@
 import {
   type Room,
   type GameState,
+  type GameLog,
   type PublicUser,
   type CardUseTarget,
   type ItemUseTarget,
@@ -523,11 +524,11 @@ async function navigateToGame(roomId: string): Promise<void> {
           <h2>操作</h2>
           <div id="game-actions"></div>
         </div>
-        <div class="info-card logs">
-          <h2>日志</h2>
-          <div id="game-logs"></div>
-        </div>
       </div>
+    </div>
+    <div class="game-logs-panel">
+      <h2>日志</h2>
+      <div id="game-logs"></div>
     </div>
   `;
   app.appendChild(container);
@@ -983,12 +984,50 @@ function renderStockMarket(container: HTMLElement, state: GameState): void {
   el.appendChild(table);
 }
 
+/** 需要高亮的日志类型：金钱损失、使用道具/卡片等关键行为 */
+const HIGHLIGHT_LOG_TYPES = new Set([
+  'buyProperty',
+  'upgradeProperty',
+  'rebuildProperty',
+  'payRent',
+  'player:rent',
+  'payTax',
+  'player:tax',
+  'companyFine',
+  'hospital',
+  'buyCard',
+  'buyItem',
+  'useItem',
+  'useCard',
+  'payLoanInterest',
+  'player:repay',
+  'loan',
+  'takeLoan',
+  'stock:trade',
+  'companyProfit',
+  'companyFine',
+]);
+
+/** 判断日志是否需要高亮 */
+function isLogHighlighted(log: GameLog): boolean {
+  if (HIGHLIGHT_LOG_TYPES.has(log.type)) return true;
+  // 兜底：消息里明确出现损失/花费/使用道具等关键词也高亮
+  const text = log.message;
+  if (/使用道具|使用.*卡|支付|花费|缴纳|交租|购买土地|升级|降級|被罚款|住院|缴税/.test(text)) {
+    return true;
+  }
+  return false;
+}
+
 function renderLogs(container: HTMLElement, state: GameState): void {
   const el = container.querySelector<HTMLDivElement>('#game-logs')!;
   el.innerHTML = '';
-  [...state.logs].reverse().slice(0, 30).forEach((log) => {
+  [...state.logs].reverse().slice(0, 50).forEach((log) => {
     const div = document.createElement('div');
     div.className = 'log-item';
+    if (isLogHighlighted(log)) {
+      div.classList.add('log-highlight');
+    }
     div.textContent = log.message;
     el.appendChild(div);
   });
