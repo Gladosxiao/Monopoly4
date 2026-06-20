@@ -363,9 +363,9 @@ function findEmptySegment(
 
   const valid = segments.filter((s) => s.length >= length);
   if (valid.length === 0) {
-    const unassigned = sortedEmpty.filter((i) => !assigned.has(i));
-    const start = rng.nextInt(0, Math.max(1, unassigned.length - length + 1));
-    return unassigned.slice(start, start + length);
+    throw new Error(
+      `[map-generator] 无法为长度 ${length} 的路段找到连续空位，请检查模板配置`
+    );
   }
   const chosen = valid[rng.nextInt(0, valid.length)];
   const start = rng.nextInt(0, chosen.length - length + 1);
@@ -438,7 +438,19 @@ function fillPropertySlots(
 
   const assigned = new Set<number>();
 
-  // 先放大块：每个大块占 span 个连续空位，优先保证有连续空间
+  // 先放小组：小组需要更长连续段，优先放置可避免后续被大块分割后无空位
+  const smallBlocks = blocks.filter((b) => b.size === 'small');
+  for (const block of smallBlocks) {
+    const segment = findEmptySegment(sortedEmpty, assigned, block.tiles.length, rng);
+    for (let i = 0; i < block.tiles.length; i++) {
+      const idx = segment[i];
+      block.tiles[i].index = idx;
+      slots[idx] = block.tiles[i];
+      assigned.add(idx);
+    }
+  }
+
+  // 再放大块：每个大块占 span 个连续空位
   const largeBlocks = blocks.filter((b) => b.size === 'large');
   for (const block of largeBlocks) {
     const span = block.tiles.length;
@@ -446,29 +458,33 @@ function fillPropertySlots(
     if (unassigned.length < span) throw new Error('[map-generator] 无空位放置大块土地');
 
     // 收集所有长度 >= span 的连续空位段
-    const segments: number[][] = [];
+    interface Segment {
+      indices: number[];
+      isWrapped: boolean;
+    }
+    const segments: Segment[] = [];
     let current: number[] = [];
     for (const idx of unassigned) {
       if (current.length === 0 || idx === current[current.length - 1] + 1) {
         current.push(idx);
       } else {
-        if (current.length >= span) segments.push(current);
+        if (current.length >= span) segments.push({ indices: current, isWrapped: false });
         current = [idx];
       }
     }
-    if (current.length >= span) segments.push(current);
+    if (current.length >= span) segments.push({ indices: current, isWrapped: false });
 
-    // 处理环形首尾相连的情况
-    if (unassigned.length > 0 && segments.length > 1) {
+    // 处理环形首尾相连的情况：大块土地跨越终点/起点时视觉上会分离，
+    // 因此仅在找不到其他连续段时才允许使用合并段，并放到候选末尾且大幅惩罚。
+    if (unassigned.length > 0 && segments.length > 0) {
       const first = unassigned[0];
       const last = unassigned[unassigned.length - 1];
       if (last === slots.length - 1 && first === 0) {
-        // 尝试把尾段和首段合并
-        const tail = segments[segments.length - 1];
-        const head = segments[0];
+        const tail = segments[segments.length - 1].indices;
+        const head = segments[0].indices;
         const merged = [...tail, ...head];
         if (merged.length >= span) {
-          segments.push(merged);
+          segments.push({ indices: merged, isWrapped: true });
         }
       }
     }
@@ -477,13 +493,15 @@ function fillPropertySlots(
       throw new Error('[map-generator] 无法为大块土地找到连续空位');
     }
 
-    let bestSegment: number[] = segments[0].slice(0, span);
+    let bestSegment: number[] = segments[0].indices.slice(0, span);
     let bestScore = -Infinity;
 
     for (const seg of segments) {
-      for (let start = 0; start <= seg.length - span; start++) {
-        const segment = seg.slice(start, start + span);
+      for (let start = 0; start <= seg.indices.length - span; start++) {
+        const segment = seg.indices.slice(start, start + span);
         let score = rng.next() * 0.5;
+        // 跨终点/起点的段大幅惩罚，仅在无其他选择时才用
+        if (seg.isWrapped) score -= 1000;
 
         for (const pos of segment) {
           const prev = slots[(pos - 1 + slots.length) % slots.length];
@@ -510,18 +528,6 @@ function fillPropertySlots(
       const idx = bestSegment[offset];
       block.tiles[offset].index = idx;
       slots[idx] = block.tiles[offset];
-      assigned.add(idx);
-    }
-  }
-
-  // 再放 small 组，尽量连续
-  const smallBlocks = blocks.filter((b) => b.size === 'small');
-  for (const block of smallBlocks) {
-    const segment = findEmptySegment(sortedEmpty, assigned, block.tiles.length, rng);
-    for (let i = 0; i < block.tiles.length; i++) {
-      const idx = segment[i];
-      block.tiles[i].index = idx;
-      slots[idx] = block.tiles[i];
       assigned.add(idx);
     }
   }
@@ -587,25 +593,39 @@ export function generateMap(template: MapTemplate = DEFAULT_TEMPLATE): GameMap {
   const slots: (Tile | null)[] = Array(t.totalTiles).fill(null);
   slots[0] = createTile(0, 'start');
 
-  // 固定关键系统格
+  // 创建土地块（先不放置）
+  const blocks = createPropertyBlocks(t);
+
+  // 先放置土地，保证同组小地产连续、大地产连续 2 格
+  fillPropertySlots(slots, blocks, rng);
+
+  // 关键系统格（监狱/医院/商店）需要尽量均匀分布，但不能打断已放置的土地组。
+  // 这里先计算理想位置，再对每个理想位置找最近的空位放置。
   const anchors: { type: TileType; name: string }[] = [];
   if (t.specialTiles.prison > 0) anchors.push({ type: 'prison', name: '监狱' });
   if (t.specialTiles.hospital > 0) anchors.push({ type: 'hospital', name: '医院' });
   if (t.specialTiles.shop > 0) anchors.push({ type: 'shop', name: '商店' });
 
-  const anchorPositions = distributeAnchors(t.totalTiles, anchors.length, rng);
-  anchors.forEach((anchor, i) => {
-    const pos = anchorPositions[i];
-    slots[pos] = createTile(pos, anchor.type, anchor.name);
-  });
+  const anchorTargets = distributeAnchors(t.totalTiles, anchors.length, rng);
+  for (let i = 0; i < anchors.length; i++) {
+    const target = anchorTargets[i];
+    let pos = target;
+    // 优先寻找最近的空位
+    let bestPos = -1;
+    let bestDist = Infinity;
+    for (let idx = 0; idx < t.totalTiles; idx++) {
+      if (slots[idx] !== null) continue;
+      const dist = cyclicDistance(idx, target, t.totalTiles);
+      if (dist < bestDist) {
+        bestDist = dist;
+        bestPos = idx;
+      }
+    }
+    if (bestPos >= 0) pos = bestPos;
+    slots[pos] = createTile(pos, anchors[i].type, anchors[i].name);
+  }
 
-  // 创建土地块（先不放置）
-  const blocks = createPropertyBlocks(t);
-
-  // 先放置土地，保证大地产连续 2 格、小地产连续 3-4 格有空间
-  fillPropertySlots(slots, blocks, rng);
-
-  // 放置其他系统格（扣除已作为 anchor 固定的关键设施），填充剩余空位
+  // 放置其他系统格，填充剩余空位
   const anchorTypes = new Set<TileType>(anchors.map((a) => a.type));
   const specialTypes = Object.entries(t.specialTiles)
     .filter(([type, count]) => type !== 'start' && type !== 'property' && count > 0)
@@ -626,12 +646,69 @@ export function generateMap(template: MapTemplate = DEFAULT_TEMPLATE): GameMap {
     throw new Error(`[map-generator] 生成失败: 实际格数 ${tiles.length}`);
   }
 
-  return {
+  const map: GameMap = {
     id: t.id,
     name: t.name,
     path: Array.from({ length: t.totalTiles }, (_, i) => i),
     tiles,
   };
+
+  validateMap(map);
+  return map;
+}
+
+/**
+ * 校验地图生成结果：
+ * 1. 同一路段（group）的小地产在路径上必须连续；
+ * 2. 大块土地（span > 1）的子格必须连续且不能跨越终点/起点边界。
+ */
+function validateMap(map: GameMap): void {
+  const total = map.tiles.length;
+
+  // 校验 group 连续性
+  const groupTiles = new Map<number, number[]>();
+  for (const tile of map.tiles) {
+    if (tile.type === 'property' && tile.size === 'small' && tile.group !== undefined) {
+      const arr = groupTiles.get(tile.group) ?? [];
+      arr.push(tile.index);
+      groupTiles.set(tile.group, arr);
+    }
+  }
+  for (const [group, indices] of groupTiles) {
+    const sorted = indices.slice().sort((a, b) => a - b);
+    for (let i = 1; i < sorted.length; i++) {
+      const prev = sorted[i - 1];
+      const curr = sorted[i];
+      const isAdjacent = curr === prev + 1 || (prev === total - 1 && curr === 0);
+      if (!isAdjacent) {
+        throw new Error(
+          `[map-generator] 路段 ${group} 不连续: [${sorted.join(',')}]`
+        );
+      }
+    }
+  }
+
+  // 校验大地产连续性（不跨边界）
+  const nameToLarge = new Map<string, number[]>();
+  for (const tile of map.tiles) {
+    if (tile.type === 'property' && tile.size === 'large' && tile.span && tile.span > 1) {
+      const arr = nameToLarge.get(tile.name) ?? [];
+      arr.push(tile.index);
+      nameToLarge.set(tile.name, arr);
+    }
+  }
+  for (const [name, indices] of nameToLarge) {
+    const sorted = indices.slice().sort((a, b) => a - b);
+    for (let i = 1; i < sorted.length; i++) {
+      const prev = sorted[i - 1];
+      const curr = sorted[i];
+      if (curr !== prev + 1) {
+        throw new Error(
+          `[map-generator] 大块土地 "${name}" 子格不连续: [${sorted.join(',')}]`
+        );
+      }
+    }
+  }
 }
 
 /**

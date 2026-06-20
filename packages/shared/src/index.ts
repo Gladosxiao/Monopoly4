@@ -543,55 +543,65 @@ export const SIMPLE_MAP: GameMap = {
   tiles: [
     // 起点
     { index: 0, name: '起点', type: 'start', basePrice: 0, baseRent: 0, level: 0 },
-    // 第一组（低价区，小块土地）
+    // 第一组小地产（连续 3 格）
     { index: 1, name: '蘑菇村', type: 'property', size: 'small', group: 0, basePrice: 30, baseRent: 3, level: 0 },
-    { index: 2, name: '命运', type: 'fate', basePrice: 0, baseRent: 0, level: 0 },
-    { index: 3, name: '青青草原', type: 'property', size: 'small', group: 0, basePrice: 40, baseRent: 4, level: 0 },
+    { index: 2, name: '青青草原', type: 'property', size: 'small', group: 0, basePrice: 40, baseRent: 4, level: 0 },
+    { index: 3, name: '石板路', type: 'property', size: 'small', group: 0, basePrice: 50, baseRent: 5, level: 0 },
+    // 系统格
     { index: 4, name: '卡片格', type: 'card', basePrice: 0, baseRent: 0, level: 0 },
-    { index: 5, name: '石板路', type: 'property', size: 'small', group: 1, basePrice: 50, baseRent: 5, level: 0 },
-    { index: 6, name: '电脑公司', type: 'company', companyId: 'computer', basePrice: 0, baseRent: 0, level: 0 },
-    { index: 7, name: '小河边', type: 'property', size: 'small', group: 1, basePrice: 60, baseRent: 6, level: 0 },
-    // 税务
+    // 第二组小地产
+    { index: 5, name: '小河边', type: 'property', size: 'small', group: 1, basePrice: 60, baseRent: 6, level: 0 },
+    { index: 6, name: '风车镇', type: 'property', size: 'small', group: 1, basePrice: 70, baseRent: 7, level: 0 },
+    { index: 7, name: '苹果园', type: 'property', size: 'small', group: 1, basePrice: 80, baseRent: 8, level: 0 },
+    // 系统格
     { index: 8, name: '税务', type: 'tax', basePrice: 0, baseRent: 0, level: 0 },
-    // 第二组（小块土地）
-    { index: 9, name: '风车镇', type: 'property', size: 'small', group: 2, basePrice: 70, baseRent: 7, level: 0 },
-    { index: 10, name: '建设路', type: 'property', size: 'small', group: 10, basePrice: 90, baseRent: 9, level: 0 },
-    { index: 11, name: '苹果园', type: 'property', size: 'small', group: 2, basePrice: 80, baseRent: 8, level: 0 },
-    { index: 12, name: '卡片格', type: 'card', basePrice: 0, baseRent: 0, level: 0 },
-    { index: 13, name: '橡树林', type: 'property', size: 'small', group: 3, basePrice: 50, baseRent: 5, level: 0 },
-    { index: 14, name: '保险公司', type: 'company', companyId: 'insurance', basePrice: 0, baseRent: 0, level: 0 },
-    { index: 15, name: '枫叶林', type: 'property', size: 'small', group: 3, basePrice: 60, baseRent: 6, level: 0 },
-    // 医院
+    // 第三组小地产
+    { index: 9, name: '橡树林', type: 'property', size: 'small', group: 2, basePrice: 90, baseRent: 9, level: 0 },
+    { index: 10, name: '枫叶林', type: 'property', size: 'small', group: 2, basePrice: 100, baseRent: 10, level: 0 },
+    { index: 11, name: '港口', type: 'property', size: 'small', group: 2, basePrice: 110, baseRent: 11, level: 0 },
+    // 系统格
+    { index: 12, name: '命运', type: 'fate', basePrice: 0, baseRent: 0, level: 0 },
+    // 第四组小地产
+    { index: 13, name: '渔人码头', type: 'property', size: 'small', group: 3, basePrice: 120, baseRent: 12, level: 0 },
+    { index: 14, name: '建设路', type: 'property', size: 'small', group: 3, basePrice: 130, baseRent: 13, level: 0 },
+    { index: 15, name: '商业街', type: 'property', size: 'small', group: 3, basePrice: 140, baseRent: 14, level: 0 },
+    // 系统格
     { index: 16, name: '医院', type: 'hospital', basePrice: 0, baseRent: 0, level: 0 },
-    // 第三组（小块土地）
-    { index: 17, name: '港口', type: 'property', size: 'small', group: 4, basePrice: 70, baseRent: 7, level: 0 },
-    { index: 18, name: '航空公司', type: 'company', companyId: 'airline', basePrice: 0, baseRent: 0, level: 0 },
-    { index: 19, name: '渔人码头', type: 'property', size: 'small', group: 4, basePrice: 80, baseRent: 8, level: 0 },
+    // 第五组小地产
+    { index: 17, name: '钟楼', type: 'property', size: 'small', group: 4, basePrice: 150, baseRent: 15, level: 0 },
+    { index: 18, name: '市政厅', type: 'property', size: 'small', group: 4, basePrice: 160, baseRent: 16, level: 0 },
+    { index: 19, name: '百货街', type: 'property', size: 'small', group: 4, basePrice: 170, baseRent: 17, level: 0 },
+    // 系统格
     { index: 20, name: '得点券 30', type: 'coupon', couponValue: 30, basePrice: 0, baseRent: 0, level: 0 },
-    // 第四组（大块土地）
-    { index: 21, name: '商业街', type: 'property', size: 'large', group: 5, basePrice: 120, baseRent: 12, level: 0 },
-    { index: 22, name: '新闻点', type: 'news', basePrice: 0, baseRent: 0, level: 0 },
-    { index: 23, name: '集市', type: 'property', size: 'large', group: 5, basePrice: 150, baseRent: 15, level: 0 },
-    // 商店
-    { index: 24, name: '商店', type: 'shop', basePrice: 0, baseRent: 0, level: 0 },
-    // 第五组（大块土地）
-    { index: 25, name: '钟楼', type: 'property', size: 'large', group: 6, basePrice: 180, baseRent: 18, level: 0 },
-    { index: 26, name: '命运', type: 'fate', basePrice: 0, baseRent: 0, level: 0 },
-    { index: 27, name: '市政厅', type: 'property', size: 'large', group: 6, basePrice: 200, baseRent: 20, level: 0 },
-    { index: 28, name: '百货街', type: 'property', size: 'small', group: 11, basePrice: 210, baseRent: 21, level: 0 },
-    { index: 29, name: '剧院', type: 'property', size: 'large', group: 7, basePrice: 200, baseRent: 20, level: 0 },
-    { index: 30, name: '饭店街', type: 'property', size: 'small', group: 12, basePrice: 230, baseRent: 23, level: 0 },
-    { index: 31, name: '歌剧院', type: 'property', size: 'large', group: 7, basePrice: 220, baseRent: 22, level: 0 },
-
-    // 第六组（高价区，大块土地）
-    { index: 32, name: '石油路', type: 'property', size: 'small', group: 13, basePrice: 240, baseRent: 24, level: 0 },
-    { index: 33, name: '水晶湖', type: 'property', size: 'large', group: 8, basePrice: 250, baseRent: 25, level: 0 },
-    { index: 34, name: '卡片格', type: 'card', basePrice: 0, baseRent: 0, level: 0 },
-    { index: 35, name: '云顶宫', type: 'property', size: 'large', group: 8, basePrice: 280, baseRent: 28, level: 0 },
-    { index: 36, name: '餐饮街', type: 'property', size: 'small', group: 14, basePrice: 290, baseRent: 29, level: 0 },
-    { index: 37, name: '钻石大道', type: 'property', size: 'large', group: 9, basePrice: 300, baseRent: 30, level: 0 },
-    { index: 38, name: '汽车路', type: 'property', size: 'small', group: 15, basePrice: 310, baseRent: 31, level: 0 },
-    { index: 39, name: '黄金广场', type: 'property', size: 'large', group: 9, basePrice: 300, baseRent: 30, level: 0 },
+    // 第一块大地产（占 2 格，同名同 group）
+    { index: 21, name: '钻石广场', type: 'property', size: 'large', span: 2, group: 5, basePrice: 300, baseRent: 30, level: 0 },
+    { index: 22, name: '钻石广场', type: 'property', size: 'large', span: 2, group: 5, basePrice: 300, baseRent: 30, level: 0 },
+    // 系统格
+    { index: 23, name: '新闻点', type: 'news', basePrice: 0, baseRent: 0, level: 0 },
+    // 第二块大地产
+    { index: 24, name: '黄金海岸', type: 'property', size: 'large', span: 2, group: 6, basePrice: 320, baseRent: 32, level: 0 },
+    { index: 25, name: '黄金海岸', type: 'property', size: 'large', span: 2, group: 6, basePrice: 320, baseRent: 32, level: 0 },
+    // 系统格
+    { index: 26, name: '商店', type: 'shop', basePrice: 0, baseRent: 0, level: 0 },
+    // 第三块大地产
+    { index: 27, name: '云顶宫', type: 'property', size: 'large', span: 2, group: 7, basePrice: 340, baseRent: 34, level: 0 },
+    { index: 28, name: '云顶宫', type: 'property', size: 'large', span: 2, group: 7, basePrice: 340, baseRent: 34, level: 0 },
+    // 系统格
+    { index: 29, name: '机会', type: 'chance', basePrice: 0, baseRent: 0, level: 0 },
+    // 第四块大地产
+    { index: 30, name: '水晶湖', type: 'property', size: 'large', span: 2, group: 8, basePrice: 360, baseRent: 36, level: 0 },
+    { index: 31, name: '水晶湖', type: 'property', size: 'large', span: 2, group: 8, basePrice: 360, baseRent: 36, level: 0 },
+    // 系统格
+    { index: 32, name: '税务', type: 'tax', basePrice: 0, baseRent: 0, level: 0 },
+    // 第五块大地产
+    { index: 33, name: '石油大道', type: 'property', size: 'large', span: 2, group: 9, basePrice: 380, baseRent: 38, level: 0 },
+    { index: 34, name: '石油大道', type: 'property', size: 'large', span: 2, group: 9, basePrice: 380, baseRent: 38, level: 0 },
+    // 公司格与系统格
+    { index: 35, name: '航空公司', type: 'company', companyId: 'airline', basePrice: 0, baseRent: 0, level: 0 },
+    { index: 36, name: '电脑公司', type: 'company', companyId: 'computer', basePrice: 0, baseRent: 0, level: 0 },
+    { index: 37, name: '保险公司', type: 'company', companyId: 'insurance', basePrice: 0, baseRent: 0, level: 0 },
+    { index: 38, name: '卡片格', type: 'card', basePrice: 0, baseRent: 0, level: 0 },
+    { index: 39, name: '命运', type: 'fate', basePrice: 0, baseRent: 0, level: 0 },
   ],
 };
 
