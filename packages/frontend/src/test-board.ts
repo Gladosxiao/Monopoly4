@@ -1,6 +1,7 @@
 import { renderBoard } from './board.js';
 import { generateMap, PLAYER4_TEMPLATE } from '@monopoly4/map-generator';
-import type { GameState, Player, Tile, Stock, Company } from '@monopoly4/shared';
+import { DEFAULT_STOCKS, DEFAULT_COMPANIES } from '@monopoly4/shared';
+import type { GameState, Player, Tile } from '@monopoly4/shared';
 
 const map = generateMap(PLAYER4_TEMPLATE);
 
@@ -86,8 +87,8 @@ if (p2Tile) {
   players[1].properties.push(p2Tile.index);
 }
 
-const stocks: Stock[] = [];
-const companies: Company[] = [];
+const stocks = JSON.parse(JSON.stringify(DEFAULT_STOCKS));
+const companies = JSON.parse(JSON.stringify(DEFAULT_COMPANIES));
 
 const state: GameState = {
   roomId: 'test-room',
@@ -119,11 +120,42 @@ const state: GameState = {
 };
 
 const canvas = document.getElementById('board') as HTMLCanvasElement;
-renderBoard(canvas, state, 'p1', { highlightCurrentTile: true });
+let zoom = Math.max(0.5, Math.min(2.5, Number(localStorage.getItem('monopoly4-test-board-zoom') || '1')));
+
+function draw(): void {
+  renderBoard(canvas, state, 'p1', { highlightCurrentTile: true, zoom });
+}
+
+const resetBtn = document.getElementById('btn-zoom-reset') as HTMLButtonElement;
+function updateZoomDisplay(): void {
+  resetBtn.textContent = `${zoom.toFixed(1)}x`;
+}
+
+document.getElementById('btn-zoom-out')!.addEventListener('click', () => {
+  zoom = Math.max(0.5, Math.round((zoom - 0.1) * 10) / 10);
+  localStorage.setItem('monopoly4-test-board-zoom', String(zoom));
+  updateZoomDisplay();
+  draw();
+});
+document.getElementById('btn-zoom-in')!.addEventListener('click', () => {
+  zoom = Math.min(2.5, Math.round((zoom + 0.1) * 10) / 10);
+  localStorage.setItem('monopoly4-test-board-zoom', String(zoom));
+  updateZoomDisplay();
+  draw();
+});
+resetBtn.addEventListener('click', () => {
+  zoom = 1;
+  localStorage.setItem('monopoly4-test-board-zoom', String(zoom));
+  updateZoomDisplay();
+  draw();
+});
+
+updateZoomDisplay();
+draw();
 
 // 高亮当前玩家所在地块，便于观察移动轨迹
 setTimeout(() => {
-  renderBoard(canvas, state, 'p1', { highlightCurrentTile: true });
+  draw();
 }, 100);
 
 // 页面加载完成后标记，便于 headless 截图等待

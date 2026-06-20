@@ -648,19 +648,57 @@ select:focus {
 }
 
 .board-wrap {
+  position: relative;
   display: flex;
-  justify-content: center;
-  align-items: center;
+  justify-content: flex-start;
+  align-items: flex-start;
   min-width: 0;
   min-height: 300px;
   height: 100%;
-  overflow: hidden;
+  overflow: auto;
 }
 
 .board-wrap canvas {
   display: block;
-  max-width: 100%;
-  max-height: 100%;
+  flex-shrink: 0;
+}
+
+.board-zoom-controls {
+  position: absolute;
+  bottom: 12px;
+  right: 12px;
+  display: flex;
+  gap: 6px;
+  padding: 6px;
+  background: rgba(15, 23, 42, 0.85);
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
+  z-index: 10;
+}
+
+.board-zoom-controls .btn-icon {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.12);
+  color: #ffffff;
+  font-size: 16px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.board-zoom-controls .btn-icon:hover {
+  background: rgba(255, 255, 255, 0.25);
+}
+
+.board-zoom-controls #btn-zoom-reset {
+  width: 48px;
+  font-size: 13px;
 }
 
 .side-panel {

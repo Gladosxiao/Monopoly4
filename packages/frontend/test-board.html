@@ -13,15 +13,64 @@
       background: #0f172a;
       overflow: hidden;
     }
+    body {
+      overflow: auto;
+    }
     #board {
       display: block;
       width: 100vw;
       height: 100vh;
+      flex-shrink: 0;
+    }
+    .board-wrap {
+      position: relative;
+      min-width: 100vw;
+      min-height: 100vh;
+      display: flex;
+      justify-content: flex-start;
+      align-items: flex-start;
+    }
+    .board-zoom-controls {
+      position: fixed;
+      bottom: 12px;
+      right: 12px;
+      display: flex;
+      gap: 6px;
+      padding: 6px;
+      background: rgba(15, 23, 42, 0.85);
+      border-radius: 8px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
+      z-index: 10;
+    }
+    .board-zoom-controls button {
+      width: 32px;
+      height: 32px;
+      border: none;
+      border-radius: 6px;
+      background: rgba(255, 255, 255, 0.12);
+      color: #fff;
+      font-size: 16px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    .board-zoom-controls button:hover {
+      background: rgba(255, 255, 255, 0.25);
+    }
+    .board-zoom-controls #btn-zoom-reset {
+      width: 48px;
+      font-size: 13px;
     }
   </style>
 </head>
 <body>
-  <canvas id="board"></canvas>
+  <div class="board-wrap">
+    <canvas id="board"></canvas>
+  </div>
+  <div class="board-zoom-controls">
+    <button id="btn-zoom-out" title="缩小">−</button>
+    <button id="btn-zoom-reset" title="重置">1x</button>
+    <button id="btn-zoom-in" title="放大">+</button>
+  </div>
   <script type="module" src="/src/test-board.ts"></script>
 </body>
 </html>

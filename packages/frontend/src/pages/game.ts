@@ -52,6 +52,7 @@ const app = document.getElementById('app')!;
 
 let isStockCollapsed = false;
 let isBackpackCollapsed = false;
+let boardZoom = Math.max(0.5, Math.min(2.5, Number(localStorage.getItem('monopoly4-board-zoom') || '1')));
 let gameCanvas: HTMLCanvasElement | null = null;
 let currentHoverIndex = -1;
 let currentHoverPixel: { x: number; y: number } | undefined;
@@ -141,7 +142,7 @@ const HIGHLIGHT_LOG_TYPES = new Set([
 export function renderBoardWithSelection(state: GameState) {
   const currentUser = getCurrentUser();
   if (!gameCanvas || !currentUser) return;
-  const opts: Parameters<typeof renderBoard>[3] = {};
+  const opts: Parameters<typeof renderBoard>[3] = { zoom: boardZoom };
   if (currentHoverIndex >= 0) {
     opts.hoverIndex = currentHoverIndex;
     opts.hoverPixel = currentHoverPixel;
@@ -222,7 +223,13 @@ export async function renderGamePage(roomId: string): Promise<void> {
           <div id="stock-market"></div>
         </div>
         <div class="game-layout">
-          <div class="board-wrap"></div>
+          <div class="board-wrap">
+            <div class="board-zoom-controls">
+              <button id="btn-zoom-out" class="btn-icon" title="缩小">−</button>
+              <button id="btn-zoom-reset" class="btn-icon" title="重置">1x</button>
+              <button id="btn-zoom-in" class="btn-icon" title="放大">+</button>
+            </div>
+          </div>
           <div class="side-panel">
             <div class="info-card player-info-card">
               <h2>玩家信息</h2>
@@ -268,6 +275,31 @@ export async function renderGamePage(roomId: string): Promise<void> {
   preloadTokenImages(CHARACTERS.map((c) => c.id));
 
   attachBoardEvents(canvas);
+
+  // 棋盘缩放按钮
+  function updateZoomDisplay(): void {
+    const resetBtn = container.querySelector<HTMLButtonElement>('#btn-zoom-reset');
+    if (resetBtn) resetBtn.textContent = `${boardZoom.toFixed(1)}x`;
+  }
+  function applyZoom(): void {
+    localStorage.setItem('monopoly4-board-zoom', String(boardZoom));
+    updateZoomDisplay();
+    const state = getCurrentGame();
+    if (state) renderBoardWithSelection(state);
+  }
+  container.querySelector('#btn-zoom-out')!.addEventListener('click', () => {
+    boardZoom = Math.max(0.5, Math.round((boardZoom - 0.1) * 10) / 10);
+    applyZoom();
+  });
+  container.querySelector('#btn-zoom-in')!.addEventListener('click', () => {
+    boardZoom = Math.min(2.5, Math.round((boardZoom + 0.1) * 10) / 10);
+    applyZoom();
+  });
+  container.querySelector('#btn-zoom-reset')!.addEventListener('click', () => {
+    boardZoom = 1;
+    applyZoom();
+  });
+  updateZoomDisplay();
 
   container.querySelector('#btn-exit')!.addEventListener('click', () => {
     navigateToLobby();
@@ -790,6 +822,9 @@ export function renderStockMarket(container: HTMLElement, state: GameState): voi
     empty.className = 'stock-empty';
     empty.textContent = isStockCollapsed ? '当前未持有任何股票' : '暂无股票数据';
     el.appendChild(empty);
+    if (!isStockCollapsed && state.stocks.length === 0) {
+      console.warn('[renderStockMarket] state.stocks 为空，请检查后端 createGame 是否初始化股票');
+    }
     return;
   }
 

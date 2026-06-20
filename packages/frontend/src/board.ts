@@ -236,6 +236,8 @@ export interface RenderOptions {
    * 本地状态刚更新且尚未开始动画时使用；动画由前端 moveAnimation 模块驱动。
    */
   skipAnimation?: boolean;
+  /** 棋盘缩放比例：1.0 为默认，<1 格子更小、每行更多，>1 格子更大、可滚动 */
+  zoom?: number;
 }
 
 let currentLayout: BoardLayout | null = null;
@@ -380,7 +382,9 @@ function getShapeMetrics(shape: TileShape, rect: Rect): ShapeMetrics {
   const minDim = Math.min(w, h);
   const radius = Math.max(3, minDim * 0.1);
   const headerH = Math.max(14, h * 0.28);
-  return { x, y, w, h, radius, headerH, cx: x + w / 2, cy: y + h / 2, r: minDim / 2 };
+  // 圆形格缩小为 tile 短边的 38%，名称居中显示
+  const r = shape === 'circle' ? minDim * 0.38 : minDim / 2;
+  return { x, y, w, h, radius, headerH, cx: x + w / 2, cy: y + h / 2, r };
 }
 
 function drawTileBody(
@@ -429,6 +433,88 @@ function drawTileBody(
     ctx.arc(m.cx, m.cy, m.r, 0, Math.PI * 2);
   } else {
     roundRectPath(ctx, m.x, m.y, m.w, m.h, m.radius);
+  }
+  ctx.stroke();
+  ctx.restore();
+}
+
+/**
+ * 绘制大地产（span > 1）的主体。
+ * 若子格在视觉上相邻，绘制为跨格圆角矩形；
+ * 若不相邻（如跨蛇行转角），绘制为多个圆角矩形并通过连接桥连成一体。
+ */
+function drawPropertyBlockBody(
+  ctx: CanvasRenderingContext2D,
+  block: { rect: Rect; tileRects: Rect[]; isAdjacent: boolean },
+  radius: number,
+  fill: string,
+  stroke: { color: string; width: number },
+  highlight?: { hovered: boolean; current: boolean; color: string }
+): void {
+  const hovered = highlight?.hovered ?? false;
+  const current = highlight?.current ?? false;
+  const highlightColor = highlight?.color ?? '#ffffff';
+
+  ctx.save();
+  ctx.fillStyle = fill;
+  ctx.shadowColor = 'rgba(0,0,0,0.25)';
+  ctx.shadowBlur = hovered ? 14 : 5;
+  ctx.shadowOffsetX = 0;
+  ctx.shadowOffsetY = hovered ? 5 : 2;
+
+  if (block.isAdjacent) {
+    roundRectPath(ctx, block.rect.x, block.rect.y, block.rect.width, block.rect.height, radius);
+  } else {
+    // 非相邻：逐个圆角矩形 + 中心连接桥
+    const bridgeWidth = Math.min(
+      block.tileRects[0]?.width ?? 0,
+      block.tileRects[0]?.height ?? 0
+    ) * 0.6;
+    for (let i = 0; i < block.tileRects.length; i++) {
+      const r = block.tileRects[i];
+      roundRectPath(ctx, r.x + 2, r.y + 2, r.width - 4, r.height - 4, radius);
+      if (i > 0) {
+        const prev = block.tileRects[i - 1];
+        const c1 = { x: prev.x + prev.width / 2, y: prev.y + prev.height / 2 };
+        const c2 = { x: r.x + r.width / 2, y: r.y + r.height / 2 };
+        const dx = c2.x - c1.x;
+        const dy = c2.y - c1.y;
+        const len = Math.sqrt(dx * dx + dy * dy) || 1;
+        const nx = -dy / len;
+        const ny = dx / len;
+        const hw = bridgeWidth / 2;
+        ctx.beginPath();
+        ctx.moveTo(c1.x + nx * hw, c1.y + ny * hw);
+        ctx.lineTo(c2.x + nx * hw, c2.y + ny * hw);
+        ctx.lineTo(c2.x - nx * hw, c2.y - ny * hw);
+        ctx.lineTo(c1.x - nx * hw, c1.y - ny * hw);
+        ctx.closePath();
+      }
+    }
+  }
+  ctx.fill();
+  ctx.restore();
+
+  ctx.save();
+  if (hovered || current) {
+    ctx.strokeStyle = hovered ? '#ffffff' : highlightColor;
+    ctx.lineWidth = hovered ? 3.5 : 2.5;
+    ctx.shadowColor = hovered ? 'rgba(255,255,255,0.6)' : 'transparent';
+    ctx.shadowBlur = hovered ? 12 : 0;
+  } else {
+    ctx.strokeStyle = stroke.color;
+    ctx.lineWidth = stroke.width;
+    ctx.shadowColor = 'transparent';
+    ctx.shadowBlur = 0;
+  }
+
+  if (block.isAdjacent) {
+    roundRectPath(ctx, block.rect.x, block.rect.y, block.rect.width, block.rect.height, radius);
+  } else {
+    for (let i = 0; i < block.tileRects.length; i++) {
+      const r = block.tileRects[i];
+      roundRectPath(ctx, r.x + 2, r.y + 2, r.width - 4, r.height - 4, radius);
+    }
   }
   ctx.stroke();
   ctx.restore();
@@ -509,8 +595,9 @@ export function renderBoard(
   }
 
   // 逻辑尺寸（CSS 像素），所有绘制坐标均在此坐标系下计算
-  const width = cssWidth;
-  const height = cssHeight;
+  const zoom = Math.max(0.5, Math.min(2.5, options.zoom ?? 1));
+  const width = cssWidth * zoom;
+  const height = cssHeight * zoom;
 
   ctx.save();
   ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -519,6 +606,7 @@ export function renderBoard(
   const map = state.map as any;
 
   // 使用蛇形布局：S 形蜿蜒铺满可用空间，任意格数都能高效排布
+  // zoom 会改变有效画布尺寸，从而改变 tileSize 与每行列数
   currentLayout = snakeLayout(map, width, height);
   const layout = currentLayout;
 
@@ -527,11 +615,13 @@ export function renderBoard(
   const currentPlayer = state.players[state.currentPlayerIndex];
   const currentTileIndex = options.highlightCurrentTile && currentPlayer ? currentPlayer.position : -1;
 
-  // 预计算大块地产（span > 1）的跨格矩形，按 name 合并
+  // 预计算大块地产（span > 1）的跨格信息，按 name 合并
   interface PropertyBlockInfo {
     rect: Rect;
     center: Point;
     indices: number[];
+    tileRects: Rect[];
+    isAdjacent: boolean;
   }
   const propertyBlockBounds = new Map<string, PropertyBlockInfo>();
   for (const tile of map.tiles) {
@@ -541,22 +631,39 @@ export function renderBoard(
       (t: Tile) => t.type === 'property' && t.name === tile.name && t.span && t.span > 1
     );
     if (blockTiles.length <= 1) continue;
+    const sorted = blockTiles
+      .map((t: Tile) => ({ tile: t, rect: getTileRect(layout, t.index) }))
+      .sort((a: { tile: Tile; rect: Rect }, b: { tile: Tile; rect: Rect }) => a.tile.index - b.tile.index);
+
     let minX = Infinity;
     let minY = Infinity;
     let maxX = -Infinity;
     let maxY = -Infinity;
-    for (const t of blockTiles) {
-      const r = getTileRect(layout, t.index);
-      minX = Math.min(minX, r.x);
-      minY = Math.min(minY, r.y);
-      maxX = Math.max(maxX, r.x + r.width);
-      maxY = Math.max(maxY, r.y + r.height);
+    for (const { rect } of sorted) {
+      minX = Math.min(minX, rect.x);
+      minY = Math.min(minY, rect.y);
+      maxX = Math.max(maxX, rect.x + rect.width);
+      maxY = Math.max(maxY, rect.y + rect.height);
     }
     const rect: Rect = { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
+    const tileRects = sorted.map((s: { rect: Rect }) => s.rect);
+
+    // 判断子格在视觉上是否相邻（共享边）：任意两格中心距离 < 1.5 倍 tileSize
+    const isAdjacent = tileRects.every((r: Rect, i: number) => {
+      if (i === 0) return true;
+      const prev = tileRects[i - 1];
+      const dx = r.x + r.width / 2 - (prev.x + prev.width / 2);
+      const dy = r.y + r.height / 2 - (prev.y + prev.height / 2);
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      return dist < layout.tileSize * 1.5;
+    });
+
     propertyBlockBounds.set(tile.name, {
       rect,
       center: { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 },
-      indices: blockTiles.map((t: Tile) => t.index).sort((a: number, b: number) => a - b),
+      indices: sorted.map((s: { tile: Tile }) => s.tile.index),
+      tileRects,
+      isAdjacent,
     });
   }
 
@@ -628,22 +735,29 @@ export function renderBoard(
     }
 
     const m = getShapeMetrics(shape, drawRect);
+    const stroke = isProperty ? { color: '#ffffff', width: 1.5 } : { color: typeColor, width: 3 };
+    const highlight = isHovered || isCurrentTile
+      ? { hovered: isHovered, current: isCurrentTile, color: currentPlayer?.color || '#ffffff' }
+      : undefined;
 
     // 绘制主体
-    drawTileBody(
-      ctx,
-      shape,
-      m,
-      bodyFill,
-      isProperty ? { color: '#ffffff', width: 1.5 } : { color: typeColor, width: 3 },
-      isHovered || isCurrentTile
-        ? { hovered: isHovered, current: isCurrentTile, color: currentPlayer?.color || '#ffffff' }
-        : undefined
-    );
+    if (block && !block.isAdjacent) {
+      // 大地产子格不相邻：用连接桥连成一体
+      drawPropertyBlockBody(ctx, block, m.radius, bodyFill, stroke, highlight);
+    } else {
+      drawTileBody(ctx, shape, m, bodyFill, stroke, highlight);
+    }
 
     // 可选中地块高亮
     if (isSelectable) {
-      drawSelectableHighlight(ctx, shape, m);
+      if (block && !block.isAdjacent) {
+        for (const r of block.tileRects) {
+          const sm = getShapeMetrics('rect', r);
+          drawSelectableHighlight(ctx, 'rect', sm);
+        }
+      } else {
+        drawSelectableHighlight(ctx, shape, m);
+      }
     }
 
     if (isBlockLead) {
@@ -656,6 +770,36 @@ export function renderBoard(
     if (shape === 'small') {
       const iconSize = Math.min(m.w, m.h) * 0.55;
       drawTileIcon(ctx, drawCenter.x, drawCenter.y, iconSize, tile.type);
+      return;
+    }
+
+    // 圆形功能格：不绘制标题栏，名称直接居中显示在圆内
+    if (shape === 'circle') {
+      ctx.save();
+      const nameFontSize = Math.max(8, minDim * 0.22);
+      ctx.font = `bold ${nameFontSize}px sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      setTextShadow(ctx, 'rgba(0,0,0,0.8)');
+      ctx.fillStyle = '#ffffff';
+      ctx.fillText(tile.name, drawCenter.x, drawCenter.y);
+      clearTextShadow(ctx);
+      ctx.restore();
+      return;
+    }
+
+    // 大地产子格不相邻：简化为只在几何中心画名称
+    if (block && !block.isAdjacent) {
+      ctx.save();
+      const nameFontSize = Math.max(9, minDim * 0.16);
+      ctx.font = `bold ${nameFontSize}px sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      setTextShadow(ctx, 'rgba(0,0,0,0.8)');
+      ctx.fillStyle = '#ffffff';
+      ctx.fillText(tile.name, block.center.x, block.center.y);
+      clearTextShadow(ctx);
+      ctx.restore();
       return;
     }
 
@@ -672,16 +816,9 @@ export function renderBoard(
     ctx.textBaseline = 'middle';
     setTextShadow(ctx, 'rgba(0,0,0,0.75)');
     ctx.fillStyle = '#ffffff';
-    const titleX = !isProperty ? drawCenter.x + minDim * 0.05 : drawCenter.x;
-    ctx.fillText(tile.name, titleX, headerY + headerH / 2 - 1);
+    ctx.fillText(tile.name, drawCenter.x, headerY + headerH / 2 - 1);
     clearTextShadow(ctx);
     ctx.restore();
-
-    // 功能性地块左上角小图标
-    if (!isProperty) {
-      const iconSize = Math.max(10, minDim * 0.18);
-      drawTileIcon(ctx, m.x + iconSize * 0.7, headerY + headerH / 2 - 1, iconSize, tile.type);
-    }
 
     // 所有者标识：标题栏下方的色条 + 首字标签
     let ownerExtraH = 0;
