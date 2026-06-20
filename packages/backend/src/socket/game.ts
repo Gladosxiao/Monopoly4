@@ -171,7 +171,7 @@ export function setupSocketIO(httpServer: HttpServer): SocketIOServer<ClientToSe
       scheduleAITurn(roomId);
     }
 
-    socket.on('room:join', (roomId) => {
+    socket.on('room:join', async (roomId) => {
       const room = rooms.get(roomId) ?? loadRoomFromDb(roomId);
       if (!room) {
         socket.emit('error', '房间不存在');
@@ -200,13 +200,13 @@ export function setupSocketIO(httpServer: HttpServer): SocketIOServer<ClientToSe
         });
       }
 
-      socket.join(roomId);
+      await socket.join(roomId);
       socketRoomMap.set(socket.id, roomId);
       saveRoomToDb(room);
       io.to(roomId).emit('room:updated', room);
     });
 
-    socket.on('room:leave', (roomId) => {
+    socket.on('room:leave', async (roomId) => {
       const room = rooms.get(roomId);
       if (!room) return;
       if (room.status !== 'waiting') {
@@ -225,7 +225,7 @@ export function setupSocketIO(httpServer: HttpServer): SocketIOServer<ClientToSe
         saveRoomToDb(room);
         io.to(roomId).emit('room:updated', room);
       }
-      socket.leave(roomId);
+      await socket.leave(roomId);
       socketRoomMap.delete(socket.id);
     });
 
@@ -275,8 +275,15 @@ export function setupSocketIO(httpServer: HttpServer): SocketIOServer<ClientToSe
 
     socket.on('game:roll', (roomId, diceCount) => {
       const state = games.get(roomId);
-      if (!state) return;
+      if (!state) {
+        console.warn(`[socket:game:roll] room=${roomId} 无游戏状态`);
+        return;
+      }
+      const currentPlayer = state.players[state.currentPlayerIndex];
       if (!canRoll(state, user.id)) {
+        console.warn(
+          `[socket:game:roll] 拒绝掷骰 room=${roomId} status=${state.status} current=${currentPlayer?.username}(${currentPlayer?.id}) user=${user.id} isAI=${currentPlayer?.isAI}`
+        );
         socket.emit('error', '现在不能掷骰');
         return;
       }
@@ -285,6 +292,7 @@ export function setupSocketIO(httpServer: HttpServer): SocketIOServer<ClientToSe
         socket.emit('error', result.message);
         return;
       }
+      console.log(`[socket:game:roll] room=${roomId} ${currentPlayer?.username} 掷出 ${result.steps} 步，status 将变为 acting/rolling`);
       if (result.steps !== undefined && result.steps !== 0) {
         movePlayer(state, result.steps);
       }
