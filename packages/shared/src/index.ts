@@ -482,7 +482,7 @@ export interface ClientToServerEvents {
   'game:start': (roomId: string) => void;
   'game:roll': (roomId: string, diceCount?: number) => void;
   'game:buy': (roomId: string) => void;
-  'game:upgrade': (roomId: string) => void;
+  'game:upgrade': (roomId: string, buildingType?: BuildingType) => void;
   'game:rebuild': (roomId: string, tileIndex: number, buildingType: BuildingType) => void;
   'game:skip': (roomId: string) => void;
   // 卡片与道具

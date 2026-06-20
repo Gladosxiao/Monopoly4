@@ -47,6 +47,45 @@ export function isAnimating(): boolean {
   return activeAnimations.size > 0;
 }
 
+export function isPlayerAnimating(playerId: string): boolean {
+  return activeAnimations.has(playerId);
+}
+
+/**
+ * 获取某玩家在当前动画时刻所在的地图格索引。
+ * 返回 null 表示没有激活的移动动画。
+ */
+export function getCurrentAnimatedTileIndex(
+  layout: BoardLayout,
+  player: Player,
+  now: number
+): number | null {
+  const animation = activeAnimations.get(player.id);
+  if (!animation) return null;
+
+  const { fromIndex, toIndex, startTime, durationPerStep, pausePerStep } = animation;
+  const path = layout.map.path;
+  const total = path.length;
+  if (total === 0) return null;
+
+  const fromPathIdx = path.indexOf(((fromIndex % total) + total) % total);
+  const toPathIdx = path.indexOf(((toIndex % total) + total) % total);
+  if (fromPathIdx < 0 || toPathIdx < 0) return null;
+
+  const steps = (toPathIdx - fromPathIdx + total) % total;
+  if (steps === 0) return null;
+
+  const elapsed = now - startTime;
+  if (elapsed <= 0) return path[fromPathIdx];
+
+  const stepCycle = durationPerStep + pausePerStep;
+  const rawProgress = elapsed / (steps * stepCycle);
+  if (rawProgress >= 1) return null;
+
+  const currentStep = Math.floor(steps * rawProgress);
+  return path[(fromPathIdx + currentStep + total) % total];
+}
+
 /**
  * 获取某玩家在当前动画时刻应显示的棋子中心坐标。
  * 返回 null 表示该玩家没有激活的移动动画（应直接显示在 player.position）。

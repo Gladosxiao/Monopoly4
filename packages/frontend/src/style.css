@@ -865,8 +865,8 @@ select:focus {
 .card-grid,
 .item-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
-  gap: 8px;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 10px;
 }
 
 .card-cell,
@@ -889,8 +889,8 @@ select:focus {
 
 .card-cell-name,
 .item-cell-name {
-  padding: 4px 3px;
-  font-size: 11px;
+  padding: 6px 4px;
+  font-size: 12px;
   font-weight: 600;
   color: var(--color-white);
   line-height: 1.2;
@@ -1001,23 +1001,23 @@ select:focus {
 }
 
 .stock-top-panel {
-  max-height: 260px;
-  overflow: hidden;
-  transition: max-height 0.25s ease;
-}
-
-.stock-top-panel.collapsed {
-  max-height: 120px;
-}
-
-.backpack-wide-panel {
   max-height: 280px;
   overflow: hidden;
   transition: max-height 0.25s ease;
 }
 
+.stock-top-panel.collapsed {
+  max-height: 150px;
+}
+
+.backpack-wide-panel {
+  max-height: 320px;
+  overflow: hidden;
+  transition: max-height 0.25s ease;
+}
+
 .backpack-wide-panel.collapsed {
-  max-height: none;
+  max-height: 56px;
 }
 
 .backpack-wide-panel.collapsed > #backpack-wide-content {
@@ -1099,6 +1099,19 @@ select:focus {
   padding: 4px 8px;
   font-size: var(--font-size-sm);
   min-height: 28px;
+}
+
+.stock-actions {
+  white-space: normal !important;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 4px;
+}
+
+.stock-actions button {
+  min-width: 48px;
+  padding: 4px 6px;
 }
 
 .stock-table small {

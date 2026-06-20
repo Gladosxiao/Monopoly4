@@ -1626,7 +1626,10 @@ export function buyProperty(state: GameState): { success: boolean; message?: str
  * 当前玩家升级所在土地。
  * 连锁店、公园、加油站不可升级，最高 5 级。
  */
-export function upgradeProperty(state: GameState): { success: boolean; message?: string } {
+export function upgradeProperty(
+  state: GameState,
+  buildingType?: BuildingType
+): { success: boolean; message?: string } {
   const player = getCurrentPlayer(state);
   const tileIndex = state.pendingTileIndex ?? player.position;
   const tile = state.map.tiles[tileIndex];
@@ -1642,10 +1645,16 @@ export function upgradeProperty(state: GameState): { success: boolean; message?:
   }
 
   let bt = tile.buildingType ?? 'house';
-  // 大块土地从住宅升级时自动变为商场（特殊建筑）
+  // 大块土地从住宅升级时可选择特殊建筑类型，未指定则默认商场
   if (tile.size === 'large' && bt === 'house') {
-    tile.buildingType = 'mall';
-    bt = 'mall';
+    const allowedLarge: BuildingType[] = ['park', 'mall', 'hotel', 'gasStation', 'lab'];
+    if (buildingType && allowedLarge.includes(buildingType)) {
+      tile.buildingType = buildingType;
+      bt = buildingType;
+    } else {
+      tile.buildingType = 'mall';
+      bt = 'mall';
+    }
   }
   // 连锁店、公园、加油站不可升级
   if (bt === 'chainStore' || bt === 'park' || bt === 'gasStation') {
@@ -1688,7 +1697,7 @@ export function upgradeProperty(state: GameState): { success: boolean; message?:
     timestamp: Date.now(),
     type: 'player:upgrade',
     actorId: player.id,
-    message: `${player.username} 升级 ${tile.name} 到 ${tile.level} 级，花费 $${fortune.cost}${discountText}`,
+    message: `${player.username} 升级 ${tile.name} 的 ${buildingTypeLabel(bt)} 到 ${tile.level} 级，花费 $${fortune.cost}${discountText}`,
   });
   return { success: true };
 }

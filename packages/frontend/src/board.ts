@@ -1,6 +1,6 @@
 
 
-import type { GameState, Tile, BuildingType, SpiritOnMap } from '@monopoly4/shared';
+import type { GameState, Tile, BuildingType, SpiritOnMap, Player } from '@monopoly4/shared';
 import { SPIRIT_DEFINITIONS } from '@monopoly4/shared';
 import {
   snakeLayout,
@@ -13,7 +13,13 @@ import {
   type Point,
   type Rect,
 } from '@monopoly4/map-generator/coords';
-import { getAnimatedPlayerPosition, isAnimating, stopMoveAnimation } from './moveAnimation.js';
+import {
+  getAnimatedPlayerPosition,
+  getCurrentAnimatedTileIndex,
+  isAnimating,
+  isPlayerAnimating,
+  stopMoveAnimation,
+} from './moveAnimation.js';
 
 /** 功能性地块描边色系：饱和度较高、用于浅底上的加粗描边 */
 const TILE_COLORS: Record<string, string> = {
@@ -1580,6 +1586,20 @@ export function getCurrentBoardLayout(): BoardLayout | null {
 /** 查询是否正在播放逐格移动动画。 */
 export function isMoveAnimating(): boolean {
   return isAnimating();
+}
+
+/** 查询指定玩家是否正在播放逐格移动动画。 */
+export function isPlayerMoveAnimating(playerId: string): boolean {
+  return isPlayerAnimating(playerId);
+}
+
+/** 获取指定玩家当前动画所在的地图格索引。 */
+export function getPlayerAnimatedTileIndex(
+  layout: BoardLayout,
+  player: Player,
+  now: number
+): number | null {
+  return getCurrentAnimatedTileIndex(layout, player, now);
 }
 
 /** 强制停止当前逐格移动动画。 */

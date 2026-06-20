@@ -20,6 +20,8 @@ import {
   preloadTokenImages,
   getCurrentBoardLayout,
   isMoveAnimating,
+  isPlayerMoveAnimating,
+  getPlayerAnimatedTileIndex,
   stopMoveAnimationNow,
 } from '../board.js';
 import { startMoveAnimation } from '../moveAnimation.js';
@@ -364,16 +366,26 @@ export async function renderGamePage(roomId: string): Promise<void> {
       currentHoverPixel = undefined;
     }
 
-    // 检测所有未破产玩家是否发生位置变化，为每位移动玩家启动逐格动画
+    // 检测所有未破产玩家是否发生位置变化，为每位移动玩家启动逐格动画。
+    // 若该玩家已在动画中，则从当前动画所在格继续移动，避免闪回/回拉。
     if (oldState) {
       let anyMoved = false;
+      const layout = getCurrentBoardLayout();
+      const now = Date.now();
       for (const player of state.players) {
         if (player.isBankrupt) continue;
         const oldPlayer = oldState.players.find((p) => p.id === player.id);
-        if (oldPlayer && player.position !== oldPlayer.position) {
-          startMoveAnimation(player.id, oldPlayer.position, player.position);
-          anyMoved = true;
+        if (!oldPlayer || player.position === oldPlayer.position) continue;
+
+        let fromIndex = oldPlayer.position;
+        if (layout && isPlayerMoveAnimating(player.id)) {
+          const animatedIndex = getPlayerAnimatedTileIndex(layout, oldPlayer, now);
+          if (animatedIndex !== null) {
+            fromIndex = animatedIndex;
+          }
         }
+        startMoveAnimation(player.id, fromIndex, player.position);
+        anyMoved = true;
       }
       if (anyMoved) scheduleAnimationFrames();
     }
@@ -682,7 +694,27 @@ export function renderActions(container: HTMLElement, state: GameState): void {
           const btn = document.createElement('button');
           const cost = Math.floor(tile.basePrice * (tile.level + 1) * 0.5 * state.priceIndex);
           btn.textContent = `升级 ${tile.name} ($${cost})`;
-          btn.addEventListener('click', () => upgradeProperty(state.roomId));
+          btn.addEventListener('click', async () => {
+            // 大块土地首次升级时允许选择特殊建筑类型
+            if (tile.size === 'large' && bt === 'house') {
+              const options = [
+                { value: 'mall', label: '商场（转盘租金）' },
+                { value: 'hotel', label: '旅馆（转盘租金+住宿）' },
+                { value: 'gasStation', label: '加油站（按步数收费）' },
+                { value: 'park', label: '公园（免收过路费）' },
+                { value: 'lab', label: '研究所（免收过路费）' },
+              ];
+              const choice = await showPrompt('选择要建造的特殊建筑：', {
+                choices: options.map((o, i) => ({ value: String(i + 1), label: `${i + 1}. ${o.label}` })),
+              });
+              const idx = parseInt(choice || '', 10) - 1;
+              if (idx >= 0 && idx < options.length) {
+                upgradeProperty(state.roomId, options[idx].value as BuildingType);
+              }
+            } else {
+              upgradeProperty(state.roomId);
+            }
+          });
           el.appendChild(btn);
         }
 
@@ -886,18 +918,25 @@ export function renderStockMarket(container: HTMLElement, state: GameState): voi
       <td></td>
     `;
     const actions = tr.querySelector('td:last-child')!;
+    actions.className = 'stock-actions';
 
-    const buyBtn = document.createElement('button');
-    buyBtn.textContent = '买1';
-    buyBtn.disabled = stock.suspendedDays > 0 || currentPlayer?.id !== state.players[state.currentPlayerIndex].id;
-    buyBtn.addEventListener('click', () => tradeStock(state.roomId, stock.id, 1));
-    actions.appendChild(buyBtn);
+    const isMyTurn = currentPlayer?.id === state.players[state.currentPlayerIndex].id;
+    const canTrade = stock.suspendedDays <= 0;
 
-    const sellBtn = document.createElement('button');
-    sellBtn.textContent = '卖1';
-    sellBtn.disabled = holding <= 0 || stock.suspendedDays > 0;
-    sellBtn.addEventListener('click', () => tradeStock(state.roomId, stock.id, -1));
-    actions.appendChild(sellBtn);
+    const addTradeBtn = (label: string, qty: number) => {
+      const btn = document.createElement('button');
+      btn.textContent = label;
+      btn.disabled = !canTrade || (qty > 0 ? !isMyTurn : holding < qty);
+      btn.addEventListener('click', () => tradeStock(state.roomId, stock.id, qty));
+      actions.appendChild(btn);
+    };
+
+    addTradeBtn('买1', 1);
+    addTradeBtn('买10', 10);
+    addTradeBtn('买100', 100);
+    addTradeBtn('卖1', -1);
+    addTradeBtn('卖10', -10);
+    addTradeBtn('卖100', -100);
 
     tbody.appendChild(tr);
   });

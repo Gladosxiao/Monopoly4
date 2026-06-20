@@ -208,6 +208,16 @@ describe('upgradeProperty', () => {
     const result = upgradeProperty(state);
     expect(result.success).toBe(false);
   });
+
+  it('大块住宅升级可选择特殊建筑类型', () => {
+    const state = makeTestState();
+    state.pendingTileIndex = 21;
+    setOwner(state, 21, 'p1', 'house', 0);
+    const result = upgradeProperty(state, 'hotel');
+    expect(result.success).toBe(true);
+    expect(state.map.tiles[21].buildingType).toBe('hotel');
+    expect(state.map.tiles[21].level).toBe(1);
+  });
 });
 
 describe('rebuildTile', () => {

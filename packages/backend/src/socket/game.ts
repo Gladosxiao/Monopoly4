@@ -334,14 +334,14 @@ export function setupSocketIO(httpServer: HttpServer): SocketIOServer<ClientToSe
       scheduleAITurn(roomId);
     });
 
-    socket.on('game:upgrade', (roomId) => {
+    socket.on('game:upgrade', (roomId, buildingType) => {
       const state = games.get(roomId);
       if (!state) return;
       if (!canUpgrade(state, user.id)) {
         socket.emit('error', '现在不能升级');
         return;
       }
-      const result = upgradeProperty(state);
+      const result = upgradeProperty(state, buildingType);
       if (!result.success) {
         socket.emit('error', result.message);
         return;

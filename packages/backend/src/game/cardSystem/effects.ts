@@ -92,9 +92,16 @@ function addStatusEffect(
 
 // ===== 控制类 =====
 
-const turnAround: CardEffect = (state, caster) => {
-  caster.pendingDirection = caster.pendingDirection === 'backward' ? 'forward' : 'backward';
-  log(state, 'card:turnAround', caster.id, `${caster.username} 使用了转向卡，下次将反向移动`);
+const turnAround: CardEffect = (state, caster, ctx) => {
+  const target = findPlayer(state, ctx.targetPlayerId) || caster;
+  target.pendingDirection = target.pendingDirection === 'backward' ? 'forward' : 'backward';
+  log(
+    state,
+    'card:turnAround',
+    caster.id,
+    `${caster.username} 对 ${target.username} 使用转向卡，下次将反向移动`,
+    target.id
+  );
   return { success: true };
 };
 

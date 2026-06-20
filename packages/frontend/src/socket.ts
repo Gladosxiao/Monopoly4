@@ -117,8 +117,8 @@ export function buyProperty(roomId: string): void {
   getSocket().emit('game:buy', roomId);
 }
 
-export function upgradeProperty(roomId: string): void {
-  getSocket().emit('game:upgrade', roomId);
+export function upgradeProperty(roomId: string, buildingType?: BuildingType): void {
+  getSocket().emit('game:upgrade', roomId, buildingType);
 }
 
 export function rebuildTile(roomId: string, tileIndex: number, buildingType: BuildingType): void {

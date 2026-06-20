@@ -25,6 +25,16 @@ describe('控制类卡片', () => {
     expect(p1.pendingDirection).toBe('backward');
   });
 
+  it('转向卡可指定目标玩家', () => {
+    const state = makeTestState();
+    prepareActingState(state);
+    const id = giveCard(state.players[0], 'turnAround');
+    const result = useCard(state, 'p1', id, { targetPlayerId: 'p2' });
+    expect(result.success).toBe(true);
+    expect(state.players[1].pendingDirection).toBe('backward');
+    expect(state.players[0].pendingDirection).toBeUndefined();
+  });
+
   it('停留卡给目标附加 stay 状态', () => {
     const state = makeTestState();
     prepareActingState(state);
