@@ -1,0 +1,21 @@
+# 生产环境部署用 docker-compose
+# 配合 .github/workflows/deploy.yml 使用：CI 构建镜像后，服务器端拉取并启动。
+# 本文件会被复制到服务器作为 docker-compose.yml。
+
+services:
+  backend:
+    image: ${IMAGE_NAME:-monopoly4-web:latest}
+    container_name: monopoly4-web
+    ports:
+      - "${PORT:-3000}:3000"
+    env_file:
+      - .env
+    volumes:
+      - ./data:/app/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s

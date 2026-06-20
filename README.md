@@ -54,17 +54,31 @@ npm run db:init        # 初始化/迁移数据库
 
 ## 部署
 
+### 快速生产部署（Docker）
+
 ```bash
 cp .env.example .env
-# 编辑 .env，设置 JWT_SECRET 等
+# 编辑 .env，设置 JWT_SECRET、ALLOWED_ORIGINS 等
 npm run build
-npm run start
+docker compose -f docker-compose.production.yml up -d
 ```
 
-或使用 Docker：
+### 自动部署到 Kimi 网站
+
+项目已配置 GitHub Actions 自动部署流水线（`.github/workflows/deploy.yml`）。推送到 `main` 分支即可自动构建 Docker 镜像并部署到服务器。
+
+需要预先在仓库 Secrets 中配置：
+
+- `DEPLOY_HOST`、`DEPLOY_USER`、`DEPLOY_SSH_KEY`、`DEPLOY_STACK_PATH`
+- `JWT_SECRET`、`ALLOWED_ORIGINS`
+- 可选：`GHCR_USERNAME`、`GHCR_PULL_TOKEN`
+
+详细步骤见 [`docs/design/08-deployment.md`](docs/design/08-deployment.md)。
+
+### 手动部署脚本
 
 ```bash
-docker compose up -d --build
+./tools/deploy/deploy.sh root@kimi.example.com /opt/monopoly4
 ```
 
 ## 许可证

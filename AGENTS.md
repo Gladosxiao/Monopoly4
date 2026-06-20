@@ -147,10 +147,16 @@ docker compose up -d --build
 
 ### 部署到 Kimi 网站
 
-1. 准备 `.env`：复制 `.env.example`，设置强密码 `JWT_SECRET`、生产域名 `ALLOWED_ORIGINS` 等。
-2. 构建：`npm run build`
-3. 启动后端：`npm run start`（监听 `PORT`，默认 3000）
-4. 可选 Docker：`docker compose up -d --build`
+项目已准备 **GitHub Actions 自动部署**（`.github/workflows/deploy.yml`）与 **手动部署脚本**（`tools/deploy/deploy.sh`）。推送到 `main` 分支后，Actions 会构建 Docker 镜像并推送到 GHCR，再 SSH 到服务器拉取启动。
+
+需要提前在仓库 Settings → Secrets 配置：
+- `DEPLOY_HOST`、`DEPLOY_USER`、`DEPLOY_SSH_KEY`、`DEPLOY_STACK_PATH`
+- `JWT_SECRET`、`ALLOWED_ORIGINS`
+- 可选：`GHCR_USERNAME`、`GHCR_PULL_TOKEN`
+
+服务器要求：Linux + Docker + Docker Compose，能 SSH 登录，3000 端口可访问（或配合 Nginx 反向代理）。首次部署前需手动上传 `users.json` 到服务器 `./data/users.json`。
+
+详细步骤与回滚方案见 `docs/design/08-deployment.md`。
 
 ### UI/UX 渲染约定
 
