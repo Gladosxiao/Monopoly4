@@ -12,6 +12,17 @@ export function getSocket(): GameSocket {
       auth: { token },
       transports: ['websocket', 'polling'],
     });
+
+    // 开发环境下打印所有 Socket 事件，方便调试
+    if ((import.meta as any).env?.DEV) {
+      (socket as any).onAny?.((event: string, ...args: unknown[]) => {
+        console.log(`[socket:in] ${event}`, args);
+      });
+      (socket as any).onAnyOutgoing?.((event: string, ...args: unknown[]) => {
+        console.log(`[socket:out] ${event}`, args);
+      });
+    }
+
     // 连接失败时尝试刷新 token 并重连，最多重试一次
     let refreshAttempted = false;
     socket.on('connect_error', (err) => {

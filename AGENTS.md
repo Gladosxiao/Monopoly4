@@ -125,6 +125,23 @@ docker compose up -d --build
 - 默认测试账号：仅在开发环境且无配置文件时自动注入，方便本地快速验证。
 - 配置文件：`packages/backend/users.config.example.json` 提供模板，复制为 `packages/backend/users.config.json` 后按需修改；该文件已被 `.gitignore` 忽略，不会提交。
 
+### Debug 与问题排查
+
+开发时默认开启以下排查能力：
+
+1. **浏览器控制台**：`npm run dev` 下会自动打印所有 Socket 进出事件（`[socket:in]` / `[socket:out]`）。
+2. **后端日志**：所有 socket 处理器异常会被捕获并打印 `[socket:<event>] error:`，不会导致连接断开或进程崩溃。
+3. **状态导出**：游戏内测试模式面板新增 **“导出当前状态 JSON”** 按钮，可下载完整 `GameState`。
+4. **Debug 接口**：
+   - `GET /api/debug/rooms`：查看所有进行中的对局摘要
+   - `GET /api/debug/state/:roomId`：获取指定房间完整游戏状态
+   开发环境默认可用；生产环境需设置 `DEBUG=true` 才开启。
+
+排查“卡住 / AI 不动”时，建议按顺序：
+1. 打开浏览器控制台，确认是否收到 `game:state`；
+2. 查看后端终端是否有 `[socket:*] error` 或 `[AI] 自动回合执行失败`；
+3. 使用测试面板导出状态 JSON，或用 `curl http://localhost:3000/api/debug/state/<roomId>` 查看 `status` 与 `currentPlayerIndex`。
+
 ### 部署到 Kimi 网站
 
 1. 准备 `.env`：复制 `.env.example`，设置强密码 `JWT_SECRET`、生产域名 `ALLOWED_ORIGINS` 等。

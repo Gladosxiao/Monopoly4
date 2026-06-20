@@ -88,6 +88,20 @@ export function createTestPanel(
     }
   });
 
+  // 普通游戏状态推送也会刷新面板中的玩家/地块下拉框
+  const refreshOnGameState = (state: GameState) => {
+    if (currentPanel && state && state.players && state.map) {
+      (currentPanel as HTMLDivElement & { _refreshState: (s: GameState) => void })
+        ._refreshState(state);
+    }
+  };
+  socket.on('game:state', refreshOnGameState);
+  const originalCleanup = cleanupTestUpdate;
+  cleanupTestUpdate = () => {
+    originalCleanup?.();
+    socket.off('game:state', refreshOnGameState);
+  };
+
   return currentPanel;
 }
 

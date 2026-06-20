@@ -43,6 +43,15 @@ npm run db:init        # 初始化/迁移数据库
 | 测试 | `npm run test -w packages/backend` | 关闭 | 无 | 关闭 |
 | 生产 | `npm run build && npm run start` | 关闭 | 需配置 `users.config.json` | 由配置决定 |
 
+## 排查问题
+
+开发时默认启用 Debug 能力：
+
+- 浏览器控制台会自动打印所有 Socket 事件（`[socket:in]` / `[socket:out]`）。
+- 后端会捕获并打印 socket 处理器异常，避免连接断开。
+- 游戏内测试面板可 **导出当前状态 JSON**。
+- 可通过 `GET /api/debug/state/<roomId>` 和 `GET /api/debug/rooms` 查看实时状态。
+
 ## 部署
 
 ```bash

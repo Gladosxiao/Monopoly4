@@ -160,6 +160,7 @@ export function createTestPanel(
       font-size: 13px;
       display: flex; flex-direction: column;
       flex-shrink: 0;
+      transition: width 0.25s ease;
     `
     : `
       position: fixed; top: 0; right: 0; height: 100vh;
@@ -169,7 +170,7 @@ export function createTestPanel(
       font-size: 13px;
       display: flex; flex-direction: column;
       box-shadow: -4px 0 16px rgba(0, 0, 0, 0.5);
-      transition: transform 0.3s ease;
+      transition: transform 0.3s ease, width 0.25s ease;
     `;
   activePanel = panel;
 
@@ -195,10 +196,8 @@ export function createTestPanel(
     collapsed = !collapsed;
     content.style.display = collapsed ? 'none' : '';
     collapseBtn.textContent = collapsed ? '▶' : '◀';
-    // 悬浮模式下折叠时收缩为 40px；嵌入布局时保持宽度不变
-    if (!docked) {
-      panel.style.width = collapsed ? '40px' : `${PANEL_WIDTH}px`;
-    }
+    // 折叠时收缩为 40px；展开时恢复 320px
+    panel.style.width = collapsed ? '40px' : `${PANEL_WIDTH}px`;
   });
 
   panel.appendChild(header);
@@ -271,10 +270,17 @@ export function createTestPanel(
   // 应用玩家修改
   const applyPlayerBtn = createButton('应用玩家修改', () => {
     const pid = playerSelect.value;
-    if (!pid) return;
+    if (!pid) {
+      console.warn('[test-panel] 未选择玩家');
+      return;
+    }
     const state = getCurrentState();
     const roomId = state?.roomId;
-    if (!roomId) return;
+    if (!roomId) {
+      console.warn('[test-panel] 当前无游戏状态');
+      return;
+    }
+    console.log('[test-panel] 应用玩家修改', { roomId, pid, cash: cashInput.value, deposit: depositInput.value });
     if (cashInput.value) emitFn('test:setCash', roomId, pid, Number(cashInput.value));
     if (depositInput.value) emitFn('test:setDeposit', roomId, pid, Number(depositInput.value));
     if (loanInput.value) emitFn('test:setLoan', roomId, pid, Number(loanInput.value));
@@ -462,6 +468,25 @@ export function createTestPanel(
     quickBtnContainer.appendChild(btn);
   });
   content.appendChild(quickBtnContainer);
+
+  // ==================== G. Debug 工具 ====================
+  content.appendChild(createSectionTitle('G. Debug 工具'));
+
+  const exportBtn = createButton('导出当前状态 JSON', () => {
+    const state = getCurrentState();
+    if (!state) return;
+    const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `game-state-${state.roomId}-${Date.now()}.json`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  });
+  exportBtn.style.cssText += `width: 100%;`;
+  content.appendChild(exportBtn);
 
   // ==================== 数据刷新逻辑 ====================
 

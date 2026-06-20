@@ -215,11 +215,11 @@ export function renderBoard(
   const map = state.map as any;
   const total = map.tiles.length;
 
-  // 40 格使用环形布局，更多格数使用网格布局
-  const useRing = total <= 40;
-  currentLayout = useRing
-    ? ringLayout(map, Math.min(width, height))
-    : gridLayout(map, Math.ceil(Math.sqrt(total)), Math.floor(Math.min(width, height) / Math.ceil(Math.sqrt(total))));
+  // 统一使用环形布局；根据格子数动态计算画布尺寸，保证每格可读
+  const targetTileSize = 60;
+  const side = Math.max(1, Math.round(total / 4));
+  const layoutSize = Math.max(800, targetTileSize * (side + 2));
+  currentLayout = ringLayout(map, layoutSize);
 
   const layout = currentLayout;
   const currentPlayer = state.players[state.currentPlayerIndex];
@@ -802,10 +802,13 @@ export function getTileIndexAt(x: number, y: number): number {
 export function createBoardCanvas(mapTileCount = 40): HTMLCanvasElement {
   const canvas = document.createElement('canvas');
   const dpr = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1;
-  const size = mapTileCount <= 40 ? 800 : 1200;
-  const ratio = mapTileCount <= 40 ? 1 : 0.75;
+
+  // 统一使用环形布局：根据格数计算合适尺寸，保证每格至少 targetTileSize 像素
+  const targetTileSize = 60;
+  const side = Math.max(1, Math.round(mapTileCount / 4));
+  const size = Math.max(800, targetTileSize * (side + 2));
   const cssWidth = size;
-  const cssHeight = Math.floor(size * ratio);
+  const cssHeight = size; // 环形棋盘为正方形
 
   // 实际像素按 DPR 放大，CSS 尺寸保持逻辑大小，保证高分屏清晰
   canvas.width = Math.floor(cssWidth * dpr);

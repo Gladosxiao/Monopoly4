@@ -9,6 +9,7 @@ import authRoutes from './routes/auth.js';
 import roomRoutes from './routes/rooms.js';
 import mapRoutes from './routes/maps.js';
 import healthRoutes from './routes/health.js';
+import debugRoutes from './routes/debug.js';
 import { setupSocketIO } from './socket/game.js';
 import { syncUsersFromConfig } from './userConfig.js';
 import { runMigrations } from './migrations/index.js';
@@ -32,6 +33,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/rooms', roomRoutes);
 app.use('/api/maps', mapRoutes);
 app.use('/api/health', healthRoutes);
+app.use('/api/debug', debugRoutes);
 
 // 生产环境托管前端构建产物
 const distPath = path.resolve(

@@ -16,6 +16,7 @@ import { createBoardCanvas, renderBoard, getTileIndexAt } from '../board.js';
 import { createTestPanel, isTestMode } from '../testMode/index.js';
 import { registerCleanup, navigateToLogin, navigateToLobby } from '../router.js';
 import { showToast, showPrompt, escapeHtml } from '../ui/common.js';
+import { launchMiniGame } from '../minigames/index.js';
 import {
   rollDice,
   buyProperty,
@@ -32,6 +33,7 @@ import {
   placeLotteryBet,
   castMagicSpell,
   skipTurn,
+  submitMiniGameResult,
   onGameState,
   onError,
 } from '../socket.js';
@@ -43,6 +45,10 @@ let isBackpackCollapsed = false;
 let gameCanvas: HTMLCanvasElement | null = null;
 let currentHoverIndex = -1;
 let currentHoverPixel: { x: number; y: number } | undefined;
+
+/** 小游戏状态 */
+let activeMiniGameType: string | undefined;
+let isMiniGameActive = false;
 
 /** 地图选块模式：等待用户点击地图选择目标地块 */
 let tileSelectionResolver: ((index: number) => void) | null = null;
@@ -277,6 +283,26 @@ export async function renderGamePage(roomId: string): Promise<void> {
     renderActions(container, state);
     renderStockMarket(container, state);
     renderLogs(container, state);
+
+    // 自动进入小游戏（仅当前玩家且尚未进入时触发）
+    const currentPlayer = state.players[state.currentPlayerIndex];
+    const currentUser = getCurrentUser();
+    if (
+      state.status === 'minigame' &&
+      state.pendingMiniGame &&
+      !isMiniGameActive &&
+      currentPlayer?.id === currentUser?.id
+    ) {
+      activeMiniGameType = state.pendingMiniGame;
+      isMiniGameActive = true;
+      launchMiniGame(state.pendingMiniGame, {
+        onEnd: (result) => {
+          isMiniGameActive = false;
+          activeMiniGameType = undefined;
+          submitMiniGameResult(state.roomId, { coupons: result.coupons });
+        },
+      });
+    }
   }
 
   registerCleanup(onGameState(renderGame));
