@@ -15,15 +15,15 @@ const activeAnimations = new Map<string, MoveAnimation>();
 
 /**
  * 启动一次棋子逐格移动动画。
- * 棋子会按地图 path 顺序从 fromIndex 移动到 toIndex，
+ * 棋子会按地图 path 正向顺序从 fromIndex 移动到 toIndex，
  * 每到达一格停顿 pausePerStep 毫秒，再移动到下一格，移动过程耗时 durationPerStep 毫秒。
  */
 export function startMoveAnimation(
   playerId: string,
   fromIndex: number,
   toIndex: number,
-  durationPerStep = 180,
-  pausePerStep = 120
+  durationPerStep = 240,
+  pausePerStep = 160
 ): void {
   activeAnimations.set(playerId, {
     playerId,
@@ -74,10 +74,8 @@ export function getAnimatedPlayerPosition(
     return null;
   }
 
-  let forward = (toPathIdx - fromPathIdx + total) % total;
-  let backward = (fromPathIdx - toPathIdx + total) % total;
-  const direction = forward <= backward ? 1 : -1;
-  const steps = direction === 1 ? forward : backward;
+  // 始终按 path 正向移动，避免反向绕路造成的“闪回”感
+  const steps = (toPathIdx - fromPathIdx + total) % total;
   if (steps === 0) {
     activeAnimations.delete(player.id);
     return null;
@@ -98,14 +96,14 @@ export function getAnimatedPlayerPosition(
 
   // 停顿阶段：棋子停留在当前格子中心
   if (stepFraction * stepCycle >= durationPerStep) {
-    const currentIdx = Math.floor(((fromPathIdx + currentStep * direction + total) % total + total) % total);
+    const currentIdx = Math.floor((fromPathIdx + currentStep + total) % total);
     return { center: getTileCenter(layout, path[currentIdx]), isAnimating: true };
   }
 
   // 移动阶段：向下一格插值
   const moveFraction = (stepFraction * stepCycle) / durationPerStep;
-  const aIdx = Math.floor(((fromPathIdx + currentStep * direction + total) % total + total) % total);
-  const bIdx = Math.floor(((fromPathIdx + (currentStep + 1) * direction + total) % total + total) % total);
+  const aIdx = Math.floor((fromPathIdx + currentStep + total) % total);
+  const bIdx = Math.floor((fromPathIdx + currentStep + 1 + total) % total);
   const a = getTileCenter(layout, path[aIdx]);
   const b = getTileCenter(layout, path[bIdx]);
   return {

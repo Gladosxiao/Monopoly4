@@ -422,6 +422,9 @@ export async function renderGamePage(roomId: string): Promise<void> {
         return;
       }
       renderBoardWithSelection(state);
+      // 动画过程中把 previousState 同步为当前状态，避免后续新状态到达时
+      // 又从最初起点重新触发一次动画（导致闪回/生硬）
+      previousState = cloneForAnimation(state);
       animationFrameId = requestAnimationFrame(frame);
     };
     animationFrameId = requestAnimationFrame(frame);
@@ -825,16 +828,32 @@ export function renderStockMarket(container: HTMLElement, state: GameState): voi
   `;
   const tbody = table.querySelector('tbody')!;
 
+  // 持仓股票置顶，折叠时优先显示持仓并至少保留 2 条
+  const holdingIds = new Set(
+    state.stocks
+      .filter((stock) => (currentPlayer?.stockHoldings[stock.id] ?? 0) > 0)
+      .map((stock) => stock.id)
+  );
+  const sortedStocks = [...state.stocks].sort((a, b) => {
+    const ha = holdingIds.has(a.id) ? 1 : 0;
+    const hb = holdingIds.has(b.id) ? 1 : 0;
+    return hb - ha;
+  });
   const filteredStocks = isStockCollapsed
-    ? state.stocks.filter((stock) => (currentPlayer?.stockHoldings[stock.id] ?? 0) > 0)
-    : state.stocks;
+    ? (() => {
+        const owned = sortedStocks.filter((s) => holdingIds.has(s.id));
+        if (owned.length >= 2) return owned;
+        const others = sortedStocks.filter((s) => !holdingIds.has(s.id));
+        return [...owned, ...others].slice(0, Math.max(2, owned.length));
+      })()
+    : sortedStocks;
 
   if (filteredStocks.length === 0) {
     const empty = document.createElement('div');
     empty.className = 'stock-empty';
-    empty.textContent = isStockCollapsed ? '当前未持有任何股票' : '暂无股票数据';
+    empty.textContent = '暂无股票数据';
     el.appendChild(empty);
-    if (!isStockCollapsed && state.stocks.length === 0) {
+    if (state.stocks.length === 0) {
       console.warn('[renderStockMarket] state.stocks 为空，请检查后端 createGame 是否初始化股票');
     }
     return;
