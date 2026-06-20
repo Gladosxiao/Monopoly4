@@ -1,6 +1,8 @@
 import { defineConfig } from 'vite';
 
 export default defineConfig({
+  // 生产部署在子路径时（如 GitHub Pages 项目站点）设置 VITE_BASE_URL=/repo-name/
+  base: process.env.VITE_BASE_URL || '/',
   server: {
     port: 5173,
     proxy: {

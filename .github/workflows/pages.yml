@@ -1,0 +1,64 @@
+name: Deploy Frontend to GitHub Pages
+
+# 将前端构建产物部署到 GitHub Pages。
+# 注意：GitHub Pages 仅提供静态托管，后端仍需部署到支持 Node.js 的服务器。
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: 构建前端
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build shared / map-generator / frontend
+        env:
+          # GitHub Pages 项目站点的子路径，默认按仓库名 Monopoly4
+          VITE_BASE_URL: ${{ vars.PAGES_BASE_URL || '/Monopoly4/' }}
+          # 后端 API 与 Socket 地址，需在仓库 Variables 中配置 BACKEND_URL
+          VITE_API_BASE_URL: ${{ vars.BACKEND_URL }}/api
+          VITE_SOCKET_URL: ${{ vars.BACKEND_URL }}
+        run: |
+          npm run build -w packages/shared
+          npm run build -w packages/map-generator
+          npm run build -w packages/frontend
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: packages/frontend/dist
+
+  deploy:
+    name: 部署到 GitHub Pages
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

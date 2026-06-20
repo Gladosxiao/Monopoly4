@@ -1,6 +1,6 @@
 import type { AuthResponse, CreateRoomRequest, JoinRoomRequest, PublicUser, Room } from '@monopoly4/shared';
 
-const API_BASE = '/api';
+const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api';
 
 let isRefreshing = false;
 let refreshPromise: Promise<string | null> | null = null;

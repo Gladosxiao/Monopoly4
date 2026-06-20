@@ -2,16 +2,28 @@
 
 ## 部署目标
 
-最终部署到 **Kimi 的网站**。当前采用 **单服务 Docker 部署** 方案：后端 Express 同时托管前端构建产物，通过一台 Linux 服务器运行容器，暴露 3000 端口（可配合 Nginx 反向代理到 80/443）。
+最终部署到 **Kimi 的网站**。当前提供两套方案：
 
-> 若 Kimi 侧提供的是无状态 Serverless 或纯静态托管，请改用「前后端分离」模式，并额外配置外部数据库（如 PostgreSQL / MongoDB）替代 SQLite。
+1. **单服务 Docker 部署（推荐）**：后端 Express 同时托管前端构建产物，部署到一台 Linux 服务器。
+2. **前后端分离**：前端部署到 **GitHub Pages**，后端部署到任意支持 Node.js 的服务器（如 VPS / Render / Railway / Fly.io）。
+
+> GitHub Pages 仅支持静态托管，不能运行 Node.js / WebSocket / SQLite，因此必须配合独立后端。
+
+---
+
+## 方案对比
+
+| 方案 | 前端托管 | 后端托管 | 数据库 | 适用场景 |
+|---|---|---|---|---|
+| 单服务 Docker | 后端 Express 静态托管 | 同一容器 | SQLite（文件持久化） | 自有服务器，简单统一部署 |
+| 前后端分离 | GitHub Pages | 独立 Node.js 服务 | SQLite 或外部数据库 | 想利用 GitHub Pages 免费 CDN |
 
 ---
 
 ## 部署前置条件
 
-1. 一台可 SSH 登录的 Linux 服务器（Ubuntu / Debian / CentOS 等）。
-2. 服务器已安装 Docker Engine 与 Docker Compose v2。
+1. 一台可 SSH 登录的 Linux 服务器（Ubuntu / Debian / CentOS 等），或支持 Node.js 的云平台。
+2. 服务器已安装 Docker Engine 与 Docker Compose v2（单服务方案）。
 3. 一个指向该服务器的域名（可选，没有则直接使用 IP + 3000 端口）。
 4. GitHub 仓库已启用 Actions，并配置好部署密钥（见下文）。
 
@@ -81,7 +93,36 @@ cp .env.example .env
 
 ---
 
-## 方式二：手动脚本部署
+## 方式二：前端部署到 GitHub Pages + 后端独立部署
+
+如果你希望前端使用 GitHub Pages 免费静态托管：
+
+1. 先在仓库 **Settings → Pages** 中将 Source 改为 **GitHub Actions**。
+2. 在仓库 **Settings → Secrets and variables → Actions → Variables** 中添加：
+   - `BACKEND_URL`：后端地址，例如 `https://monopoly4-api.kimi.example.com`（末尾不要 `/`）
+   - `PAGES_BASE_URL`（可选）：项目站点子路径，默认 `/Monopoly4/`
+3. 在仓库 **Settings → Secrets and variables → Actions → Secrets** 中添加后端部署所需的 Secrets（同方式一）。
+4. 推送代码到 `main`，会自动触发两个工作流：
+   - `.github/workflows/pages.yml`：构建并部署前端到 GitHub Pages。
+   - `.github/workflows/deploy.yml`：构建并部署后端到服务器。
+
+> 后端 `ALLOWED_ORIGINS` 必须包含 GitHub Pages 域名，例如 `https://gladosxiao.github.io`。
+
+### 前后端分离时的环境变量
+
+前端构建时会读取以下变量：
+
+| 变量 | 来源 | 说明 |
+|---|---|---|
+| `VITE_BASE_URL` | GitHub Actions Variables `PAGES_BASE_URL` | Pages 项目站点的子路径 |
+| `VITE_API_BASE_URL` | `BACKEND_URL/api` | 后端 REST API 地址 |
+| `VITE_SOCKET_URL` | `BACKEND_URL` | Socket.IO 连接地址 |
+
+本地开发时这些变量未设置，前端会回退到同域 `/api` 与当前页面 Socket 连接。
+
+---
+
+## 方式三：手动脚本部署
 
 如果不想用 GitHub Actions，可使用本地脚本：
 
@@ -98,7 +139,7 @@ cp .env.example .env
 
 ---
 
-## 方式三：Docker Compose 本地/测试服务器部署
+## 方式四：Docker Compose 本地/测试服务器部署
 
 如果直接在服务器上操作：
 

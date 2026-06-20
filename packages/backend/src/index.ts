@@ -25,7 +25,14 @@ syncUsersFromConfig();
 const app = express();
 const httpServer = createServer(app);
 
-app.use(cors());
+// CORS：生产环境按 ALLOWED_ORIGINS 限制，开发/测试环境允许所有来源
+const allowedOrigins = process.env.ALLOWED_ORIGINS?.split(',').map((s) => s.trim()) ?? '*';
+app.use(
+  cors({
+    origin: allowedOrigins,
+    credentials: true,
+  })
+);
 app.use(express.json());
 app.use(cookieParser());
 

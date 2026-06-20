@@ -1,6 +1,9 @@
 import { io, Socket } from 'socket.io-client';
 import type { ClientToServerEvents, ServerToClientEvents, Room, GameState, GameLog, BuildingType, CardUseTarget, ItemUseTarget } from '@monopoly4/shared';
 
+const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api';
+const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || undefined;
+
 type GameSocket = Socket<ServerToClientEvents, ClientToServerEvents>;
 
 let socket: GameSocket | null = null;
@@ -8,7 +11,7 @@ let socket: GameSocket | null = null;
 export function getSocket(): GameSocket {
   if (!socket) {
     const token = localStorage.getItem('accessToken') || '';
-    socket = io({
+    socket = io(SOCKET_URL, {
       auth: { token },
       transports: ['websocket', 'polling'],
     });
@@ -30,7 +33,7 @@ export function getSocket(): GameSocket {
         refreshAttempted = true;
         const refreshToken = localStorage.getItem('refreshToken');
         if (refreshToken) {
-          fetch('/api/auth/refresh', {
+          fetch(`${API_BASE}/auth/refresh`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ refreshToken }),
