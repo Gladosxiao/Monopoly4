@@ -136,11 +136,13 @@ function createSectionTitle(text: string): HTMLDivElement {
  *
  * @param emitFn 发送 Socket 事件的函数（(event: string, ...args: any[]) => void）
  * @param getCurrentState 获取当前游戏状态快照的函数
+ * @param docked 是否作为页面布局的一部分嵌入（默认 false，即悬浮覆盖）
  * @returns 测试面板 DOM 元素
  */
 export function createTestPanel(
   emitFn: (event: string, ...args: unknown[]) => void,
-  getCurrentState: () => GameState | null
+  getCurrentState: () => GameState | null,
+  docked = false
 ): HTMLDivElement {
   // 先销毁已有面板
   destroyTestPanel();
@@ -148,16 +150,27 @@ export function createTestPanel(
   // --- 面板根容器 ---
   const panel = document.createElement('div');
   panel.id = 'test-mode-panel';
-  panel.style.cssText = `
-    position: fixed; top: 0; right: 0; height: 100vh;
-    width: ${PANEL_WIDTH}px; z-index: 10000;
-    background: ${PANEL_BG}; color: ${TEXT_COLOR};
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', sans-serif;
-    font-size: 13px;
-    display: flex; flex-direction: column;
-    box-shadow: -4px 0 16px rgba(0, 0, 0, 0.5);
-    transition: transform 0.3s ease;
-  `;
+  panel.style.cssText = docked
+    ? `
+      position: relative;
+      width: ${PANEL_WIDTH}px;
+      min-height: 100%;
+      background: ${PANEL_BG}; color: ${TEXT_COLOR};
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', sans-serif;
+      font-size: 13px;
+      display: flex; flex-direction: column;
+      flex-shrink: 0;
+    `
+    : `
+      position: fixed; top: 0; right: 0; height: 100vh;
+      width: ${PANEL_WIDTH}px; z-index: 10000;
+      background: ${PANEL_BG}; color: ${TEXT_COLOR};
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', sans-serif;
+      font-size: 13px;
+      display: flex; flex-direction: column;
+      box-shadow: -4px 0 16px rgba(0, 0, 0, 0.5);
+      transition: transform 0.3s ease;
+    `;
   activePanel = panel;
 
   // --- 标题栏（可折叠） ---
@@ -182,7 +195,10 @@ export function createTestPanel(
     collapsed = !collapsed;
     content.style.display = collapsed ? 'none' : '';
     collapseBtn.textContent = collapsed ? '▶' : '◀';
-    panel.style.width = collapsed ? '40px' : `${PANEL_WIDTH}px`;
+    // 悬浮模式下折叠时收缩为 40px；嵌入布局时保持宽度不变
+    if (!docked) {
+      panel.style.width = collapsed ? '40px' : `${PANEL_WIDTH}px`;
+    }
   });
 
   panel.appendChild(header);

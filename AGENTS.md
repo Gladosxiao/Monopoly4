@@ -98,6 +98,40 @@ docker compose up -d --build
 
 **每次修改后务必运行测试**确保不破坏现有功能。
 
+## 环境、端口与部署说明
+
+### 端口分工
+
+| 端口 | 服务 | 说明 |
+|------|------|------|
+| `3000` | **后端服务** | Node.js + Express + Socket.IO，提供 `/api/*` REST API 与 WebSocket 实时通信。生产环境由该服务直接托管前端构建产物（`packages/frontend/dist`）。 |
+| `5173` | **前端开发服务器** | Vite 自带的 dev server，仅在开发时使用。它通过 `vite.config.ts` 中的 `proxy` 把 `/api` 和 `/socket.io` 请求转发到 `localhost:3000`，因此开发时浏览器只访问 `5173` 即可。 |
+
+**开发时访问**：打开 `http://localhost:5173`，所有 API 与 Socket 请求会自动代理到 `3000`。
+
+**生产时访问**：通常只暴露 `3000` 端口，后端同时提供 API 与静态页面。
+
+### 开发 / 测试 / 生产环境区别
+
+后端通过 `NODE_ENV` 与 `ENABLE_TEST_MODE` 区分行为：
+
+| 环境 | 典型启动方式 | `NODE_ENV` | 测试模式默认值 | 默认用户 | 注册开关 |
+|------|-------------|------------|----------------|----------|----------|
+| **开发** | `npm run dev` | `development` 或未设置 | **开启** | 若未配置 `users.config.json`，自动提供 `test / test123` | 开启 |
+| **测试** | `npm run test -w packages/backend` | `test` | **关闭** | 无 | 关闭 |
+| **生产** | `npm run build && npm run start` | `production` | **关闭** | 必须通过 `users.config.json` 配置 | 由配置文件决定 |
+
+- 测试模式：控制房间页的“添加 AI 机器人”按钮与游戏内“测试模式”侧拉面板是否可用。生产环境务必保持关闭。
+- 默认测试账号：仅在开发环境且无配置文件时自动注入，方便本地快速验证。
+- 配置文件：`packages/backend/users.config.example.json` 提供模板，复制为 `packages/backend/users.config.json` 后按需修改；该文件已被 `.gitignore` 忽略，不会提交。
+
+### 部署到 Kimi 网站
+
+1. 准备 `.env`：复制 `.env.example`，设置强密码 `JWT_SECRET`、生产域名 `ALLOWED_ORIGINS` 等。
+2. 构建：`npm run build`
+3. 启动后端：`npm run start`（监听 `PORT`，默认 3000）
+4. 可选 Docker：`docker compose up -d --build`
+
 ## 测试策略
 
 - **测试运行器**：Vitest

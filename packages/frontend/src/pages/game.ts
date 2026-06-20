@@ -163,43 +163,48 @@ export async function renderGamePage(roomId: string): Promise<void> {
       <h1>游戏中 - 房间 ${roomId}</h1>
       <button id="btn-exit">退出</button>
     </header>
-    <div class="stock-top-panel">
-      <div class="stock-top-header">
-        <h2>股市与公司</h2>
-        <button id="btn-toggle-stock" class="btn-icon" title="展开/折叠">−</button>
-      </div>
-      <div id="stock-market"></div>
-    </div>
-    <div class="game-layout">
-      <div class="board-wrap"></div>
-      <div class="side-panel">
-        <div class="info-card player-info-card">
-          <h2>玩家信息</h2>
-          <div id="players-info"></div>
+    <div class="game-body">
+      <div class="game-content">
+        <div class="stock-top-panel">
+          <div class="stock-top-header">
+            <h2>股市与公司</h2>
+            <button id="btn-toggle-stock" class="btn-icon" title="展开/折叠">−</button>
+          </div>
+          <div id="stock-market"></div>
         </div>
-        <div class="info-card actions-card">
-          <h2>操作</h2>
-          <div id="game-actions"></div>
+        <div class="game-layout">
+          <div class="board-wrap"></div>
+          <div class="side-panel">
+            <div class="info-card player-info-card">
+              <h2>玩家信息</h2>
+              <div id="players-info"></div>
+            </div>
+            <div class="info-card actions-card">
+              <h2>操作</h2>
+              <div id="game-actions"></div>
+            </div>
+          </div>
+        </div>
+        <div class="backpack-wide-panel">
+          <div class="backpack-wide-header">
+            <h2>卡片 / 道具</h2>
+            <button id="btn-toggle-backpack" class="btn-icon" title="展开/折叠">−</button>
+          </div>
+          <div id="backpack-wide-content">
+            <div class="backpack-tabs">
+              <button class="backpack-tab active" data-tab="cards">卡片</button>
+              <button class="backpack-tab" data-tab="items">道具</button>
+            </div>
+            <div id="backpack-cards" class="backpack-panel active"></div>
+            <div id="backpack-items" class="backpack-panel"></div>
+          </div>
+        </div>
+        <div class="game-logs-panel">
+          <h2>日志</h2>
+          <div id="game-logs"></div>
         </div>
       </div>
-    </div>
-    <div class="backpack-wide-panel">
-      <div class="backpack-wide-header">
-        <h2>卡片 / 道具</h2>
-        <button id="btn-toggle-backpack" class="btn-icon" title="展开/折叠">−</button>
-      </div>
-      <div id="backpack-wide-content">
-        <div class="backpack-tabs">
-          <button class="backpack-tab active" data-tab="cards">卡片</button>
-          <button class="backpack-tab" data-tab="items">道具</button>
-        </div>
-        <div id="backpack-cards" class="backpack-panel active"></div>
-        <div id="backpack-items" class="backpack-panel"></div>
-      </div>
-    </div>
-    <div class="game-logs-panel">
-      <h2>日志</h2>
-      <div id="game-logs"></div>
+      <div class="test-mode-dock" id="test-mode-dock"></div>
     </div>
   `;
   app.appendChild(container);
@@ -281,10 +286,11 @@ export async function renderGamePage(roomId: string): Promise<void> {
     })
   );
 
-  // 测试模式：在游戏界面添加测试面板
+  // 测试模式：在游戏界面右侧嵌入测试面板，不覆盖现有 UI
   if (isTestMode()) {
-    const testPanel = createTestPanel(() => getCurrentGame());
-    document.body.appendChild(testPanel);
+    const dock = container.querySelector<HTMLDivElement>('#test-mode-dock')!;
+    const testPanel = createTestPanel(() => getCurrentGame(), true);
+    dock.appendChild(testPanel);
   }
 }
 

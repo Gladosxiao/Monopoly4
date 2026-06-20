@@ -51,10 +51,12 @@ export function enableTestMode(): void {
  * 内部自动获取 Socket 连接，并监听 test:update 事件刷新面板。
  *
  * @param getCurrentState 获取当前游戏状态的回调
+ * @param docked 是否作为页面布局的一部分嵌入（默认 false，即悬浮覆盖）
  * @returns 测试面板 DOM 元素
  */
 export function createTestPanel(
-  getCurrentState: () => GameState | null
+  getCurrentState: () => GameState | null,
+  docked = false
 ): HTMLDivElement {
   // 销毁旧面板（如果存在）
   destroyPanelImpl();
@@ -70,7 +72,8 @@ export function createTestPanel(
         ...args
       );
     },
-    getCurrentState
+    getCurrentState,
+    docked
   );
 
   // 监听服务端推送的测试状态更新，刷新面板数据
