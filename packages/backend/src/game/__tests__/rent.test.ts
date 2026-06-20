@@ -52,15 +52,15 @@ describe('calculateRent', () => {
     expect(calculateRent(state.map.tiles[2], state.players[0], state, state.players[1]).rent).toBe(6);
   });
 
-  it('连锁店：按全图连锁店数量联合收费', () => {
+  it('连锁店：按全图连锁店数量联合收费，并随等级提升', () => {
     const state = makeTestState();
     setOwner(state, 1, 'p1', 'chainStore', 1);
     setOwner(state, 3, 'p1', 'chainStore', 1);
     setOwner(state, 5, 'p1', 'chainStore', 1);
     const owner = state.players[0];
     const visitor = state.players[1];
-    // 蘑菇村 baseRent=3，owner 拥有 3 家连锁店
-    expect(calculateRent(state.map.tiles[1], owner, state, visitor).rent).toBe(9);
+    // 蘑菇村 baseRent=3，3 家连锁店，等级 1 加成 1.2 => 3*3*1.2 = 10.8 -> 10
+    expect(calculateRent(state.map.tiles[1], owner, state, visitor).rent).toBe(10);
   });
 
   it('商场：baseRent * level * 转盘倍数', () => {

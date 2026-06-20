@@ -11,11 +11,11 @@ export interface MoveAnimation {
   pausePerStep: number;
 }
 
-let activeAnimation: MoveAnimation | null = null;
+const activeAnimations = new Map<string, MoveAnimation>();
 
 /**
  * 启动一次棋子逐格移动动画。
- * 棋子会按 layout.path 顺序从 fromIndex 移动到 toIndex，
+ * 棋子会按地图 path 顺序从 fromIndex 移动到 toIndex，
  * 每到达一格停顿 pausePerStep 毫秒，再移动到下一格，移动过程耗时 durationPerStep 毫秒。
  */
 export function startMoveAnimation(
@@ -25,23 +25,26 @@ export function startMoveAnimation(
   durationPerStep = 180,
   pausePerStep = 120
 ): void {
-  stopMoveAnimation();
-  activeAnimation = {
+  activeAnimations.set(playerId, {
     playerId,
     fromIndex,
     toIndex,
-    startTime: performance.now(),
+    startTime: Date.now(),
     durationPerStep,
     pausePerStep,
-  };
+  });
 }
 
-export function stopMoveAnimation(): void {
-  activeAnimation = null;
+export function stopMoveAnimation(playerId?: string): void {
+  if (playerId) {
+    activeAnimations.delete(playerId);
+  } else {
+    activeAnimations.clear();
+  }
 }
 
 export function isAnimating(): boolean {
-  return activeAnimation !== null;
+  return activeAnimations.size > 0;
 }
 
 /**
@@ -53,20 +56,21 @@ export function getAnimatedPlayerPosition(
   player: Player,
   now: number
 ): { center: Point; isAnimating: boolean } | null {
-  if (!activeAnimation || activeAnimation.playerId !== player.id) return null;
+  const animation = activeAnimations.get(player.id);
+  if (!animation) return null;
 
-  const { fromIndex, toIndex, startTime, durationPerStep, pausePerStep } = activeAnimation;
-  const path = layout.path;
+  const { fromIndex, toIndex, startTime, durationPerStep, pausePerStep } = animation;
+  const path = layout.map.path;
   const total = path.length;
   if (total === 0) {
-    activeAnimation = null;
+    activeAnimations.delete(player.id);
     return null;
   }
 
   const fromPathIdx = path.indexOf(((fromIndex % total) + total) % total);
   const toPathIdx = path.indexOf(((toIndex % total) + total) % total);
   if (fromPathIdx < 0 || toPathIdx < 0) {
-    activeAnimation = null;
+    activeAnimations.delete(player.id);
     return null;
   }
 
@@ -75,7 +79,7 @@ export function getAnimatedPlayerPosition(
   const direction = forward <= backward ? 1 : -1;
   const steps = direction === 1 ? forward : backward;
   if (steps === 0) {
-    activeAnimation = null;
+    activeAnimations.delete(player.id);
     return null;
   }
 
@@ -84,7 +88,7 @@ export function getAnimatedPlayerPosition(
   const rawProgress = elapsed / (steps * stepCycle);
 
   if (rawProgress >= 1) {
-    activeAnimation = null;
+    activeAnimations.delete(player.id);
     return null;
   }
 

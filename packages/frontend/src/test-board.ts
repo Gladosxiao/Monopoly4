@@ -1,7 +1,9 @@
-import { renderBoard } from './board.js';
+import { renderBoard, preloadTokenImages } from './board.js';
 import { generateMap, PLAYER4_TEMPLATE } from '@monopoly4/map-generator';
 import { DEFAULT_STOCKS, DEFAULT_COMPANIES } from '@monopoly4/shared';
 import type { GameState, Player, Tile } from '@monopoly4/shared';
+
+preloadTokenImages(['atu', 'sun']);
 
 const map = generateMap(PLAYER4_TEMPLATE);
 

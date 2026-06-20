@@ -160,12 +160,12 @@ describe('buyProperty', () => {
     expect(state.players[0].properties).toContain(1);
   });
 
-  it('购买大块土地后默认为住宅', () => {
+  it('购买大块土地后默认为商场（特殊建筑）', () => {
     const state = makeTestState();
     state.pendingTileIndex = 21;
     const result = buyProperty(state);
     expect(result.success).toBe(true);
-    expect(state.map.tiles[21].buildingType).toBe('house');
+    expect(state.map.tiles[21].buildingType).toBe('mall');
   });
 
   it('现金不足无法购买', () => {
@@ -284,14 +284,15 @@ describe('calculateRent', () => {
     expect(calculateRent(state.map.tiles[1], owner, state, visitor).rent).toBe(4);
   });
 
-  it('连锁店：按全图连锁店数量联合收费', () => {
+  it('连锁店：按全图连锁店数量联合收费，并随等级提升', () => {
     const state = makeTestState();
     setOwner(state, 1, 'p1', 'chainStore', 1);
     setOwner(state, 3, 'p1', 'chainStore', 1);
     setOwner(state, 5, 'p1', 'chainStore', 1);
     const owner = state.players[0];
     const visitor = state.players[1];
-    expect(calculateRent(state.map.tiles[1], owner, state, visitor).rent).toBe(9);
+    // 蘑菇村 baseRent=3，3 家连锁店，等级 1 加成 1.2 => 3*3*1.2 = 10.8 -> 10
+    expect(calculateRent(state.map.tiles[1], owner, state, visitor).rent).toBe(10);
   });
 
   it('商场：baseRent * level * 转盘倍数', () => {

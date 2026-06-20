@@ -264,6 +264,147 @@ export function preloadTokenImages(characterIds: string[]): void {
   characterIds.forEach((id) => loadTokenImage(id));
 }
 
+/** 读取点券格数值 */
+function getCouponValue(tile: Tile): number {
+  if (tile.type === 'coupon10') return 10;
+  if (tile.type === 'coupon30') return 30;
+  if (tile.type === 'coupon50') return 50;
+  return tile.couponValue ?? 30;
+}
+
+/** 计算某玩家拥有的连锁店数量 */
+function getOwnerChainCount(state: GameState, owner: import('@monopoly4/shared').Player): number {
+  return state.map.tiles.filter((t) => t.ownerId === owner.id && t.buildingType === 'chainStore').length;
+}
+
+/** 前端估算当前地块显示的过路费（不含访客神明效果，含物价指数、路段效果、等级加成） */
+function computeDisplayRent(
+  tile: Tile,
+  state: GameState
+): { value: number; approximate: boolean } {
+  if (tile.type !== 'property' || !tile.ownerId) return { value: 0, approximate: false };
+  const owner = state.players.find((p) => p.id === tile.ownerId);
+  if (!owner) return { value: 0, approximate: false };
+
+  const bt = tile.buildingType ?? 'house';
+  let base = 0;
+  let approximate = false;
+
+  switch (bt) {
+    case 'house': {
+      let groupBonus = 0;
+      if (tile.size === 'small' && tile.group !== undefined) {
+        const groupTiles = state.map.tiles.filter(
+          (t) => t.group === tile.group && t.ownerId === owner.id
+        );
+        if (groupTiles.length >= 2) groupBonus = 0.2;
+        if (groupTiles.length >= 3) groupBonus = 0.5;
+      }
+      base = tile.baseRent * (1 + tile.level * 0.5) * (1 + groupBonus);
+      break;
+    }
+    case 'chainStore': {
+      const chainCount = getOwnerChainCount(state, owner);
+      base = tile.baseRent * chainCount * (1 + tile.level * 0.2);
+      break;
+    }
+    case 'mall': {
+      // 转盘期望约 4.5，仅用于显示
+      base = tile.baseRent * tile.level * 4.5;
+      approximate = true;
+      break;
+    }
+    case 'hotel': {
+      // 住宿天数期望约 3.5，仅用于显示
+      base = tile.baseRent * tile.level * 3.5;
+      approximate = true;
+      break;
+    }
+    case 'gasStation': {
+      // 按本回合步数估算，未移动时按 3 步计
+      const steps = state.lastRoll ?? 3;
+      const rate = 125; // 步行 50 / 载具 200 的平均估算
+      base = steps * rate * (1 + tile.level * 0.3);
+      approximate = true;
+      break;
+    }
+    case 'park':
+    case 'lab':
+      base = 0;
+      break;
+  }
+
+  let rent = base * state.priceIndex;
+  if (tile.group !== undefined) {
+    const priceRise = state.roadEffects.find(
+      (e) => e.group === tile.group && e.type === 'priceRise' && e.remainingDays > 0
+    );
+    if (priceRise) rent *= priceRise.multiplier;
+  }
+  return { value: Math.floor(rent), approximate };
+}
+
+/** 在地块上绘制所有者 token 小图标（与棋子使用同一套图片资源） */
+function drawOwnerToken(
+  ctx: CanvasRenderingContext2D,
+  cx: number,
+  cy: number,
+  size: number,
+  owner: import('@monopoly4/shared').Player
+): void {
+  const r = size / 2;
+  const draw = (img?: ImageBitmap | null) => {
+    ctx.save();
+    ctx.shadowColor = 'rgba(0,0,0,0.4)';
+    ctx.shadowBlur = 3;
+    ctx.beginPath();
+    ctx.arc(cx, cy, r + 1, 0, Math.PI * 2);
+    ctx.fillStyle = '#ffffff';
+    ctx.fill();
+    ctx.restore();
+
+    if (img) {
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(cx, cy, r, 0, Math.PI * 2);
+      ctx.clip();
+      const s = r * 2 + 2;
+      ctx.drawImage(img, cx - s / 2, cy - s / 2, s, s);
+      ctx.restore();
+    } else {
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(cx, cy, r, 0, Math.PI * 2);
+      ctx.fillStyle = owner.color;
+      ctx.fill();
+      ctx.font = `bold ${r}px sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillStyle = '#ffffff';
+      ctx.fillText(owner.username[0] ?? '?', cx, cy);
+      ctx.restore();
+    }
+
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(cx, cy, r + 1, 0, Math.PI * 2);
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+    ctx.restore();
+  };
+
+  const cached = tokenImageCache.get(owner.characterId);
+  if (cached) {
+    draw(cached);
+  } else {
+    draw(null);
+    loadTokenImage(owner.characterId).then((img) => {
+      if (img) window.dispatchEvent(new CustomEvent('monopoly:tokenLoaded'));
+    });
+  }
+}
+
 /** 绘制地块路径连接线，展示先后顺序 */
 function drawPathLines(ctx: CanvasRenderingContext2D, layout: BoardLayout): void {
   const centers = getPathCenters(layout);
@@ -382,8 +523,8 @@ function getShapeMetrics(shape: TileShape, rect: Rect): ShapeMetrics {
   const minDim = Math.min(w, h);
   const radius = Math.max(3, minDim * 0.1);
   const headerH = Math.max(14, h * 0.28);
-  // 圆形格缩小为 tile 短边的 38%，名称居中显示
-  const r = shape === 'circle' ? minDim * 0.38 : minDim / 2;
+  // 圆形格进一步缩小为 tile 短边的 30%，名称居中显示
+  const r = shape === 'circle' ? minDim * 0.3 : minDim / 2;
   return { x, y, w, h, radius, headerH, cx: x + w / 2, cy: y + h / 2, r };
 }
 
@@ -766,18 +907,39 @@ export function renderBoard(
 
     const minDim = Math.min(m.w, m.h);
 
-    // 卡片/点券类小格：不绘制标题行，只居中显示大图标
+    // 卡片/点券类小格：不绘制标题行，只居中显示大图标与点券数值
     if (shape === 'small') {
       const iconSize = Math.min(m.w, m.h) * 0.55;
       drawTileIcon(ctx, drawCenter.x, drawCenter.y, iconSize, tile.type);
+      const couponValue = getCouponValue(tile);
+      if (couponValue > 0) {
+        ctx.save();
+        const valueFontSize = Math.max(7, minDim * 0.18);
+        ctx.font = `bold ${valueFontSize}px sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        setTextShadow(ctx, 'rgba(0,0,0,0.85)');
+        ctx.fillStyle = '#f1c40f';
+        ctx.fillText(`+${couponValue}`, drawCenter.x, drawCenter.y + iconSize * 0.55);
+        clearTextShadow(ctx);
+        ctx.restore();
+      }
       return;
     }
 
     // 圆形功能格：不绘制标题栏，名称直接居中显示在圆内
     if (shape === 'circle') {
       ctx.save();
-      const nameFontSize = Math.max(8, minDim * 0.22);
-      ctx.font = `bold ${nameFontSize}px sans-serif`;
+      // 根据名称长度自动缩放字体，确保不超出小圆
+      const maxFontSize = Math.max(8, minDim * 0.22);
+      const maxWidth = m.r * 1.6;
+      ctx.font = `bold ${maxFontSize}px sans-serif`;
+      let nameFontSize = maxFontSize;
+      const nameWidth = ctx.measureText(tile.name).width;
+      if (nameWidth > maxWidth && nameWidth > 0) {
+        nameFontSize = Math.max(7, Math.floor(maxFontSize * (maxWidth / nameWidth)));
+        ctx.font = `bold ${nameFontSize}px sans-serif`;
+      }
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       setTextShadow(ctx, 'rgba(0,0,0,0.8)');
@@ -820,57 +982,55 @@ export function renderBoard(
     clearTextShadow(ctx);
     ctx.restore();
 
-    // 所有者标识：标题栏下方的色条 + 首字标签
+    // 所有者标识：标题栏下方显示与棋子一致的角色 token
     let ownerExtraH = 0;
     if (tile.ownerId) {
       const owner = state.players.find((p) => p.id === tile.ownerId);
       if (owner) {
-        ctx.save();
-        const barH = Math.max(3, m.h * 0.07);
+        const barH = Math.max(3, m.h * 0.06);
         const barY = m.y + m.headerH + 2;
+        ctx.save();
         ctx.fillStyle = owner.color;
         roundRectPath(ctx, m.x + 3, barY, m.w - 6, barH, barH / 2);
         ctx.fill();
-
-        const tagSize = Math.max(9, minDim * 0.18);
-        const tagY = barY + barH + tagSize / 2 + 2;
-        ctx.fillStyle = owner.color;
-        ctx.beginPath();
-        ctx.arc(m.x + tagSize / 2 + 3, tagY, tagSize / 2, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.strokeStyle = '#ffffff';
-        ctx.lineWidth = 1.5;
-        ctx.stroke();
-        ctx.font = `bold ${tagSize * 0.55}px sans-serif`;
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillStyle = '#ffffff';
-        ctx.shadowColor = 'rgba(0,0,0,0.6)';
-        ctx.shadowBlur = 2;
-        ctx.fillText(owner.username[0] ?? '?', m.x + tagSize / 2 + 3, tagY);
         ctx.restore();
 
-        ownerExtraH = barH + tagSize + 5;
+        const tokenSize = Math.max(12, minDim * 0.28);
+        const tokenR = tokenSize / 2;
+        const tokenX = m.x + tokenR + 4;
+        const tokenY = barY + barH + tokenR + 2;
+        drawOwnerToken(ctx, tokenX, tokenY, tokenSize, owner);
+
+        ownerExtraH = barH + tokenSize + 6;
       }
     }
 
-    // 地产内容（价格/建筑/等级）
+    // 地产内容（价格/建筑/等级/过路费）
     if (isProperty) {
       const owner = state.players.find((p) => p.id === tile.ownerId);
       const contentTop = m.y + m.headerH + ownerExtraH + 2;
       const contentY = contentTop + (m.h - (contentTop - m.y)) / 2;
       if (owner) {
+        // 等级徽章：右上角醒目显示
+        const badgeSize = Math.max(12, minDim * 0.28);
+        const badgeX = m.x + m.w - badgeSize / 2 - 4;
+        const badgeY = m.y + m.headerH + badgeSize / 2 + 3;
+        drawLevelBadge(ctx, badgeX, badgeY, badgeSize, tile.level);
+
         const iconSize = minDim * 0.28;
         const buildingType = tile.buildingType ?? 'house';
-        const contentY = contentTop + (m.h - (contentTop - m.y)) / 2 - minDim * 0.03;
-        drawBuildingWithLevel(ctx, drawCenter.x, contentY, iconSize, buildingType, tile.level);
+        const centerY = contentTop + (m.h - (contentTop - m.y)) / 2 - minDim * 0.03;
+        drawBuildingWithLevel(ctx, drawCenter.x, centerY, iconSize, buildingType, tile.level);
 
+        // 显示按等级/建筑类型估算的过路费
+        const { value: displayRent, approximate } = computeDisplayRent(tile, state);
         setTextShadow(ctx, 'rgba(0,0,0,0.8)');
         ctx.font = `bold ${Math.max(8, minDim * 0.12)}px sans-serif`;
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
         ctx.fillStyle = '#f1c40f';
-        ctx.fillText(`$${formatMoney(tile.baseRent)}`, drawCenter.x, contentY + minDim * 0.22);
+        const rentText = approximate && displayRent > 0 ? `≈$${formatMoney(displayRent)}` : `$${formatMoney(displayRent)}`;
+        ctx.fillText(rentText, drawCenter.x, centerY + minDim * 0.24);
         clearTextShadow(ctx);
       } else {
         const priceFontSize = Math.max(9, minDim * 0.15);
@@ -1056,20 +1216,10 @@ function drawBuildingWithLevel(
     for (let i = 0; i < displayLevel; i++) {
       drawBuildingIcon(ctx, startX + i * (unitW + gap), cy, unitW, buildingType, 1);
     }
-    if (displayLevel > 0) {
-      ctx.save();
-      ctx.font = `bold ${size * 0.45}px sans-serif`;
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      setTextShadow(ctx, 'rgba(0,0,0,0.9)');
-      ctx.fillStyle = '#ffffff';
-      ctx.fillText(`Lv.${displayLevel}`, cx, cy - size * 0.6);
-      clearTextShadow(ctx);
-      ctx.restore();
-    }
+    // 等级徽章统一由调用方绘制，避免与建筑图标重叠
   } else {
     drawBuildingIcon(ctx, cx, cy, size, buildingType, level);
-    drawLevelBadge(ctx, cx, cy - size * 0.65, size * 0.5, level);
+    // 等级徽章统一由调用方在地块右上角绘制
   }
 }
 
@@ -1352,7 +1502,9 @@ function drawTooltip(
   if (owner) {
     lines.push(`所有者：${owner.username}`);
     lines.push(`建筑：${tile.buildingType ? BUILDING_LABELS[tile.buildingType] : '空地'} | 等级 ${tile.level}`);
-    lines.push(`当前过路费：$${formatMoney(tile.baseRent)}`);
+    const { value: displayRent, approximate } = computeDisplayRent(tile, state);
+    const rentLabel = approximate && displayRent > 0 ? `当前过路费：≈$${formatMoney(displayRent)}` : `当前过路费：$${formatMoney(displayRent)}`;
+    lines.push(rentLabel);
   } else if (tile.type === 'property' || tile.type === 'company') {
     lines.push(`价格：$${formatMoney(tile.basePrice)}`);
     if (tile.baseRent > 0) lines.push(`当前过路费：$${formatMoney(tile.baseRent)}`);

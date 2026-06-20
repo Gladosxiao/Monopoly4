@@ -518,7 +518,8 @@ export function calculateRent(
       const chainCount = state.map.tiles.filter(
         (t) => t.ownerId === owner.id && t.buildingType === 'chainStore'
       ).length;
-      base = tile.baseRent * chainCount;
+      // 连锁店也随等级提升，每级 +20%
+      base = tile.baseRent * chainCount * (1 + tile.level * 0.2);
       break;
     }
     case 'mall': {
@@ -537,7 +538,8 @@ export function calculateRent(
       const steps = state.lastRoll ?? 1;
       const rate = visitor.vehicle === 'walk' ? 50 : 200;
       spin = steps;
-      base = steps * rate;
+      // 加油站随等级提升，每级 +30%
+      base = steps * rate * (1 + tile.level * 0.3);
       break;
     }
     case 'park':
@@ -1605,8 +1607,8 @@ export function buyProperty(state: GameState): { success: boolean; message?: str
 
   player.cash -= fortune.cost;
   tile.ownerId = player.id;
-  // 小块与大块土地默认均为住宅，大块土地后续可通过改建卡建造特殊建筑
-  tile.buildingType = 'house';
+  // 小块土地默认住宅；大块土地默认建造商场（特殊建筑），体现“升级即特殊地段”
+  tile.buildingType = tile.size === 'large' ? 'mall' : 'house';
   tile.level = 0;
   setTileLease(state, tile);
   player.properties.push(tileIndex);
@@ -1639,7 +1641,12 @@ export function upgradeProperty(state: GameState): { success: boolean; message?:
     return { success: false, message: '只能升级自己的土地' };
   }
 
-  const bt = tile.buildingType ?? 'house';
+  let bt = tile.buildingType ?? 'house';
+  // 大块土地从住宅升级时自动变为商场（特殊建筑）
+  if (tile.size === 'large' && bt === 'house') {
+    tile.buildingType = 'mall';
+    bt = 'mall';
+  }
   // 连锁店、公园、加油站不可升级
   if (bt === 'chainStore' || bt === 'park' || bt === 'gasStation') {
     state.logs.push({

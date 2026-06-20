@@ -358,19 +358,18 @@ export async function renderGamePage(roomId: string): Promise<void> {
       currentHoverPixel = undefined;
     }
 
-    // 检测当前行动玩家是否发生位置变化，启动逐格移动动画
-    const currentPlayer = state.players[state.currentPlayerIndex];
-    if (
-      oldState &&
-      currentPlayer &&
-      !currentPlayer.isBankrupt &&
-      currentPlayer.position !== oldState.players[oldState.currentPlayerIndex]?.position &&
-      oldState.players[oldState.currentPlayerIndex]?.id === currentPlayer.id
-    ) {
-      const fromIndex = oldState.players[oldState.currentPlayerIndex].position;
-      const toIndex = currentPlayer.position;
-      startMoveAnimation(currentPlayer.id, fromIndex, toIndex);
-      scheduleAnimationFrames();
+    // 检测所有未破产玩家是否发生位置变化，为每位移动玩家启动逐格动画
+    if (oldState) {
+      let anyMoved = false;
+      for (const player of state.players) {
+        if (player.isBankrupt) continue;
+        const oldPlayer = oldState.players.find((p) => p.id === player.id);
+        if (oldPlayer && player.position !== oldPlayer.position) {
+          startMoveAnimation(player.id, oldPlayer.position, player.position);
+          anyMoved = true;
+        }
+      }
+      if (anyMoved) scheduleAnimationFrames();
     }
 
     renderBoardWithSelection(state);
@@ -384,6 +383,7 @@ export async function renderGamePage(roomId: string): Promise<void> {
     previousState = cloneForAnimation(state);
 
     // 自动进入小游戏（仅当前玩家且尚未进入时触发）
+    const currentPlayer = state.players[state.currentPlayerIndex];
     const currentUser = getCurrentUser();
     if (
       state.status === 'minigame' &&
@@ -403,16 +403,22 @@ export async function renderGamePage(roomId: string): Promise<void> {
     }
   }
 
+  let animationFrameId: number | null = null;
+
   /** 驱动逐格移动动画帧，动画结束时触发一次最终渲染。 */
   function scheduleAnimationFrames(): void {
+    if (animationFrameId !== null) return;
     const frame = () => {
       const state = getCurrentGame();
       const layout = getCurrentBoardLayout();
-      if (!state || !layout || !isMoveAnimating()) return;
+      if (!state || !layout || !isMoveAnimating()) {
+        animationFrameId = null;
+        return;
+      }
       renderBoardWithSelection(state);
-      requestAnimationFrame(frame);
+      animationFrameId = requestAnimationFrame(frame);
     };
-    requestAnimationFrame(frame);
+    animationFrameId = requestAnimationFrame(frame);
   }
 
   /** 提取动画对比所需的最小状态快照。 */
