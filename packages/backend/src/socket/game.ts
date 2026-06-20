@@ -44,6 +44,8 @@ import {
   canRepayLoan,
   canPlaceLotteryBet,
   canCastMagicSpell,
+  canRescueNpc,
+  rescueNpc,
 } from '../game/engine.js';
 import { getShopCards, canBuyCard } from '../game/cardSystem/index.js';
 import { getShopItems, canBuyItem } from '../game/itemSystem/index.js';
@@ -143,12 +145,15 @@ export function setupSocketIO(httpServer: HttpServer): SocketIOServer<ClientToSe
             if (result.success && result.steps !== undefined && result.steps !== 0) {
               movePlayer(s, result.steps);
             }
-            // AI 自动买地/升级
+            // AI 自动买地/升级/解救 NPC
             const tile = s.map.tiles[ai.position];
             if (tile.type === 'property' && !tile.ownerId && ai.cash >= (tile.basePrice ?? 0) * s.priceIndex) {
               buyProperty(s);
             } else if (tile.type === 'property' && tile.ownerId === ai.id && (tile.level ?? 0) < 5) {
               upgradeProperty(s);
+            } else if ((tile.type === 'hospital' || tile.type === 'prison') && canRescueNpc(s, ai.id)) {
+              const captive = s.npcs.find((n) => !n.rescued && s.map.path[n.pathIndex] === ai.position);
+              if (captive) rescueNpc(s, ai.id, captive.id);
             }
             // 结束回合
             endTurn(s);
@@ -605,6 +610,21 @@ export function setupSocketIO(httpServer: HttpServer): SocketIOServer<ClientToSe
       endTurn(state);
       emitState(roomId, state);
       scheduleAITurn(roomId); // 检查下一个玩家是否为 AI
+    });
+
+    socket.on('game:rescueNpc', (roomId, npcId) => {
+      const state = games.get(roomId);
+      if (!state) return;
+      if (!canRescueNpc(state, user.id)) {
+        socket.emit('error', '现在不能解救 NPC');
+        return;
+      }
+      const result = rescueNpc(state, user.id, npcId);
+      if (!result.success) {
+        socket.emit('error', result.message);
+        return;
+      }
+      emitState(roomId, state);
     });
 
     // ===== 测试模式事件 =====

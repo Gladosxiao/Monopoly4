@@ -177,6 +177,10 @@ export function skipTurn(roomId: string): void {
   getSocket().emit('game:skip', roomId);
 }
 
+export function rescueNpc(roomId: string, npcId: string): void {
+  getSocket().emit('game:rescueNpc', roomId, npcId);
+}
+
 export function submitMiniGameResult(roomId: string, result: { coupons: number }): void {
   getSocket().emit('game:miniGameResult', roomId, result);
 }

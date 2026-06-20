@@ -301,7 +301,11 @@ describe('createGame', () => {
     expect(state.month).toBe(1);
     expect(state.priceIndex).toBe(1);
     expect(state.roadEffects).toEqual([]);
-    expect(state.spirits).toEqual([]);
+    expect(state.spirits.length).toBeGreaterThan(0);
+    expect(state.spirits[0]).toHaveProperty('id');
+    expect(state.spirits[0]).toHaveProperty('spiritId');
+    expect(state.spirits[0]).toHaveProperty('pathIndex');
+    expect(state.spirits[0]).toHaveProperty('remainingDays');
     expect(state.stocks.length).toBeGreaterThan(0);
     expect(state.companies.length).toBeGreaterThan(0);
     expect(state.marketStatus.loanFrozenDays).toBe(0);

@@ -5,13 +5,13 @@
 import { describe, it, expect, vi } from 'vitest';
 import type { GameState } from '@monopoly4/shared';
 import { makeTestState, giveCard, giveItem, setOwner } from './setup.js';
-import { spawnNpcs, moveNpcs, triggerNpcEffect } from '../npcSystem/index.js';
-import { endTurn } from '../engine.js';
+import { spawnNpcs, moveNpcs, triggerNpcEffect, rescueNpc } from '../npcSystem/index.js';
+import { endTurn, canRescueNpc } from '../engine.js';
 
-function placeNpc(state: GameState, type: string, tileIndex: number): string {
+function placeNpc(state: GameState, type: string, tileIndex: number, rescued = true): string {
   const pathIndex = state.map.path.indexOf(tileIndex);
   const id = `npc-${type}-${Date.now()}`;
-  state.npcs.push({ id, type: type as any, pathIndex, remainingDays: 5 });
+  state.npcs.push({ id, type: type as any, pathIndex, remainingDays: 5, rescued });
   return id;
 }
 
@@ -23,21 +23,46 @@ describe('NPC 生成与移动', () => {
     expect(state.npcs.length).toBe(3);
   });
 
-  it('NPC 不会出生在起点或医院', () => {
+  it('NPC 默认关押在医院/监狱格', () => {
     const state = makeTestState();
-    spawnNpcs(state, 10);
+    spawnNpcs(state, 3);
     for (const npc of state.npcs) {
+      expect(npc.rescued).toBe(false);
       const tile = state.map.tiles[state.map.path[npc.pathIndex]];
-      expect(tile.type).not.toBe('start');
-      expect(tile.type).not.toBe('hospital');
+      expect(['hospital', 'prison']).toContain(tile.type);
     }
   });
 
-  it('moveNpcs 会移动 NPC 并移除到期者', () => {
+  it('未解救的 NPC 不会被 moveNpcs 移动或移除', () => {
     const state = makeTestState();
-    state.npcs = [{ id: 'n1', type: 'dog', pathIndex: 5, remainingDays: 1 }];
+    state.npcs = [{ id: 'n1', type: 'dog', pathIndex: 5, remainingDays: 1, rescued: false }];
+    moveNpcs(state);
+    expect(state.npcs.length).toBe(1);
+    expect(state.npcs[0].pathIndex).toBe(5);
+  });
+
+  it('moveNpcs 会移动已解救 NPC 并移除到期者', () => {
+    const state = makeTestState();
+    state.npcs = [{ id: 'n1', type: 'dog', pathIndex: 5, remainingDays: 1, rescued: true }];
     moveNpcs(state);
     expect(state.npcs.length).toBe(0);
+  });
+
+  it('可在医院/监狱格解救 NPC', () => {
+    const state = makeTestState();
+    const hospitalTileIndex = state.map.tiles.findIndex((t) => t.type === 'hospital');
+    const hospitalPathIndex = state.map.path.indexOf(hospitalTileIndex);
+    state.npcs = [{ id: 'n1', type: 'dog', pathIndex: hospitalPathIndex, remainingDays: 5, rescued: false }];
+    state.players[0].position = hospitalTileIndex;
+    state.status = 'acting';
+    state.pendingTileIndex = hospitalTileIndex;
+
+    expect(canRescueNpc(state, 'p1')).toBe(true);
+    // npcSystem 内部接口为 (state, npcId, playerId)
+    const result = rescueNpc(state, 'n1', 'p1');
+    expect(result.success).toBe(true);
+    expect(state.npcs[0].rescued).toBe(true);
+    expect(state.npcs[0].rescuedBy).toBe('p1');
   });
 });
 

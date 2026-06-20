@@ -328,8 +328,10 @@ export interface RoadEffect {
 }
 
 export interface SpiritOnMap {
+  id: string;
   spiritId: string;
   pathIndex: number;
+  remainingDays: number;
 }
 
 export interface NpcInstance {
@@ -337,6 +339,8 @@ export interface NpcInstance {
   type: NpcType;
   pathIndex: number; // 当前在 map.path 中的索引
   remainingDays: number;
+  rescued: boolean; // 是否已被玩家从医院/监狱解救
+  rescuedBy?: string; // 解救者玩家 ID
 }
 
 export interface CardUseTarget {
@@ -485,6 +489,7 @@ export interface ClientToServerEvents {
   'game:upgrade': (roomId: string, buildingType?: BuildingType) => void;
   'game:rebuild': (roomId: string, tileIndex: number, buildingType: BuildingType) => void;
   'game:skip': (roomId: string) => void;
+  'game:rescueNpc': (roomId: string, npcId: string) => void;
   // 卡片与道具
   'game:buyCard': (roomId: string, cardId: string) => void;
   'game:useCard': (roomId: string, cardId: string, target?: CardUseTarget) => void;

@@ -1,7 +1,7 @@
 
 
-import type { GameState, Tile, BuildingType, SpiritOnMap, Player } from '@monopoly4/shared';
-import { SPIRIT_DEFINITIONS } from '@monopoly4/shared';
+import type { GameState, Tile, BuildingType, SpiritOnMap, Player, NpcInstance } from '@monopoly4/shared';
+import { NPC_DEFINITIONS, SPIRIT_DEFINITIONS } from '@monopoly4/shared';
 import {
   snakeLayout,
   getTileCenter,
@@ -283,7 +283,16 @@ function getOwnerChainCount(state: GameState, owner: import('@monopoly4/shared')
   return state.map.tiles.filter((t) => t.ownerId === owner.id && t.buildingType === 'chainStore').length;
 }
 
-/** 前端估算当前地块显示的过路费（不含访客神明效果，含物价指数、路段效果、等级加成） */
+/** 计算同组土地持有加成 */
+function getGroupBonus(state: GameState, tile: Tile, owner?: import('@monopoly4/shared').Player): number {
+  if (tile.group === undefined || !owner) return 0;
+  const groupTiles = state.map.tiles.filter((t) => t.group === tile.group && t.ownerId === owner.id);
+  if (groupTiles.length >= 3) return 0.5;
+  if (groupTiles.length >= 2) return 0.2;
+  return 0;
+}
+
+/** 前端估算当前地块显示的过路费（不含访客神明效果，含物价指数、路段效果、等级加成、同组加成） */
 function computeDisplayRent(
   tile: Tile,
   state: GameState
@@ -293,19 +302,13 @@ function computeDisplayRent(
   if (!owner) return { value: 0, approximate: false };
 
   const bt = tile.buildingType ?? 'house';
+  // 连锁店采用全图连锁店数量联合计费，不参与同组加成
+  const groupBonus = bt === 'chainStore' ? 0 : getGroupBonus(state, tile, owner);
   let base = 0;
   let approximate = false;
 
   switch (bt) {
     case 'house': {
-      let groupBonus = 0;
-      if (tile.size === 'small' && tile.group !== undefined) {
-        const groupTiles = state.map.tiles.filter(
-          (t) => t.group === tile.group && t.ownerId === owner.id
-        );
-        if (groupTiles.length >= 2) groupBonus = 0.2;
-        if (groupTiles.length >= 3) groupBonus = 0.5;
-      }
       base = tile.baseRent * (1 + tile.level * 0.5) * (1 + groupBonus);
       break;
     }
@@ -316,13 +319,13 @@ function computeDisplayRent(
     }
     case 'mall': {
       // 转盘期望约 4.5，仅用于显示
-      base = tile.baseRent * tile.level * 4.5;
+      base = tile.baseRent * tile.level * 4.5 * (1 + groupBonus);
       approximate = true;
       break;
     }
     case 'hotel': {
       // 住宿天数期望约 3.5，仅用于显示
-      base = tile.baseRent * tile.level * 3.5;
+      base = tile.baseRent * tile.level * 3.5 * (1 + groupBonus);
       approximate = true;
       break;
     }
@@ -330,7 +333,7 @@ function computeDisplayRent(
       // 按本回合步数估算，未移动时按 3 步计
       const steps = state.lastRoll ?? 3;
       const rate = 125; // 步行 50 / 载具 200 的平均估算
-      base = steps * rate * (1 + tile.level * 0.3);
+      base = steps * rate * (1 + tile.level * 0.3) * (1 + groupBonus);
       approximate = true;
       break;
     }
@@ -839,15 +842,7 @@ export function renderBoard(
         );
         drawTrapIcon(ctx, tileRect.x + tileRect.width - tMinDim * 0.18, trapY, tMinDim * 0.14, tile.traps[0].type);
       }
-      const spirit = state.spirits.find((s) => s.pathIndex === tile.index);
-      if (spirit) {
-        const tMinDim = Math.min(tileRect.width, tileRect.height);
-        const spiritY = Math.max(
-          tileRect.y + tMinDim * 0.28 + tMinDim * 0.1,
-          tileCenter.y - tileRect.height * 0.05
-        );
-        drawSpiritIcon(ctx, tileCenter.x + tMinDim * 0.2, spiritY, tMinDim * 0.16, spirit);
-      }
+      // 神明与 NPC 由 drawMapEntities 统一绘制，避免重复
       return;
     }
 
@@ -1188,6 +1183,9 @@ export function renderBoard(
     }
   });
 
+  // 绘制地图 NPC 与神明
+  drawMapEntities(ctx, state, layout);
+
   // 悬停 tooltip
   if (options.hoverIndex !== undefined && options.hoverIndex >= 0 && options.hoverPixel) {
     const hoverTile: Tile = map.tiles[options.hoverIndex];
@@ -1432,6 +1430,39 @@ function drawTrapIcon(
   ctx.restore();
 }
 
+/** 绘制 NPC 图标：带颜色描边的圆形 + 类型首字 */
+function drawNpcIcon(
+  ctx: CanvasRenderingContext2D,
+  cx: number,
+  cy: number,
+  size: number,
+  npc: NpcInstance
+): void {
+  const def = NPC_DEFINITIONS[npc.type];
+  const r = size / 2;
+  const color = '#e74c3c';
+
+  ctx.save();
+  ctx.shadowColor = 'rgba(0,0,0,0.4)';
+  ctx.shadowBlur = 4;
+  ctx.fillStyle = '#2c3e50';
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = color;
+  ctx.lineWidth = Math.max(1, r * 0.2);
+  ctx.stroke();
+
+  ctx.shadowColor = 'transparent';
+  ctx.fillStyle = '#ffffff';
+  ctx.font = `bold ${Math.max(7, r * 1.1)}px sans-serif`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  const label = def?.name?.[0] ?? '?';
+  ctx.fillText(label, cx, cy);
+  ctx.restore();
+}
+
 /** 绘制神明图标：带颜色光晕的圆形 + 名称首字 */
 function drawSpiritIcon(
   ctx: CanvasRenderingContext2D,
@@ -1466,6 +1497,41 @@ function drawSpiritIcon(
   const label = def?.name?.[0] ?? '神';
   ctx.fillText(label, cx, cy);
   ctx.restore();
+}
+
+/**
+ * 统一绘制地图上的 NPC 与神明。
+ * 在地块主体、玩家棋子之后绘制，避免被遮挡。
+ */
+function drawMapEntities(
+  ctx: CanvasRenderingContext2D,
+  state: GameState,
+  layout: BoardLayout
+): void {
+  const path = layout.map.path;
+
+  // 神明
+  for (const spirit of state.spirits) {
+    const tileIndex = path[spirit.pathIndex];
+    if (tileIndex === undefined) continue;
+    const tileRect = getTileRect(layout, tileIndex);
+    const tileCenter = getTileCenter(layout, tileIndex);
+    const minDim = Math.min(tileRect.width, tileRect.height);
+    const size = Math.max(10, minDim * 0.22);
+    drawSpiritIcon(ctx, tileCenter.x + minDim * 0.18, tileCenter.y - minDim * 0.18, size, spirit);
+  }
+
+  // NPC（只显示已解救的）
+  for (const npc of state.npcs) {
+    if (!npc.rescued) continue;
+    const tileIndex = path[npc.pathIndex];
+    if (tileIndex === undefined) continue;
+    const tileRect = getTileRect(layout, tileIndex);
+    const tileCenter = getTileCenter(layout, tileIndex);
+    const minDim = Math.min(tileRect.width, tileRect.height);
+    const size = Math.max(10, minDim * 0.22);
+    drawNpcIcon(ctx, tileCenter.x - minDim * 0.18, tileCenter.y - minDim * 0.18, size, npc);
+  }
 }
 
 /** 绘制地块类型图标：仅文字符号，无背景圆圈 */
@@ -1504,7 +1570,12 @@ function drawTooltip(
   const owner = tile.ownerId ? state.players.find((p) => p.id === tile.ownerId) : undefined;
   const typeLabel = TILE_TYPE_LABELS[tile.type] || tile.type;
   const lines: string[] = [`${tile.name} (${typeLabel})`];
-  if (tile.group !== undefined) lines.push(`路段 ${tile.group}`);
+  if (tile.group !== undefined) {
+    const groupCount = state.map.tiles.filter((t) => t.group === tile.group && t.ownerId === owner?.id).length;
+    const bonus = getGroupBonus(state, tile, owner);
+    const bonusText = bonus > 0 ? `（同组 ${groupCount} 块，+${Math.round(bonus * 100)}%）` : '';
+    lines.push(`路段 ${tile.group}${bonusText}`);
+  }
   if (owner) {
     lines.push(`所有者：${owner.username}`);
     lines.push(`建筑：${tile.buildingType ? BUILDING_LABELS[tile.buildingType] : '空地'} | 等级 ${tile.level}`);
@@ -1529,6 +1600,13 @@ function drawTooltip(
   if (spirit) {
     const def = SPIRIT_DEFINITIONS[spirit.spiritId];
     lines.push(`神明：${def?.name ?? spirit.spiritId}`);
+  }
+  const pathIndex = state.map.path.indexOf(tile.index);
+  const npcsHere = state.npcs.filter((n) => n.pathIndex === pathIndex);
+  for (const npc of npcsHere) {
+    const def = NPC_DEFINITIONS[npc.type];
+    const status = npc.rescued ? '' : '（待解救）';
+    lines.push(`NPC：${def?.name ?? npc.type}${status}`);
   }
 
   const padding = 10;

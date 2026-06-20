@@ -113,12 +113,16 @@
 ## 6. 过路费
 
 - 进入对手土地时支付。
-- **完整公式（住宅）**：
+- **完整公式（住宅 / 特殊建筑）**：
   ```
   rent = baseRent * (1 + level * 0.5) * (1 + groupBonus) * priceIndex
   ```
   - `level`：土地等级 0-5
   - `groupBonus`：同路段（group）连锁加成，同组拥有地块越多加成越高
+    - 同组拥有 **2 块**：加成 **20%**
+    - 同组拥有 **3 块及以上**：加成 **50%**
+    - 仅对属于同一 `group` 的可收费地产生效；**连锁店（chainStore）不参与同组加成**，仍按全图连锁店数量联合收费
+    - 当前实现中，除连锁店外的所有可收费建筑（住宅、商场、旅馆、加油站等）均享受同组加成，以强化路段垄断收益
   - `priceIndex`：物价指数（= 所有人总资产平均值 ÷ 初始资产值，**上限 6**，月底调整）
 - **连锁店公式**：
   ```
@@ -126,10 +130,10 @@
   ```
   - 连锁店固定 1 级，全地图所有连锁店联合收费
   - `chainStoreCount`：该玩家全地图拥有的连锁店总数
-- **特殊建筑**按各自规则计算：
-  - 商场：`rent = mallBaseRent * level * randomMultiplier(1-6) * priceIndex`
-  - 旅馆：`rent = hotelBaseRent * level * randomDays(1-6) * priceIndex`（停留期间无法行动和收租）
-  - 加油站：`rent = stepsThisTurn * gasRate * priceIndex`（仅对乘坐交通工具的对手；步行 rate=50，乘车 rate=200）
+- **特殊建筑**按各自规则计算（再乘 `priceIndex`，并叠加同组加成）：
+  - 商场：`rent = mallBaseRent * level * randomMultiplier(1-6) * priceIndex * (1 + groupBonus)`
+  - 旅馆：`rent = hotelBaseRent * level * randomDays(1-6) * priceIndex * (1 + groupBonus)`（停留期间无法行动和收租）
+  - 加油站：`rent = stepsThisTurn * gasRate * priceIndex * (1 + groupBonus)`（仅对乘坐交通工具的对手；步行 rate=50，乘车 rate=200）
   - 研究所：不收过路费，按等级制造道具
   - 公园：不收费
 
@@ -138,11 +142,13 @@
 - **卡片影响**：涨价卡指定路段加倍 5 天；查封卡指定路段 5 天无法收租。
 
 代码实现：
-- `Game.calculateRent(tile, owner, allTiles, priceIndex, visitor): number` —— 综合计算住宅/连锁店/特殊建筑租金，并应用神明、卡片、状态效果加成。
+- `Game.calculateRent(tile, owner, state, visitor): { rent, ... }` —— 综合计算住宅/连锁店/特殊建筑租金，并应用神明、卡片、状态效果、同组加成。
+- `Game.getGroupBonus(state, tile, owner): number` —— 计算同组地块数量对应的加成比例（0 / 0.2 / 0.5）。
 - `Game.calculateMallRent(tile, owner, priceIndex): number` —— 商场转盘倍数。
 - `Game.calculateHotelRent(tile, owner, priceIndex): { rent, days }` —— 旅馆转盘天数与费用，同时给访问者附加 `hotelRest` 状态。
 - `Game.calculateGasRent(tile, owner, priceIndex, steps, vehicle): number` —— 加油站按步数收费。
 - `Game.isRentExempt(visitor, tile): boolean` —— 判断是否免租（大财神、免费卡、同盟等）。
+- 前端 tooltip 会显示当前地块所属 group 及同组拥有数量，方便玩家预估加成。
 
 ## 7. 破产与获胜
 
@@ -348,7 +354,7 @@
 | 機器娃娃 | 工具 | 清除前方 9-10 格内的路障、地雷、定時炸彈等障碍物。 |
 | 機器人 | 研发 | 研究所 1 级产物，在指定土地上免费加盖一级。可先盖研究所再踩上去直接研发。 |
 | 時光機 | 研发 | 研究所 2 级产物，令所有人恢复到上一回合的状态。 |
-| 傳送機 | 研发 | 研究所 3 级产物，将地图上的人物、神明、房屋、物品瞬间传送到指定地点；传房子必须落到空地。 |
+| 傳送機 | 研发 | 研究所 3 级产物，将指定人物/神明/房屋/物品瞬间传送到**玩家手动选择的目标地块**；传房子必须落到空地。 |
 | 工程車 | 研发 | 研究所 4 级产物，走到哪里拆到哪里，自动拆除他人房屋一级，持续 7 回合后报废。 |
 
 ### 首期建议子集（已全部实现，完整 13 种道具见上方表格）
@@ -375,14 +381,20 @@
 - `TrapSystem.explode(state, trap, centerTile): void` —— 定时炸弹/飞弹/核弹爆炸处理。
 - 每种道具对应一个 `ItemEffect(state, user, target): Result` 函数。
 
-## 11. 神明附身系统（扩展）
+## 11. 神明系统（扩展）
 
-### 基本规则
+### 地图神明（可拾取）
 
-- 神仙以 NPC 形式随机出现在地图路径上，玩家角色抵达该格即可让神仙附身。
-- 使用**请神符**可将距离最近的神仙立即招来附身；使用**送神符**可送走当前附身的神明。
-- **同一时间只能有一种神仙附身**。若已附身时遇到新的神仙，新神仙会替换旧神仙。
-- **送神符对好神无效**，只能送走坏神（衰神、穷神、恶魔），也可将身上的定时炸弹送走。**送神符对死神无效**。
+- 游戏开局及每月初会在地图路径上随机生成若干**地图神明**（`SpiritOnMap`）。
+- 地图神明不会出生在起点、医院、监狱、商店等功能性格。
+- 玩家角色在移动过程中**经过或抵达**该格即可让神明附身；新神会替换玩家身上已有的神明。
+- 地图神明会在地图上存在若干天，每天沿路径随机移动 1 格；停留天数到期后消失。
+- 使用**请神符**可召唤距离最近的一位地图神明立即飞到当前玩家所在格并附身。
+
+### 附身神明规则
+
+- 玩家同一时间只能有一种**附身神明**（`Player.spirit`）。
+- 使用**送神符**可送走当前附身的坏神（衰神、穷神、恶魔），也可将身上的定时炸弹送走；**好神无法送走**。
 - 好神包括：小财神、大财神、小福神、大福神、天使、土地公公。
 - 坏神包括：小穷神、大穷神、小衰神、大衰神、恶魔、死神。
 - 部分神明在持续期满后会**相互变身**：小神仙 7 天后变对应大神仙，大神仙 7 天后变回小神仙；天使与恶魔互换。
@@ -409,11 +421,13 @@
 > 视频中提到的"不可描述之神"多为对大衰神、恶魔或死神的戏称，不属于独立于 12 主神之外的新神明。
 
 代码实现：
-- `SpiritSystem.spawnSpirits(map): Spirit[]` —— 每月初在地图上随机生成神明 NPC。
-- `SpiritSystem.attach(player, spiritId): Result` —— 神明附身（新神替换旧神）。
+- `SpiritSystem.spawnSpirits(state, count?): void` —— 开局/每月初在地图上随机生成地图神明。
+- `SpiritSystem.moveSpirits(state): void` —— 每天移动地图神明 1 格并移除到期者。
+- `SpiritSystem.pickUpSpirit(state, player, pathIndex): void` —— 玩家经过/抵达有神明的格子时附身。
+- `SpiritSystem.attach(player, spiritId): Result` —— 直接为玩家附加指定神明（新神替换旧神）。
 - `SpiritSystem.dismiss(player): Result` —— 使用送神符送走坏神或定时炸弹。
-- `SpiritSystem.summonNearest(player, state): Result` —— 使用请神符招来最近神明。
-- `SpiritSystem.onDayEnd(state): void` —— 每天递减神明剩余天数，处理变身/消失。
+- `SpiritSystem.summonNearest(player, state): Result` —— 使用请神符招来最近地图神明。
+- `SpiritSystem.onDayEnd(state): void` —— 每天递减附身神明剩余天数，处理变身/消失。
 - `SpiritEffectRegistry.get(spiritId): SpiritEffect` —— 获取神明效果器。
 - 每种神明对应 `SpiritEffect`：
   - `onAttach(player)` —— 附身时触发（如大衰神丢卡）。
@@ -421,6 +435,7 @@
   - `onArriveTile(player, tile)` —— 抵达土地时触发（土地公占地、财神免租等）。
   - `onFate(player, event)` —— 遇到命运/新闻事件时触发（大财神挡灾、恶魔加倍等）。
   - `onDayEnd(player)` —— 每天结束时触发（小神仙变身）。
+- 前端 `board.ts` 的 `drawMapEntities` 会在对应格子绘制神明图标（福神/财神等 emoji 与剩余天数），并在 tooltip 中提示神明信息。
 
 ## 12. 股票、公司与保险投资（扩展）
 
@@ -503,36 +518,28 @@
 
 > 小游戏通常有 READY / GO 倒计时，结束后立即结算奖励。
 
-### 特殊人物（四大恶人 + 其他）
+### 特殊 NPC
 
-四大恶人可通过卡片或监狱保释后成为临时跟班，在地图上行窃/抢劫/勒索/间谍行为，也可能因触发地雷、恶犬等陷阱而入院。
+地图上存在一类**可被解救的 NPC**。游戏开局时，NPC 会被随机关押在医院或监狱格；玩家走到这些格子时可以选择**解救**他们。解救后 NPC 会站在该格前方 1 格，随后每回合沿地图路径行走 1 格，持续若干天；当其他玩家与 NPC 处于同一格时触发其特殊效果。
 
-| 人物 | 触发方式 | 效果 |
+| NPC | 关押/出现 | 效果 |
 |---|---|---|
-| **小偷** | 保释后跟随 | 从对手身边路过时偷取点券、宝物、卡片或道具给保释者；自身踩到地雷等会入院 |
-| **强盗** | 保释后跟随 | 路过银行时抢劫其他所有玩家一定比例存款（观察到约 20%）；走到对手土地上可收取过路费；还可抢一张卡片/道具给保释者 |
-| **流氓** | 保释后跟随 | 走到对手土地上时勒索保护费，费用与地价/房屋等级正相关；收取的钱进入保释者存款 |
-| **间谍** | 保释后跟随 | 走到对手土地上窃取该土地上一次收取的租金；未收过租的土地无法窃取；还可窃取/查看对手卡片或公司红利 |
-| **乞丐** | 玩家倒闭后原地出现 | 其他玩家经过时须施舍 1000 元 |
-| **恶犬** | 地图固定 NPC | 步行玩家碰到后住院 3 天；车辆行进则撞跑恶犬（非神明，属特殊动物） |
-| **死神** | 认输投降时由魔法屋女巫召唤（需身上有复仇卡） | 附身指定目标 14 天，期间遗失全部卡片道具，罚款加倍，奖励作废，不能收租，替所有人付费用，不能买地盖房，送神符无效 |
+| **小偷** | 开局关押在医院/监狱 | 同格时随机偷取目标 1 张卡片；无卡则偷 1 个道具；再无则无事发生 |
+| **强盗** | 开局关押在医院/监狱 | 同格时抢走目标 10% 现金 |
+| **流氓** | 开局关押在医院/监狱 | 同格时破坏目标一块随机自有建筑 1 级；土地公/天使可挡灾 |
+| **恶犬** | 开局关押在医院/监狱 | 同格时咬伤目标，住院 1 天；触发保险理赔 |
+| **乞丐** | 玩家破产后原地出现 | 其他玩家经过时施舍 1000 元 |
 
-> 四大恶人行为通常受保释者控制，行动失败（如被反击、被捕）后会进入医院或监狱。
+> NPC 不会主动攻击解救者。NPC 到期后自动离开地图；被陷阱或事件送入医院/监狱时也会移除。
 
 代码实现：
-- `SpecialTileHandlers.start(tile, player): Result` —— 起点/银行：发工资、存取款、贷款。
-- `SpecialTileHandlers.hospital(tile, player)` —— 医院：住院逻辑；门外可保释。
-- `SpecialTileHandlers.prison(tile, player)` —— 监狱：坐牢逻辑；门外可保释。
-- `SpecialTileHandlers.shop(tile, player): ShopOption[]` —— 商店/百货公司：展示可购买卡片/道具列表。
-- `SpecialTileHandlers.buyFromShop(player, itemId / cardId): Result` / `sellToShop(...)` —— 商店买卖。
-- `SpecialTileHandlers.lottery(tile, player, number): Result` —— 乐透投注。
-- `SpecialTileHandlers.lotteryDraw(state): void` —— 每月 15 日开奖。
-- `SpecialTileHandlers.magicHouse(tile, player, target, spell): Result` —— 魔法屋施法。
-- `MiniGameSystem.start(gameType, player): Promise<MiniGameResult>` —— 触发小游戏。
-- `MiniGameSystem.award(player, score, gameType): void` —— 根据得分发放点券。
-- `SpecialNPCSystem.onPass(npc, player)` —— 四大恶人/乞丐/恶犬的经过效果。
-- `SpecialNPCSystem.bail(player, npcType): Result` —— 保释四大恶人。
-- `SpecialNPCSystem.moveNPCs(state): void` —— 每回合移动跟班 NPC。
+- `NpcSystem.spawnNpcs(state, count?): void` —— 开局生成 NPC，默认关押在医院/监狱格，`rescued: false`。
+- `NpcSystem.rescueNpc(state, npcId, playerId): Result` —— 在医院/监狱格解救指定 NPC。
+- `NpcSystem.canRescueNpc(state, playerId): boolean` —— 判断当前玩家是否处于可解救状态。
+- `NpcSystem.moveNpcs(state): void` —— 每天移动已解救 NPC 1 格，并移除到期者。
+- `NpcSystem.triggerNpcEffect(state, npc, player): void` —— 玩家与 NPC 同格时触发效果（仅对已解救 NPC 生效）。
+- 前端 `board.ts` 的 `drawMapEntities` 会在 NPC 所在格绘制对应图标（小偷/强盗/流氓/恶犬 emoji），并在 tooltip 中显示剩余天数与解救者。
+- Socket 事件 `game:rescueNpc` 供玩家发起解救，AI 回合自动检测并解救。
 
 ## 14. 命运与新闻事件（扩展，基于视频资料补充）
 

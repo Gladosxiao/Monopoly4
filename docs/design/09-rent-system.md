@@ -69,17 +69,19 @@ interface RoadEffect {
 2. 调用 `isRentExempt()` 判断是否免租。
 3. 按 `buildingType` 计算基础租金。
 4. 乘上 `priceIndex`。
-5. 应用路段效果（涨价卡）。
-6. 应用神明效果。
+5. 应用同组加成（`getGroupBonus`）。
+6. 应用路段效果（涨价卡）。
+7. 应用神明效果。
 
-### 3.1 住宅 (`house`)
+### 3.1 住宅 / 特殊建筑（除连锁店外）
 
 ```
 rent = baseRent * (1 + level * 0.5) * (1 + groupBonus) * priceIndex
 ```
 
 - `groupBonus`：同组拥有 2 块 = 20%，3 块及以上 = 50%。
-- 仅对 `size === 'small'` 的地块生效；大块土地即使建筑类型临时为住宅也不参与 groupBonus。
+- **连锁店不参与同组加成**，仍按全图连锁店数量联合收费。
+- 当前实现中，除连锁店外的所有可收费建筑（`house`、`mall`、`hotel`、`gasStation` 等）均按所属 `group` 计算加成，以强化同一路段的垄断收益。
 
 ### 3.2 连锁店 (`chainStore`)
 
@@ -94,9 +96,9 @@ rent = baseRent * chainStoreCount * priceIndex
 
 | 建筑 | 公式 | 备注 |
 |---|---|---|
-| 商场 (`mall`) | `baseRent * level * wheel(1-6) * priceIndex` | 转盘决定消费倍数 |
-| 旅馆 (`hotel`) | `baseRent * level * wheel(1-6) * priceIndex` | 转盘决定住宿天数，访客获得 `hotelRest` |
-| 加油站 (`gasStation`) | `stepsThisTurn * rate * priceIndex` | 步行 rate=50，乘车 rate=200；与土地 basePrice 无关 |
+| 商场 (`mall`) | `baseRent * level * wheel(1-6) * priceIndex * (1 + groupBonus)` | 转盘决定消费倍数，再叠同组加成 |
+| 旅馆 (`hotel`) | `baseRent * level * wheel(1-6) * priceIndex * (1 + groupBonus)` | 转盘决定住宿天数，访客获得 `hotelRest`，再叠同组加成 |
+| 加油站 (`gasStation`) | `stepsThisTurn * rate * priceIndex * (1 + groupBonus)` | 步行 rate=50，乘车 rate=200；与土地 basePrice 无关，叠同组加成 |
 | 公园 (`park`) | 0 | 不收费 |
 | 研究所 (`lab`) | 0 | 不收租 |
 

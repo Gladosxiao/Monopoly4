@@ -34,6 +34,7 @@ describe('住院传送', () => {
         type: 'dog',
         pathIndex: player.position,
         remainingDays: 1,
+        rescued: true,
       },
     ];
     triggerNpcEffect(state, state.npcs[0], player);

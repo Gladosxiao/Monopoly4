@@ -1002,6 +1002,7 @@ select:focus {
 
 .stock-top-panel {
   max-height: 280px;
+  min-height: 150px;
   overflow: hidden;
   transition: max-height 0.25s ease;
 }
@@ -1012,12 +1013,14 @@ select:focus {
 
 .backpack-wide-panel {
   max-height: 320px;
+  min-height: 140px;
   overflow: hidden;
   transition: max-height 0.25s ease;
 }
 
 .backpack-wide-panel.collapsed {
   max-height: 56px;
+  min-height: auto;
 }
 
 .backpack-wide-panel.collapsed > #backpack-wide-content {

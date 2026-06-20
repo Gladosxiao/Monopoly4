@@ -8,6 +8,8 @@ import {
   type BuildingType,
   CARD_DEFINITIONS,
   ITEM_DEFINITIONS,
+  NPC_DEFINITIONS,
+  SPIRIT_DEFINITIONS,
   DEFAULT_GAME_CONFIG,
   CHARACTERS,
 } from '@monopoly4/shared';
@@ -45,6 +47,7 @@ import {
   placeLotteryBet,
   castMagicSpell,
   skipTurn,
+  rescueNpc,
   submitMiniGameResult,
   onGameState,
   onError,
@@ -745,6 +748,18 @@ export function renderActions(container: HTMLElement, state: GameState): void {
         el.appendChild(rebuildBtn);
       }
 
+      // 医院/监狱格解救 NPC
+      if (tile.type === 'hospital' || tile.type === 'prison') {
+        const captiveNpcs = state.npcs.filter((n) => !n.rescued && state.map.path[n.pathIndex] === tileIndex);
+        for (const npc of captiveNpcs) {
+          const def = NPC_DEFINITIONS[npc.type];
+          const btn = document.createElement('button');
+          btn.textContent = `解救 ${def.name}`;
+          btn.addEventListener('click', () => rescueNpc(state.roomId, npc.id));
+          el.appendChild(btn);
+        }
+      }
+
       // 银行贷款与还款（起点/银行格可贷款，有贷款时随时可还款）
       if (tile.type === 'start') {
         const loanBtn = document.createElement('button');
@@ -1111,7 +1126,7 @@ export async function promptItemTarget(state: GameState, itemId: string): Promis
   if (itemId === 'remoteDice') {
     const diceInput = await showPrompt('输入要控制的骰子点数 1-6：');
     target.diceValue = parseInt(diceInput || '', 10);
-  } else if (itemId === 'barrier' || itemId === 'mine' || itemId === 'timeBomb' || itemId === 'missile') {
+  } else if (itemId === 'barrier' || itemId === 'mine' || itemId === 'timeBomb' || itemId === 'missile' || itemId === 'teleporter') {
     target.targetTileIndex = await selectTileOnBoard(state, '请点击要放置道具的目标地块');
   } else if (itemId === 'robot') {
     const currentUser = getCurrentUser();

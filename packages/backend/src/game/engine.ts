@@ -47,7 +47,8 @@ import { buyItem as buyItemFromSystem, sellItem as sellItemFromSystem } from './
 import { destroyVehicle } from './itemSystem/effects.js';
 import { triggerTrap, tickBomb, type TriggerResult } from './itemSystem/trapSystem.js';
 import { triggerFateEvent, triggerNewsEvent, type EventEffect, type EventOutcome } from './eventSystem/index.js';
-import { spawnNpcs, moveNpcs, triggerNpcEffect } from './npcSystem/index.js';
+import { spawnNpcs, moveNpcs, triggerNpcEffect, rescueNpc as rescueNpcImpl } from './npcSystem/index.js';
+import { spawnSpirits, moveSpirits, pickUpSpirit } from './spiritSystem/index.js';
 
 /** 神明到期变身映射：小神 <-> 大神，天使 <-> 恶魔；未列出的神明到期后消失。 */
 const GAME_TIME_MONTHS: Record<GameConfig['gameTime'], number | null> = {
@@ -147,6 +148,7 @@ export function createGame(roomId: string, config: GameConfig, roomPlayers: Room
   };
 
   spawnNpcs(state);
+  spawnSpirits(state);
 
   // 将地图上的公司格与公司列表按顺序绑定；公司格数量多于公司时循环复用
   const companyTiles = state.map.tiles.filter((tile) => tile.type === 'company');
@@ -483,12 +485,22 @@ export function getSpiritRentMultiplier(visitor: Player): number {
  * 计算顺序：基础租金 → 物价指数 → 路段效果（涨价卡） → 神明效果。
  * 若地块为旅馆，还会返回住宿天数，由调用方附加 hotelRest 状态。
  */
+function getGroupBonus(state: GameState, tile: Tile, owner: Player): number {
+  if (tile.group === undefined) return 0;
+  const groupTiles = state.map.tiles.filter(
+    (t) => t.group === tile.group && t.ownerId === owner.id
+  );
+  if (groupTiles.length >= 3) return 0.5;
+  if (groupTiles.length >= 2) return 0.2;
+  return 0;
+}
+
 export function calculateRent(
   tile: Tile,
   owner: Player,
   state: GameState,
   visitor: Player
-): { rent: number; hotelDays?: number; spin?: number } {
+): { rent: number; hotelDays?: number; spin?: number; groupBonus?: number } {
   if (tile.type !== 'property' || !tile.ownerId || tile.ownerId !== owner.id) {
     return { rent: 0 };
   }
@@ -497,20 +509,14 @@ export function calculateRent(
   }
 
   const buildingType = tile.buildingType ?? 'house';
+  // 连锁店采用全图连锁店数量联合计费，不参与同组加成
+  const groupBonus = buildingType === 'chainStore' ? 0 : getGroupBonus(state, tile, owner);
   let base = 0;
   let hotelDays: number | undefined;
   let spin: number | undefined;
 
   switch (buildingType) {
     case 'house': {
-      let groupBonus = 0;
-      if (tile.size === 'small' && tile.group !== undefined) {
-        const groupTiles = state.map.tiles.filter(
-          (t) => t.group === tile.group && t.ownerId === owner.id
-        );
-        if (groupTiles.length >= 2) groupBonus = 0.2;
-        if (groupTiles.length >= 3) groupBonus = 0.5;
-      }
       base = tile.baseRent * (1 + tile.level * 0.5) * (1 + groupBonus);
       break;
     }
@@ -518,19 +524,19 @@ export function calculateRent(
       const chainCount = state.map.tiles.filter(
         (t) => t.ownerId === owner.id && t.buildingType === 'chainStore'
       ).length;
-      // 连锁店也随等级提升，每级 +20%
+      // 连锁店随等级提升，每级 +20%
       base = tile.baseRent * chainCount * (1 + tile.level * 0.2);
       break;
     }
     case 'mall': {
       spin = spinWheel(8);
-      base = tile.baseRent * tile.level * spin;
+      base = tile.baseRent * tile.level * spin * (1 + groupBonus);
       break;
     }
     case 'hotel': {
       hotelDays = spinWheel(6);
       spin = hotelDays;
-      base = tile.baseRent * tile.level * hotelDays;
+      base = tile.baseRent * tile.level * hotelDays * (1 + groupBonus);
       break;
     }
     case 'gasStation': {
@@ -538,8 +544,8 @@ export function calculateRent(
       const steps = state.lastRoll ?? 1;
       const rate = visitor.vehicle === 'walk' ? 50 : 200;
       spin = steps;
-      // 加油站随等级提升，每级 +30%
-      base = steps * rate * (1 + tile.level * 0.3);
+      // 加油站随等级提升，每级 +30%，同时享受同组加成
+      base = steps * rate * (1 + tile.level * 0.3) * (1 + groupBonus);
       break;
     }
     case 'park':
@@ -567,7 +573,7 @@ export function calculateRent(
     rent *= getSpiritRentMultiplier(visitor);
   }
 
-  return { rent: Math.floor(rent), hotelDays, spin };
+  return { rent: Math.floor(rent), hotelDays, spin, groupBonus };
 }
 
 export function movePlayer(state: GameState, steps: number): GameState {
@@ -679,6 +685,11 @@ function onPassTile(state: GameState, tileIndex: number, player: Player): boolea
     if (npc.pathIndex === pathIndex) {
       triggerNpcEffect(state, npc, player);
     }
+  }
+
+  // 地图神明拾取
+  if (state.config.enableSpirits !== false) {
+    pickUpSpirit(state, player, pathIndex);
   }
 
   // 工程车：经过对手土地时拆除一级
@@ -2049,6 +2060,10 @@ function decrementEffects(state: GameState): void {
   if (state.config.enableStock !== false) {
     updateStockPrices(state);
   }
+  // 地图神明移动
+  if (state.config.enableSpirits !== false) {
+    moveSpirits(state);
+  }
 }
 
 export function calculatePriceIndex(state: GameState): number {
@@ -2301,6 +2316,26 @@ export function canUseCard(state: GameState, playerId: string): boolean {
 
 export function canUseItem(state: GameState, playerId: string): boolean {
   return (state.status === 'acting' || state.status === 'rolling') && getCurrentPlayer(state).id === playerId;
+}
+
+export function canRescueNpc(state: GameState, playerId: string): boolean {
+  if (state.status !== 'acting') return false;
+  const player = getCurrentPlayer(state);
+  if (player.id !== playerId || player.isBankrupt) return false;
+  const tile = state.map.tiles[state.pendingTileIndex ?? player.position];
+  if (tile.type !== 'hospital' && tile.type !== 'prison') return false;
+  return state.npcs.some((n) => !n.rescued && state.map.path[n.pathIndex] === tile.index);
+}
+
+export function rescueNpc(state: GameState, playerId: string, npcId: string): { success: boolean; message?: string } {
+  if (state.status === 'ended') return { success: false, message: '游戏已结束' };
+  const player = state.players.find((p) => p.id === playerId);
+  if (!player) return { success: false, message: '玩家不存在' };
+  if (player.isBankrupt) return { success: false, message: '已破产无法操作' };
+  if (state.status !== 'acting' || state.players[state.currentPlayerIndex].id !== playerId) {
+    return { success: false, message: '现在不能解救 NPC' };
+  }
+  return rescueNpcImpl(state, npcId, playerId);
 }
 
 const MINI_GAME_NAMES: Record<MiniGameType, string> = {

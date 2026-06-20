@@ -212,21 +212,21 @@ const socket = io('/game', {
 
 #### `game:useItem`
 
-使用道具。
+使用道具。部分道具需要玩家在弹出面板中选择目标地块（如飞弹、传送机）。
 
 ```json
 {
   "roomId": "string",
   "itemId": "string",           // ItemInstance.instanceId
   "target": {                   // 可选目标
-    "tileIndex": 0              // 目标地块索引（如飞弹）
+    "tileIndex": 0              // 目标地块索引（如飞弹、传送机）
   }
 }
 ```
 
 #### `game:stockTrade`
 
-买入/卖出股票。
+买入/卖出股票。前端提供 `10 股 / 100 股` 快捷按钮，也可输入任意数量。
 
 ```json
 {
@@ -290,6 +290,19 @@ const socket = io('/game', {
   "spell": "swapCash"  // 'swapCash' | 'dismissSpirit' | 'stealCard' | 'jail'
 }
 ```
+
+#### `game:rescueNpc`
+
+在医院/监狱格解救被关押的 NPC。
+
+```json
+{
+  "roomId": "string",
+  "npcId": "string"             // NpcInstance.id
+}
+```
+
+> 仅当当前玩家所在格为医院或监狱，且该格存在未被解救的 NPC 时可成功。
 
 #### `game:miniGameResult`
 

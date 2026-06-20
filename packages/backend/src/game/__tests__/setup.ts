@@ -27,8 +27,9 @@ export function makeTestState(
 ): GameState {
   const state = createGame('room-test', { ...DEFAULT_TEST_CONFIG, ...config }, players);
   state.priceIndex = 1;
-  // 测试中默认清空 NPC，避免随机 NPC 干扰断言；需要测试 NPC 时手动添加
+  // 测试中默认清空 NPC 与地图神明，避免随机生成干扰断言；需要测试时手动添加
   state.npcs = [];
+  state.spirits = [];
   // 默认游戏只有 3 家公司，但旧测试仍需要全部 9 家公司特效，因此注入完整公司/股票数据
   state.companies = JSON.parse(JSON.stringify(ALL_COMPANIES));
   state.stocks = JSON.parse(JSON.stringify(ALL_STOCKS));
