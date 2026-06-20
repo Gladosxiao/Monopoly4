@@ -11,6 +11,7 @@ import {
   getPathCenters,
   type BoardLayout,
   type Point,
+  type Rect,
 } from '@monopoly4/map-generator/coords';
 import { getAnimatedPlayerPosition, isAnimating, stopMoveAnimation } from './moveAnimation.js';
 
@@ -226,7 +227,7 @@ export interface RenderOptions {
   hoverPixel?: { x: number; y: number };
   /** 动画时间戳，缺省则使用 Date.now() */
   time?: number;
-  /** 可选：可被选中的地块索引集合（地图选块模式高亮） */
+  /** 可选：可选中的地块索引集合（地图选块模式高亮） */
   selectableTileIndexes?: Set<number>;
   /** 可选：当前是否处于地图选块模式 */
   isSelectingTile?: boolean;
@@ -330,6 +331,157 @@ function drawPathLines(ctx: CanvasRenderingContext2D, layout: BoardLayout): void
   ctx.restore();
 }
 
+/** 地块视觉形状类型 */
+type TileShape = 'rect' | 'circle' | 'small';
+
+function getTileShape(tile: Tile): TileShape {
+  if (tile.type === 'property') return 'rect';
+  if (
+    tile.type === 'card' ||
+    tile.type === 'coupon' ||
+    tile.type === 'coupon10' ||
+    tile.type === 'coupon30' ||
+    tile.type === 'coupon50'
+  ) {
+    return 'small';
+  }
+  return 'circle';
+}
+
+interface ShapeMetrics {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  radius: number;
+  headerH: number;
+  cx: number;
+  cy: number;
+  /** 内切圆半径，circle 绘制时使用 */
+  r: number;
+}
+
+function getShapeMetrics(shape: TileShape, rect: Rect): ShapeMetrics {
+  if (shape === 'small') {
+    const w = rect.width * 0.7;
+    const h = rect.height * 0.7;
+    const x = rect.x + (rect.width - w) / 2;
+    const y = rect.y + (rect.height - h) / 2;
+    const radius = Math.max(3, Math.min(w, h) * 0.1);
+    const headerH = Math.max(14, h * 0.28);
+    return { x, y, w, h, radius, headerH, cx: x + w / 2, cy: y + h / 2, r: Math.min(w, h) / 2 };
+  }
+
+  const padding = 1;
+  const x = rect.x + padding;
+  const y = rect.y + padding;
+  const w = rect.width - padding * 2;
+  const h = rect.height - padding * 2;
+  const minDim = Math.min(w, h);
+  const radius = Math.max(3, minDim * 0.1);
+  const headerH = Math.max(14, h * 0.28);
+  return { x, y, w, h, radius, headerH, cx: x + w / 2, cy: y + h / 2, r: minDim / 2 };
+}
+
+function drawTileBody(
+  ctx: CanvasRenderingContext2D,
+  shape: TileShape,
+  m: ShapeMetrics,
+  fill: string,
+  stroke: { color: string; width: number },
+  highlight?: { hovered: boolean; current: boolean; color: string }
+): void {
+  const hovered = highlight?.hovered ?? false;
+  const current = highlight?.current ?? false;
+  const highlightColor = highlight?.color ?? '#ffffff';
+
+  ctx.save();
+  ctx.shadowColor = 'rgba(0,0,0,0.25)';
+  ctx.shadowBlur = hovered ? 14 : 5;
+  ctx.shadowOffsetX = 0;
+  ctx.shadowOffsetY = hovered ? 5 : 2;
+  ctx.fillStyle = fill;
+
+  if (shape === 'circle') {
+    ctx.beginPath();
+    ctx.arc(m.cx, m.cy, m.r, 0, Math.PI * 2);
+  } else {
+    roundRectPath(ctx, m.x, m.y, m.w, m.h, m.radius);
+  }
+  ctx.fill();
+  ctx.restore();
+
+  ctx.save();
+  if (hovered || current) {
+    ctx.strokeStyle = hovered ? '#ffffff' : highlightColor;
+    ctx.lineWidth = hovered ? 3.5 : 2.5;
+    ctx.shadowColor = hovered ? 'rgba(255,255,255,0.6)' : 'transparent';
+    ctx.shadowBlur = hovered ? 12 : 0;
+  } else {
+    ctx.strokeStyle = stroke.color;
+    ctx.lineWidth = stroke.width;
+    ctx.shadowColor = 'transparent';
+    ctx.shadowBlur = 0;
+  }
+
+  if (shape === 'circle') {
+    ctx.beginPath();
+    ctx.arc(m.cx, m.cy, m.r, 0, Math.PI * 2);
+  } else {
+    roundRectPath(ctx, m.x, m.y, m.w, m.h, m.radius);
+  }
+  ctx.stroke();
+  ctx.restore();
+}
+
+function drawSelectableHighlight(ctx: CanvasRenderingContext2D, shape: TileShape, m: ShapeMetrics): void {
+  ctx.save();
+  ctx.strokeStyle = '#2ecc71';
+  ctx.lineWidth = 3;
+  ctx.shadowColor = 'rgba(46, 204, 113, 0.8)';
+  ctx.shadowBlur = 10;
+  if (shape === 'circle') {
+    ctx.beginPath();
+    ctx.arc(m.cx, m.cy, m.r + 2, 0, Math.PI * 2);
+  } else {
+    roundRectPath(ctx, m.x - 1, m.y - 1, m.w + 2, m.h + 2, m.radius + 1);
+  }
+  ctx.stroke();
+  ctx.restore();
+}
+
+function drawTileHeader(
+  ctx: CanvasRenderingContext2D,
+  shape: TileShape,
+  m: ShapeMetrics,
+  headerFill: string,
+  accentColor: string
+): { headerY: number; headerH: number } {
+  const headerY = m.y + 1;
+  const headerH = m.headerH - 2;
+
+  ctx.save();
+  ctx.fillStyle = headerFill;
+  if (shape === 'circle') {
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(m.cx, m.cy, m.r, 0, Math.PI * 2);
+    ctx.clip();
+    ctx.fillRect(m.x, headerY, m.w, headerH);
+    ctx.restore();
+  } else {
+    roundRectPath(ctx, m.x + 1, headerY, m.w - 2, headerH, Math.max(2, m.radius - 1));
+    ctx.fill();
+  }
+
+  // 底部细线
+  ctx.fillStyle = accentColor;
+  ctx.fillRect(m.x + 3, headerY + headerH - 4, m.w - 6, 2);
+  ctx.restore();
+
+  return { headerY, headerH };
+}
+
 export function renderBoard(
   canvas: HTMLCanvasElement,
   state: GameState,
@@ -375,27 +527,89 @@ export function renderBoard(
   const currentPlayer = state.players[state.currentPlayerIndex];
   const currentTileIndex = options.highlightCurrentTile && currentPlayer ? currentPlayer.position : -1;
 
+  // 预计算大块地产（span > 1）的跨格矩形，按 name 合并
+  interface PropertyBlockInfo {
+    rect: Rect;
+    center: Point;
+    indices: number[];
+  }
+  const propertyBlockBounds = new Map<string, PropertyBlockInfo>();
+  for (const tile of map.tiles) {
+    if (tile.type !== 'property' || !tile.span || tile.span <= 1) continue;
+    if (propertyBlockBounds.has(tile.name)) continue;
+    const blockTiles = map.tiles.filter(
+      (t: Tile) => t.type === 'property' && t.name === tile.name && t.span && t.span > 1
+    );
+    if (blockTiles.length <= 1) continue;
+    let minX = Infinity;
+    let minY = Infinity;
+    let maxX = -Infinity;
+    let maxY = -Infinity;
+    for (const t of blockTiles) {
+      const r = getTileRect(layout, t.index);
+      minX = Math.min(minX, r.x);
+      minY = Math.min(minY, r.y);
+      maxX = Math.max(maxX, r.x + r.width);
+      maxY = Math.max(maxY, r.y + r.height);
+    }
+    const rect: Rect = { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
+    propertyBlockBounds.set(tile.name, {
+      rect,
+      center: { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 },
+      indices: blockTiles.map((t: Tile) => t.index).sort((a: number, b: number) => a - b),
+    });
+  }
+
+  const drawnBlocks = new Set<string>();
+
   // 绘制地块
   map.tiles.forEach((tile: Tile) => {
-    const rect = getTileRect(layout, tile.index);
-    const center = getTileCenter(layout, tile.index);
+    const tileRect = getTileRect(layout, tile.index);
+    const tileCenter = getTileCenter(layout, tile.index);
 
     const isProperty = tile.type === 'property';
     const typeColor = TILE_COLORS[tile.type] || '#95a5a6';
     const groupColor = tile.group !== undefined ? GROUP_COLORS[tile.group % GROUP_COLORS.length] : typeColor;
 
-    const padding = 1;
-    const x = rect.x + padding;
-    const y = rect.y + padding;
-    const w = rect.width - padding * 2;
-    const h = rect.height - padding * 2;
-    const minDim = Math.min(w, h);
-    const radius = Math.max(3, minDim * 0.1);
-    const headerH = Math.max(14, h * 0.28);
+    const block = isProperty && tile.span && tile.span > 1 ? propertyBlockBounds.get(tile.name) : undefined;
+    const isBlockTile = block !== undefined;
+    const isBlockLead = isBlockTile && !drawnBlocks.has(tile.name);
 
-    const isHovered = tile.index === options.hoverIndex;
-    const isCurrentTile = tile.index === currentTileIndex;
-    const isSelectable = options.isSelectingTile && options.selectableTileIndexes?.has(tile.index);
+    // 非 lead 的大块地产子格只绘制本格独有的覆盖物（陷阱/神明）
+    if (isBlockTile && !isBlockLead) {
+      if (tile.traps && tile.traps.length > 0) {
+        const tMinDim = Math.min(tileRect.width, tileRect.height);
+        const trapY = Math.max(
+          tileRect.y + tMinDim * 0.28 + tMinDim * 0.1,
+          tileRect.y + tileRect.height - tMinDim * 0.18
+        );
+        drawTrapIcon(ctx, tileRect.x + tileRect.width - tMinDim * 0.18, trapY, tMinDim * 0.14, tile.traps[0].type);
+      }
+      const spirit = state.spirits.find((s) => s.pathIndex === tile.index);
+      if (spirit) {
+        const tMinDim = Math.min(tileRect.width, tileRect.height);
+        const spiritY = Math.max(
+          tileRect.y + tMinDim * 0.28 + tMinDim * 0.1,
+          tileCenter.y - tileRect.height * 0.05
+        );
+        drawSpiritIcon(ctx, tileCenter.x + tMinDim * 0.2, spiritY, tMinDim * 0.16, spirit);
+      }
+      return;
+    }
+
+    const drawRect: Rect = block ? block.rect : tileRect;
+    const drawCenter: Point = block ? block.center : tileCenter;
+    const shape = getTileShape(tile);
+
+    const isHovered = block
+      ? block.indices.some((i) => i === options.hoverIndex)
+      : tile.index === options.hoverIndex;
+    const isCurrentTile = block
+      ? block.indices.some((i) => i === currentTileIndex)
+      : tile.index === currentTileIndex;
+    const isSelectable = options.isSelectingTile && (block
+      ? block.indices.some((i) => options.selectableTileIndexes?.has(i))
+      : options.selectableTileIndexes?.has(tile.index));
 
     // 主体底色：property 纯色，functional 浅灰白底
     let bodyFill: string;
@@ -413,55 +627,42 @@ export function renderBoard(
       }
     }
 
+    const m = getShapeMetrics(shape, drawRect);
+
     // 绘制主体
-    ctx.save();
-    ctx.shadowColor = 'rgba(0,0,0,0.25)';
-    ctx.shadowBlur = isHovered ? 14 : 5;
-    ctx.shadowOffsetX = 0;
-    ctx.shadowOffsetY = isHovered ? 5 : 2;
-
-    ctx.fillStyle = bodyFill;
-    roundRectPath(ctx, x, y, w, h, radius);
-    ctx.fill();
-
-    // 边框
-    if (isHovered || isCurrentTile) {
-      ctx.strokeStyle = isHovered ? '#ffffff' : currentPlayer?.color || '#ffffff';
-      ctx.lineWidth = isHovered ? 3.5 : 2.5;
-      ctx.shadowColor = isHovered ? 'rgba(255,255,255,0.6)' : 'transparent';
-      ctx.shadowBlur = isHovered ? 12 : 0;
-      roundRectPath(ctx, x, y, w, h, radius);
-      ctx.stroke();
-    } else {
-      ctx.strokeStyle = isProperty ? '#ffffff' : typeColor;
-      ctx.lineWidth = isProperty ? 1.5 : 3;
-      roundRectPath(ctx, x, y, w, h, radius);
-      ctx.stroke();
-    }
+    drawTileBody(
+      ctx,
+      shape,
+      m,
+      bodyFill,
+      isProperty ? { color: '#ffffff', width: 1.5 } : { color: typeColor, width: 3 },
+      isHovered || isCurrentTile
+        ? { hovered: isHovered, current: isCurrentTile, color: currentPlayer?.color || '#ffffff' }
+        : undefined
+    );
 
     // 可选中地块高亮
     if (isSelectable) {
-      ctx.strokeStyle = '#2ecc71';
-      ctx.lineWidth = 3;
-      ctx.shadowColor = 'rgba(46, 204, 113, 0.8)';
-      ctx.shadowBlur = 10;
-      roundRectPath(ctx, x - 1, y - 1, w + 2, h + 2, radius + 1);
-      ctx.stroke();
-      ctx.shadowColor = 'transparent';
+      drawSelectableHighlight(ctx, shape, m);
     }
-    ctx.restore();
+
+    if (isBlockLead) {
+      drawnBlocks.add(tile.name);
+    }
+
+    const minDim = Math.min(m.w, m.h);
+
+    // 卡片/点券类小格：不绘制标题行，只居中显示大图标
+    if (shape === 'small') {
+      const iconSize = Math.min(m.w, m.h) * 0.55;
+      drawTileIcon(ctx, drawCenter.x, drawCenter.y, iconSize, tile.type);
+      return;
+    }
 
     // 顶部标题栏：深色底 + 白字，底部带类型色/分组色细线
-    const headerY = y + 1;
     const headerFill = isProperty ? darkenColor(groupColor, 0.6) : typeColor;
-    ctx.save();
-    ctx.fillStyle = headerFill;
-    roundRectPath(ctx, x + 1, headerY, w - 2, headerH - 2, Math.max(2, radius - 1));
-    ctx.fill();
-    // 底部细线
-    ctx.fillStyle = isProperty ? '#ffffff' : typeColor;
-    ctx.fillRect(x + 3, headerY + headerH - 4, w - 6, 2);
-    ctx.restore();
+    const accentColor = isProperty ? '#ffffff' : typeColor;
+    const { headerY, headerH } = drawTileHeader(ctx, shape, m, headerFill, accentColor);
 
     // 标题文字（白字，居中）
     ctx.save();
@@ -471,7 +672,7 @@ export function renderBoard(
     ctx.textBaseline = 'middle';
     setTextShadow(ctx, 'rgba(0,0,0,0.75)');
     ctx.fillStyle = '#ffffff';
-    const titleX = !isProperty ? center.x + minDim * 0.05 : center.x;
+    const titleX = !isProperty ? drawCenter.x + minDim * 0.05 : drawCenter.x;
     ctx.fillText(tile.name, titleX, headerY + headerH / 2 - 1);
     clearTextShadow(ctx);
     ctx.restore();
@@ -479,7 +680,7 @@ export function renderBoard(
     // 功能性地块左上角小图标
     if (!isProperty) {
       const iconSize = Math.max(10, minDim * 0.18);
-      drawTileIcon(ctx, x + iconSize * 0.7, headerY + headerH / 2 - 1, iconSize, tile.type);
+      drawTileIcon(ctx, m.x + iconSize * 0.7, headerY + headerH / 2 - 1, iconSize, tile.type);
     }
 
     // 所有者标识：标题栏下方的色条 + 首字标签
@@ -488,17 +689,17 @@ export function renderBoard(
       const owner = state.players.find((p) => p.id === tile.ownerId);
       if (owner) {
         ctx.save();
-        const barH = Math.max(3, h * 0.07);
-        const barY = y + headerH + 2;
+        const barH = Math.max(3, m.h * 0.07);
+        const barY = m.y + m.headerH + 2;
         ctx.fillStyle = owner.color;
-        roundRectPath(ctx, x + 3, barY, w - 6, barH, barH / 2);
+        roundRectPath(ctx, m.x + 3, barY, m.w - 6, barH, barH / 2);
         ctx.fill();
 
         const tagSize = Math.max(9, minDim * 0.18);
         const tagY = barY + barH + tagSize / 2 + 2;
         ctx.fillStyle = owner.color;
         ctx.beginPath();
-        ctx.arc(x + tagSize / 2 + 3, tagY, tagSize / 2, 0, Math.PI * 2);
+        ctx.arc(m.x + tagSize / 2 + 3, tagY, tagSize / 2, 0, Math.PI * 2);
         ctx.fill();
         ctx.strokeStyle = '#ffffff';
         ctx.lineWidth = 1.5;
@@ -509,7 +710,7 @@ export function renderBoard(
         ctx.fillStyle = '#ffffff';
         ctx.shadowColor = 'rgba(0,0,0,0.6)';
         ctx.shadowBlur = 2;
-        ctx.fillText(owner.username[0] ?? '?', x + tagSize / 2 + 3, tagY);
+        ctx.fillText(owner.username[0] ?? '?', m.x + tagSize / 2 + 3, tagY);
         ctx.restore();
 
         ownerExtraH = barH + tagSize + 5;
@@ -519,19 +720,20 @@ export function renderBoard(
     // 地产内容（价格/建筑/等级）
     if (isProperty) {
       const owner = state.players.find((p) => p.id === tile.ownerId);
-      const contentTop = y + headerH + ownerExtraH + 2;
-      const contentY = contentTop + (h - (contentTop - y)) / 2;
+      const contentTop = m.y + m.headerH + ownerExtraH + 2;
+      const contentY = contentTop + (m.h - (contentTop - m.y)) / 2;
       if (owner) {
-        const iconSize = minDim * 0.16;
+        const iconSize = minDim * 0.28;
         const buildingType = tile.buildingType ?? 'house';
-        drawBuildingWithLevel(ctx, center.x, contentY, iconSize, buildingType, tile.level);
+        const contentY = contentTop + (m.h - (contentTop - m.y)) / 2 - minDim * 0.03;
+        drawBuildingWithLevel(ctx, drawCenter.x, contentY, iconSize, buildingType, tile.level);
 
         setTextShadow(ctx, 'rgba(0,0,0,0.8)');
-        ctx.font = `bold ${Math.max(7, minDim * 0.11)}px sans-serif`;
+        ctx.font = `bold ${Math.max(8, minDim * 0.12)}px sans-serif`;
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
         ctx.fillStyle = '#f1c40f';
-        ctx.fillText(`$${formatMoney(tile.baseRent)}`, center.x, contentY + minDim * 0.14);
+        ctx.fillText(`$${formatMoney(tile.baseRent)}`, drawCenter.x, contentY + minDim * 0.22);
         clearTextShadow(ctx);
       } else {
         const priceFontSize = Math.max(9, minDim * 0.15);
@@ -540,22 +742,30 @@ export function renderBoard(
         ctx.textBaseline = 'middle';
         setTextShadow(ctx, 'rgba(0,0,0,0.8)');
         ctx.fillStyle = '#ffffff';
-        ctx.fillText(`$${formatMoney(tile.basePrice)}`, center.x, contentY);
+        ctx.fillText(`$${formatMoney(tile.basePrice)}`, drawCenter.x, contentY);
         clearTextShadow(ctx);
       }
     }
 
-    // 陷阱道具图标（右下角）
+    // 陷阱道具图标（右下角）—— 使用本格中心，不跟随跨格矩形
     if (tile.traps && tile.traps.length > 0) {
-      const trapY = Math.max(y + headerH + minDim * 0.1, y + h - minDim * 0.18);
-      drawTrapIcon(ctx, x + w - minDim * 0.18, trapY, minDim * 0.14, tile.traps[0].type);
+      const tMinDim = Math.min(tileRect.width, tileRect.height);
+      const trapY = Math.max(
+        tileRect.y + tMinDim * 0.28 + tMinDim * 0.1,
+        tileRect.y + tileRect.height - tMinDim * 0.18
+      );
+      drawTrapIcon(ctx, tileRect.x + tileRect.width - tMinDim * 0.18, trapY, tMinDim * 0.14, tile.traps[0].type);
     }
 
-    // 神明图标（右上角）
+    // 神明图标（右上角）—— 使用本格中心
     const spirit = state.spirits.find((s) => s.pathIndex === tile.index);
     if (spirit) {
-      const spiritY = Math.max(y + headerH + minDim * 0.1, center.y - h * 0.05);
-      drawSpiritIcon(ctx, center.x + minDim * 0.2, spiritY, minDim * 0.16, spirit);
+      const tMinDim = Math.min(tileRect.width, tileRect.height);
+      const spiritY = Math.max(
+        tileRect.y + tMinDim * 0.28 + tMinDim * 0.1,
+        tileCenter.y - tileRect.height * 0.05
+      );
+      drawSpiritIcon(ctx, tileCenter.x + tMinDim * 0.2, spiritY, tMinDim * 0.16, spirit);
     }
   });
 

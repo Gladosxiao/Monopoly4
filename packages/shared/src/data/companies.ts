@@ -28,6 +28,26 @@ export const DEFAULT_COMPANIES: Company[] = [
     profit: 0,
     totalProfit: 0,
   },
+];
+
+export const DEFAULT_STOCKS: Stock[] = DEFAULT_COMPANIES.map((company) => ({
+  id: `stock-${company.id}`,
+  name: `${company.name}股票`,
+  companyId: company.id,
+  price: 200,
+  basePrice: 200,
+  totalShares: 10000,
+  availableShares: 10000,
+  suspendedDays: 0,
+  fluctuation: 0,
+}));
+
+/**
+ * 全部 9 家公司定义（含默认未启用的公司）。
+ * 主要用于测试，保证旧的公司特效测试用例仍可找到对应公司。
+ */
+export const ALL_COMPANIES: Company[] = [
+  ...DEFAULT_COMPANIES,
   {
     id: 'automobile',
     name: '汽车公司',
@@ -78,7 +98,7 @@ export const DEFAULT_COMPANIES: Company[] = [
   },
 ];
 
-export const DEFAULT_STOCKS: Stock[] = DEFAULT_COMPANIES.map((company) => ({
+export const ALL_STOCKS: Stock[] = ALL_COMPANIES.map((company) => ({
   id: `stock-${company.id}`,
   name: `${company.name}股票`,
   companyId: company.id,

@@ -4,6 +4,7 @@
  */
 
 import type { GameState, Player, Tile, GameConfig, RoomPlayer } from '@monopoly4/shared';
+import { ALL_COMPANIES, ALL_STOCKS } from '@monopoly4/shared';
 import { createGame } from '../engine.js';
 
 export const DEFAULT_TEST_CONFIG: GameConfig = {
@@ -28,6 +29,9 @@ export function makeTestState(
   state.priceIndex = 1;
   // 测试中默认清空 NPC，避免随机 NPC 干扰断言；需要测试 NPC 时手动添加
   state.npcs = [];
+  // 默认游戏只有 3 家公司，但旧测试仍需要全部 9 家公司特效，因此注入完整公司/股票数据
+  state.companies = JSON.parse(JSON.stringify(ALL_COMPANIES));
+  state.stocks = JSON.parse(JSON.stringify(ALL_STOCKS));
   return state;
 }
 

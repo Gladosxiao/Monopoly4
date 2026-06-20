@@ -148,6 +148,17 @@ export function createGame(roomId: string, config: GameConfig, roomPlayers: Room
 
   spawnNpcs(state);
 
+  // 将地图上的公司格与公司列表按顺序绑定；公司格数量多于公司时循环复用
+  const companyTiles = state.map.tiles.filter((tile) => tile.type === 'company');
+  const companyList = state.companies;
+  if (companyList.length > 0) {
+    for (let i = 0; i < companyTiles.length; i++) {
+      const company = companyList[i % companyList.length];
+      companyTiles[i].companyId = company.id;
+      companyTiles[i].name = company.name;
+    }
+  }
+
   return state;
 }
 

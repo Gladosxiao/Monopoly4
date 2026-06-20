@@ -11,29 +11,29 @@ export type { GameMap, MapTemplate, Tile, TileType, PropertySize };
 // ============ 预设模板 ============
 
 /**
- * 标准模板：参考原版节奏，土地占 55%，系统格分布均匀。
+ * 标准模板：土地占比约 65%，5 个占两步的大地产 + 5 组连续小地产。
  */
 export const DEFAULT_TEMPLATE: MapTemplate = {
   id: 'map_default',
   name: '随机乐园',
   totalTiles: 40,
-  largePropertyCount: 4,
+  largePropertyCount: 5,
   largePropertySpan: 2,
-  smallPropertyGroups: [3, 3, 3, 3], // 12 个小块，分 4 组，每组 3 个
+  smallPropertyGroups: [3, 3, 3, 3, 3], // 15 个小块，分 5 组连续 3 个
   specialTiles: {
-    fate: 3,
-    chance: 4,
+    fate: 2,
+    chance: 2,
     prison: 1,
     hospital: 1,
     shop: 2,
-    card: 4,
+    card: 1,
     tax: 2,
-    coupon30: 2,
+    coupon30: 0,
     park: 0,
     lottery: 0,
     magic: 0,
     news: 0,
-    company: 0,
+    company: 3,
     coupon10: 0,
     coupon50: 0,
     miniGame: 0,
@@ -43,88 +43,87 @@ export const DEFAULT_TEMPLATE: MapTemplate = {
 };
 
 /**
- * 快速模板：系统格更多，地产更紧凑，单局时长更短。
+ * 快速模板：地产更紧凑，单局时长更短；5 个大地产 + 4 组连续小地产。
  */
 export const FAST_TEMPLATE: MapTemplate = {
   ...DEFAULT_TEMPLATE,
   id: 'map_fast',
   name: '速战速决',
-  largePropertyCount: 3,
+  largePropertyCount: 5,
   largePropertySpan: 2,
-  smallPropertyGroups: [3, 3, 3], // 9 个小块
+  smallPropertyGroups: [3, 3, 3, 3], // 12 个小块
   specialTiles: {
     ...DEFAULT_TEMPLATE.specialTiles,
-    fate: 3,
-    chance: 3,
-    card: 5,
-    tax: 3,
+    fate: 2,
+    chance: 2,
+    card: 2,
+    tax: 2,
     shop: 2,
-    coupon30: 3,
+    coupon30: 0,
     coupon50: 1,
-    coupon10: 2,
+    coupon10: 1,
+    company: 3,
   },
   basePriceRange: [100, 500],
 };
 
 /**
- * 地产模板：土地比例更高，强调占地策略。
+ * 地产模板：土地比例最高，5 个占两步大地产 + 5 组连续 4 个小地产。
  */
 export const ECONOMY_TEMPLATE: MapTemplate = {
   ...DEFAULT_TEMPLATE,
   id: 'map_economy',
   name: '地产为王',
-  largePropertyCount: 4,
+  largePropertyCount: 5,
   largePropertySpan: 2,
-  smallPropertyGroups: [4, 4, 4, 4], // 16 个小块，分 4 组，每组 4 个
-  specialTiles: {
-    fate: 2,
-    chance: 2,
-    prison: 1,
-    hospital: 1,
-    shop: 1,
-    card: 3,
-    tax: 1,
-    coupon30: 0,
-    coupon50: 2,
-    coupon10: 2,
-    park: 0,
-    lottery: 0,
-    magic: 0,
-    news: 0,
-    company: 0,
-    miniGame: 0,
-  },
-  basePriceRange: [120, 700],
-};
-
-/**
- * 4 人桌游模板：人均 1 个大块、3 个小块，卡片/道具获取更充裕。
- *
- * 目标：4 人每局绕 1 圈左右，人均获得卡片+道具约 10 个。
- */
-export const PLAYER4_TEMPLATE: MapTemplate = {
-  id: 'map_4player',
-  name: '四人桌游',
-  totalTiles: 40,
-  largePropertyCount: 4,
-  largePropertySpan: 2, // 每个大地产占 2 格，共 8 格
-  smallPropertyGroups: [4, 4, 4], // 12 个小块，分 3 组连续 4 个
+  smallPropertyGroups: [4, 4, 4, 4, 4], // 20 个小块，分 5 组连续 4 个
   specialTiles: {
     fate: 1,
     chance: 1,
     prison: 1,
     hospital: 1,
     shop: 1,
-    card: 5,
+    card: 0,
     tax: 1,
-    coupon10: 2,
-    coupon30: 3,
-    coupon50: 3,
+    coupon30: 0,
+    coupon50: 0,
+    coupon10: 0,
     park: 0,
     lottery: 0,
     magic: 0,
     news: 0,
-    company: 0,
+    company: 3,
+    miniGame: 0,
+  },
+  basePriceRange: [120, 700],
+};
+
+/**
+ * 4 人桌游模板：5 个占两步大地产 + 4 组连续 4 个小地产。
+ */
+export const PLAYER4_TEMPLATE: MapTemplate = {
+  id: 'map_4player',
+  name: '四人桌游',
+  totalTiles: 40,
+  largePropertyCount: 5,
+  largePropertySpan: 2, // 每个大地产占 2 格，共 10 格
+  smallPropertyGroups: [4, 4, 4, 4], // 16 个小块，分 4 组连续 4 个
+  specialTiles: {
+    fate: 1,
+    chance: 1,
+    prison: 1,
+    hospital: 1,
+    shop: 1,
+    card: 2,
+    tax: 1,
+    coupon10: 1,
+    coupon30: 0,
+    coupon50: 1,
+    park: 0,
+    lottery: 0,
+    magic: 0,
+    news: 0,
+    company: 3,
     miniGame: 0,
   },
   basePriceRange: [100, 550],
@@ -132,35 +131,32 @@ export const PLAYER4_TEMPLATE: MapTemplate = {
 };
 
 /**
- * 80 格大地图模板：同时满足 4 人局人均 9 个小块、点券翻倍（约 600 点）的目标。
- *
- * 40 格地图物理上无法同时容纳 36 个小块 + 足够点券格；80 格可在 40 回合绕 1.75 圈，
- * 使人均获得约 600 点券。
+ * 80 格大地图模板：6 个占两步大地产 + 12 组连续 4 个小地产，土地占比约 75%。
  */
 export const MAP80_TEMPLATE: MapTemplate = {
   id: 'map_80',
   name: '大地图80格',
   totalTiles: 80,
-  largePropertyCount: 4,
-  largePropertySpan: 2, // 4 个大地产各占 2 格，共 8 格
-  smallPropertyGroups: [4, 4, 4, 4, 4, 4, 4, 4, 4], // 36 个小块，分 9 组，每组 4 个
+  largePropertyCount: 6,
+  largePropertySpan: 2, // 6 个大地产各占 2 格，共 12 格
+  smallPropertyGroups: [4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4], // 48 个小块，分 12 组连续 4 个
   specialTiles: {
-    fate: 4,
-    chance: 4,
+    fate: 2,
+    chance: 2,
     prison: 1,
     hospital: 1,
-    shop: 3,
-    card: 3,
-    tax: 2,
-    coupon10: 3,
-    coupon30: 5,
-    coupon50: 8,
+    shop: 2,
+    card: 1,
+    tax: 1,
+    coupon10: 2,
+    coupon30: 2,
+    coupon50: 1,
     miniGame: 1,
     park: 0,
     lottery: 0,
     magic: 0,
     news: 0,
-    company: 0,
+    company: 3,
   },
   basePriceRange: [100, 800],
   priceCurve: 'sigmoid',
