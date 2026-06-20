@@ -44,6 +44,7 @@ import { useCard as useCardSystem, type CardContext } from './cardSystem/index.j
 import { buyCard as buyCardFromSystem, sellCard as sellCardFromSystem } from './cardSystem/index.js';
 import { useItem as useItemSystem, type ItemContext } from './itemSystem/index.js';
 import { buyItem as buyItemFromSystem, sellItem as sellItemFromSystem } from './itemSystem/index.js';
+import { destroyVehicle } from './itemSystem/effects.js';
 import { triggerTrap, tickBomb, type TriggerResult } from './itemSystem/trapSystem.js';
 import { triggerFateEvent, triggerNewsEvent, type EventEffect, type EventOutcome } from './eventSystem/index.js';
 import { spawnNpcs, moveNpcs, triggerNpcEffect } from './npcSystem/index.js';
@@ -1362,12 +1363,12 @@ function applyEventEffects(state: GameState, player: Player, effects: EventEffec
         break;
       }
       case 'loseVehicle': {
-        player.vehicle = 'walk';
+        destroyVehicle(player);
         state.logs.push({
           timestamp: Date.now(),
           type: 'event:loseVehicle',
           actorId: player.id,
-          message: `${player.username} ${effect.reason}，交通工具恢复步行`,
+          message: `${player.username} ${effect.reason}，交通工具损坏，恢复步行`,
         });
         break;
       }

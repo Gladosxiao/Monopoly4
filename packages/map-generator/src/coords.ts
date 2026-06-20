@@ -91,7 +91,7 @@ export function snakeLayout(map: GameMap, width: number, height: number): BoardL
   const cols = bestCols;
   const rows = bestRows;
   const tileSize = bestSize;
-  const padding = 4;
+  const padding = Math.max(5, Math.round(tileSize * 0.08));
   const path = buildSnakePath(total, cols);
 
   return {

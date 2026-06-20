@@ -112,10 +112,13 @@ export function useItem(
 
   const result = effect(state, player, ctx);
   if (result.success) {
-    // 使用成功后扣减数量
-    itemInstance.quantity -= 1;
-    if (itemInstance.quantity === 0) {
-      player.items = player.items.filter((i) => i.instanceId !== itemInstance.instanceId);
+    // 交通工具为可反复装备/卸下的道具，不消耗数量；其他道具使用一次扣一个
+    const def = ITEM_DEFINITIONS[itemId];
+    if (def?.type !== 'vehicle') {
+      itemInstance.quantity -= 1;
+      if (itemInstance.quantity === 0) {
+        player.items = player.items.filter((i) => i.instanceId !== itemInstance.instanceId);
+      }
     }
   }
   return result;

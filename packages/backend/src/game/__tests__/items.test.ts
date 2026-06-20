@@ -15,25 +15,27 @@ function prepareActingState(state: GameState, playerIndex = 0): void {
 }
 
 describe('交通工具道具', () => {
-  it('机车道具进入背包并保持唯一', () => {
+  it('装备机车道具后保留在背包中且 vehicle 变为 bike', () => {
     const state = makeTestState();
     prepareActingState(state);
     giveItem(state.players[0], 'bike');
     const result = useItem(state, 'p1', 'bike');
     expect(result.success).toBe(true);
     expect(state.players[0].items.some((i) => i.itemId === 'bike')).toBe(true);
+    expect(state.players[0].vehicle).toBe('bike');
   });
 
-  it('汽车道具进入背包并保持唯一', () => {
+  it('装备汽车道具后保留在背包中且 vehicle 变为 car', () => {
     const state = makeTestState();
     prepareActingState(state);
     giveItem(state.players[0], 'car');
     const result = useItem(state, 'p1', 'car');
     expect(result.success).toBe(true);
     expect(state.players[0].items.some((i) => i.itemId === 'car')).toBe(true);
+    expect(state.players[0].vehicle).toBe('car');
   });
 
-  it('使用新交通工具会替换背包中旧交通工具', () => {
+  it('装备新交通工具会卸下旧交通工具，两者都保留在背包中', () => {
     const state = makeTestState();
     prepareActingState(state);
     giveItem(state.players[0], 'bike');
@@ -41,7 +43,19 @@ describe('交通工具道具', () => {
     giveItem(state.players[0], 'car');
     useItem(state, 'p1', 'car');
     expect(state.players[0].items.some((i) => i.itemId === 'car')).toBe(true);
-    expect(state.players[0].items.some((i) => i.itemId === 'bike')).toBe(false);
+    expect(state.players[0].items.some((i) => i.itemId === 'bike')).toBe(true);
+    expect(state.players[0].vehicle).toBe('car');
+  });
+
+  it('再次点击已装备的交通工具会卸下并恢复步行', () => {
+    const state = makeTestState();
+    prepareActingState(state);
+    giveItem(state.players[0], 'bike');
+    useItem(state, 'p1', 'bike');
+    const result = useItem(state, 'p1', 'bike');
+    expect(result.success).toBe(true);
+    expect(state.players[0].vehicle).toBe('walk');
+    expect(state.players[0].items.some((i) => i.itemId === 'bike')).toBe(true);
   });
 });
 

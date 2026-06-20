@@ -9,13 +9,23 @@ import {
   CARD_DEFINITIONS,
   ITEM_DEFINITIONS,
   DEFAULT_GAME_CONFIG,
+  CHARACTERS,
 } from '@monopoly4/shared';
 import { getCurrentUser } from '../state/user.js';
 import { getCurrentGame, setCurrentGame } from '../state/game.js';
-import { createBoardCanvas, renderBoard, getTileIndexAt } from '../board.js';
+import {
+  createBoardCanvas,
+  renderBoard,
+  getTileIndexAt,
+  preloadTokenImages,
+  getCurrentBoardLayout,
+  isMoveAnimating,
+  stopMoveAnimationNow,
+} from '../board.js';
+import { startMoveAnimation } from '../moveAnimation.js';
 import { createTestPanel, isTestMode } from '../testMode/index.js';
 import { registerCleanup, navigateToLogin, navigateToLobby } from '../router.js';
-import { showToast, showPrompt, escapeHtml } from '../ui/common.js';
+import { showToast, showPrompt, escapeHtml, showBanner } from '../ui/common.js';
 import { launchMiniGame } from '../minigames/index.js';
 import {
   rollDice,
@@ -45,6 +55,39 @@ let isBackpackCollapsed = false;
 let gameCanvas: HTMLCanvasElement | null = null;
 let currentHoverIndex = -1;
 let currentHoverPixel: { x: number; y: number } | undefined;
+let lastBannerLogTimestamp = 0;
+
+/** 需要 Banner 强提醒的日志类型 */
+const BANNER_LOG_TYPES = new Set([
+  'event:triggered',
+  'player:tax',
+  'player:rent',
+  'rent:detail',
+  'player:hospital',
+  'player:jail',
+  'player:coupon',
+  'player:card',
+  'player:lotteryWin',
+  'game:lotteryDraw',
+  'item:vehicle',
+  'event:loseVehicle',
+]);
+
+function maybeShowEventBanners(logs: GameLog[]): void {
+  for (const log of logs) {
+    if (log.timestamp <= lastBannerLogTimestamp) continue;
+    if (!BANNER_LOG_TYPES.has(log.type)) continue;
+
+    let type: 'info' | 'error' | 'success' | 'warning' = 'info';
+    if (log.type === 'player:tax' || log.type === 'player:rent' || log.type === 'event:loseVehicle') {
+      type = 'warning';
+    } else if (log.type === 'player:coupon' || log.type === 'player:lotteryWin' || log.type === 'game:lotteryDraw') {
+      type = 'success';
+    }
+    showBanner(log.message, type, 4500);
+    lastBannerLogTimestamp = Math.max(lastBannerLogTimestamp, log.timestamp);
+  }
+}
 
 /** 小游戏状态 */
 let activeMiniGameType: string | undefined;
@@ -222,6 +265,8 @@ export async function renderGamePage(roomId: string): Promise<void> {
   currentHoverPixel = undefined;
   boardWrap.appendChild(canvas);
 
+  preloadTokenImages(CHARACTERS.map((c) => c.id));
+
   attachBoardEvents(canvas);
 
   container.querySelector('#btn-exit')!.addEventListener('click', () => {
@@ -265,7 +310,10 @@ export async function renderGamePage(roomId: string): Promise<void> {
     toggleBackpackBtn.textContent = isBackpackCollapsed ? '+' : '−';
   });
 
+  let previousState: GameState | null = null;
+
   function renderGame(state: GameState): void {
+    const oldState = previousState;
     setCurrentGame(state);
     // 当地图格数变化时重建 canvas
     if (String(state.map.tiles.length) !== canvas.dataset.tileCount) {
@@ -277,15 +325,33 @@ export async function renderGamePage(roomId: string): Promise<void> {
       currentHoverIndex = -1;
       currentHoverPixel = undefined;
     }
+
+    // 检测当前行动玩家是否发生位置变化，启动逐格移动动画
+    const currentPlayer = state.players[state.currentPlayerIndex];
+    if (
+      oldState &&
+      currentPlayer &&
+      !currentPlayer.isBankrupt &&
+      currentPlayer.position !== oldState.players[oldState.currentPlayerIndex]?.position &&
+      oldState.players[oldState.currentPlayerIndex]?.id === currentPlayer.id
+    ) {
+      const fromIndex = oldState.players[oldState.currentPlayerIndex].position;
+      const toIndex = currentPlayer.position;
+      startMoveAnimation(currentPlayer.id, fromIndex, toIndex);
+      scheduleAnimationFrames();
+    }
+
     renderBoardWithSelection(state);
     renderPlayersInfo(container, state);
     renderBackpack(container, state);
     renderActions(container, state);
     renderStockMarket(container, state);
     renderLogs(container, state);
+    maybeShowEventBanners(state.logs);
+
+    previousState = cloneForAnimation(state);
 
     // 自动进入小游戏（仅当前玩家且尚未进入时触发）
-    const currentPlayer = state.players[state.currentPlayerIndex];
     const currentUser = getCurrentUser();
     if (
       state.status === 'minigame' &&
@@ -305,12 +371,40 @@ export async function renderGamePage(roomId: string): Promise<void> {
     }
   }
 
+  /** 驱动逐格移动动画帧，动画结束时触发一次最终渲染。 */
+  function scheduleAnimationFrames(): void {
+    const frame = () => {
+      const state = getCurrentGame();
+      const layout = getCurrentBoardLayout();
+      if (!state || !layout || !isMoveAnimating()) return;
+      renderBoardWithSelection(state);
+      requestAnimationFrame(frame);
+    };
+    requestAnimationFrame(frame);
+  }
+
+  /** 提取动画对比所需的最小状态快照。 */
+  function cloneForAnimation(state: GameState): GameState {
+    return {
+      ...state,
+      players: state.players.map((p) => ({ ...p })),
+    } as GameState;
+  }
+
   registerCleanup(onGameState(renderGame));
   registerCleanup(
     onError((msg) => {
       showToast(msg, 'error');
     })
   );
+
+  // 棋子图片加载完成后重绘棋盘
+  const onTokenLoaded = () => {
+    const state = getCurrentGame();
+    if (state) renderBoardWithSelection(state);
+  };
+  window.addEventListener('monopoly:tokenLoaded', onTokenLoaded);
+  registerCleanup(() => window.removeEventListener('monopoly:tokenLoaded', onTokenLoaded));
 
   // 测试模式：在游戏界面右侧嵌入测试面板，不覆盖现有 UI
   if (isTestMode()) {
@@ -440,10 +534,13 @@ export function renderBackpack(container: HTMLElement, state: GameState): void {
       const cell = document.createElement('div');
       cell.className = 'item-cell';
       const typeColor = ITEM_TYPE_COLORS[def?.type ?? ''] || '#555';
+      const isVehicle = def?.type === 'vehicle';
+      const isEquipped = isVehicle && myPlayer.vehicle === it.itemId;
+      if (isEquipped) cell.classList.add('item-cell-equipped');
       cell.style.borderColor = typeColor;
       cell.innerHTML = `
         <div class="item-cell-name" style="background:${typeColor}">${def?.name ?? it.itemId}</div>
-        <div class="item-cell-qty">×${it.quantity}</div>
+        <div class="item-cell-qty">×${it.quantity}${isEquipped ? ' · 装备中' : ''}</div>
       `;
       // 悬停 tooltip
       cell.title = def?.description ?? it.itemId;
@@ -473,10 +570,25 @@ export function renderActions(container: HTMLElement, state: GameState): void {
 
   if (isMyTurn) {
     if (state.status === 'rolling') {
-      const btn = document.createElement('button');
-      btn.textContent = `掷骰子 (${state.lastRoll ?? '?'})`;
-      btn.addEventListener('click', () => rollDice(state.roomId));
-      el.appendChild(btn);
+      const maxDice = currentPlayer.vehicle === 'walk' ? 1 : currentPlayer.vehicle === 'bike' ? 2 : 3;
+      if (maxDice === 1) {
+        const btn = document.createElement('button');
+        btn.innerHTML = '🎲 掷骰子';
+        btn.addEventListener('click', () => rollDice(state.roomId, 1));
+        el.appendChild(btn);
+      } else {
+        const label = document.createElement('div');
+        label.textContent = `🎲 选择骰子数（最多 ${maxDice} 颗）`;
+        label.style.fontSize = '13px';
+        label.style.color = 'var(--color-text-muted)';
+        el.appendChild(label);
+        for (let i = 1; i <= maxDice; i++) {
+          const btn = document.createElement('button');
+          btn.innerHTML = `🎲 掷 ${i} 颗骰子`;
+          btn.addEventListener('click', () => rollDice(state.roomId, i));
+          el.appendChild(btn);
+        }
+      }
     } else if (state.status === 'acting') {
       const tileIndex = state.pendingTileIndex ?? currentPlayer.position;
       const tile = state.map.tiles[tileIndex];
@@ -660,6 +772,7 @@ export function renderStockMarket(container: HTMLElement, state: GameState): voi
         <th>股价</th>
         <th>涨跌</th>
         <th>持有</th>
+        <th>持股比例</th>
         <th>成本价（仓位）</th>
         <th>操作</th>
       </tr>
@@ -693,11 +806,16 @@ export function renderStockMarket(container: HTMLElement, state: GameState): voi
     const unrealized = holding > 0 ? (stock.price - costBasis) * holding : 0;
     const plClass = unrealized >= 0 ? 'stock-up' : 'stock-down';
     const plSign = unrealized >= 0 ? '+' : '';
+    const shareRatio = (holding / stock.totalShares) * 100;
+    const ratioText = `${shareRatio.toFixed(2)}%`;
+    const isChairman = company?.chairmanPlayerId === currentPlayer?.id;
+    const ratioClass = isChairman ? 'stock-chairman' : '';
     tr.innerHTML = `
-      <td>${stock.name}<br><small>董事长：${chairman}（需>10%）</small></td>
+      <td>${stock.name}<br><small>董事长：${chairman}</small></td>
       <td>$${stock.price}</td>
       <td class="${fluctuationClass}">${fluctuationSign}${stock.fluctuation}%</td>
       <td>${holding}</td>
+      <td class="${ratioClass}">${ratioText}<br><small>阈值>10%</small></td>
       <td>$${costBasis}<br><small class="${plClass}">${plSign}$${unrealized}</small></td>
       <td></td>
     `;
@@ -862,8 +980,12 @@ export async function promptCardTarget(state: GameState, cardId: string): Promis
     const typeInput = await showPrompt('输入建筑类型（house/chainStore/park/mall/hotel/gasStation/lab）：');
     target.buildingType = typeInput as BuildingType | undefined;
   } else if (cardId === 'priceRise' || cardId === 'seal' || cardId === 'angel' || cardId === 'devil') {
-    const groupInput = await showPrompt('输入目标路段 group 编号：');
-    target.targetGroup = parseInt(groupInput || '', 10);
+    const tileIdx = await selectTileOnBoard(
+      state,
+      '请点击目标路段中的任意一个土地块',
+      (t) => t.type === 'property' && t.group !== undefined
+    );
+    target.targetGroup = state.map.tiles[tileIdx].group;
   } else if (cardId === 'alliance' || cardId === 'turnAround' || cardId === 'stay' || cardId === 'turtle' || cardId === 'sleepwalk' || cardId === 'frame' || cardId === 'snatch' || cardId === 'equalPoverty') {
     const choice = await showPrompt('选择目标玩家：', {
       choices: state.players.map((p, i) => ({ value: String(i + 1), label: `${i + 1}. ${p.username}` })),
@@ -886,6 +1008,39 @@ export async function promptItemTarget(state: GameState, itemId: string): Promis
     target.diceValue = parseInt(diceInput || '', 10);
   } else if (itemId === 'barrier' || itemId === 'mine' || itemId === 'timeBomb' || itemId === 'missile') {
     target.targetTileIndex = await selectTileOnBoard(state, '请点击要放置道具的目标地块');
+  } else if (itemId === 'robot') {
+    const currentUser = getCurrentUser();
+    const myPlayer = state.players.find((p) => p.id === currentUser?.id);
+    target.targetTileIndex = await selectTileOnBoard(state, '请点击要使用机器人的目标土地', (t) =>
+      t.type === 'property' && t.ownerId === myPlayer?.id
+    );
+    const tile = state.map.tiles[target.targetTileIndex];
+    if (!tile || tile.type !== 'property' || tile.ownerId !== myPlayer?.id) return target;
+
+    // 达到升级分支时才询问
+    const canLevelUp = (tile.buildingType ?? 'house') === 'house' && tile.level < 5;
+    if (!canLevelUp) {
+      const options: { value: string; label: string }[] =
+        tile.size === 'small'
+          ? [
+              { value: 'house', label: '住宅（继续升级）' },
+              { value: 'chainStore', label: '连锁店' },
+            ]
+          : [
+              { value: 'park', label: '公园' },
+              { value: 'mall', label: '商场' },
+              { value: 'hotel', label: '旅馆' },
+              { value: 'gasStation', label: '加油站' },
+              { value: 'lab', label: '研究所' },
+            ];
+      const choice = await showPrompt('选择机器人的升级/改建分支：', {
+        choices: options.map((o, i) => ({ value: String(i + 1), label: `${i + 1}. ${o.label}` })),
+      });
+      const idx = parseInt(choice || '', 10) - 1;
+      if (idx >= 0 && idx < options.length) {
+        target.buildingType = options[idx].value as BuildingType;
+      }
+    }
   }
   return target;
 }

@@ -103,7 +103,7 @@ export interface GameConfig {
 }
 
 export const DEFAULT_GAME_CONFIG: GameConfig = {
-  totalFunds: 100000,
+  totalFunds: 10000,
   moveMode: 'walk',
   landLease: 'perpetual',
   gameTime: 'perpetual',
@@ -149,6 +149,17 @@ export type BuildingType =
   | 'hotel' // 旅馆（大块）
   | 'gasStation' // 加油站（大块）
   | 'lab'; // 研究所（大块）
+
+/** 建筑类型对应的中文标签 */
+export const BUILDING_LABELS: Record<BuildingType, string> = {
+  house: '住宅',
+  chainStore: '连锁店',
+  park: '公园',
+  mall: '商场',
+  hotel: '旅馆',
+  gasStation: '加油站',
+  lab: '研究所',
+};
 
 export type TrapType = 'barrier' | 'mine' | 'timeBomb';
 
@@ -341,6 +352,8 @@ export interface ItemUseTarget {
   targetTileIndex?: number;
   targetPlayerId?: string;
   diceValue?: number;
+  /** 机器人道具升级/改建目标建筑类型 */
+  buildingType?: BuildingType;
 }
 
 export interface TurnSnapshot {

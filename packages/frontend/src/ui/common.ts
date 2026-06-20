@@ -27,6 +27,49 @@ export function showToast(message: string, type: 'info' | 'error' | 'success' = 
   }, 3000);
 }
 
+let bannerTimer: ReturnType<typeof setTimeout> | null = null;
+let currentBanner: HTMLElement | null = null;
+
+/**
+ * 显示顶部居中 Banner，几秒后自动消失，新的 Banner 会立即顶掉旧的。
+ * 用于事件类消息（罚款、获得金钱、住院等）的强提醒。
+ */
+export function showBanner(
+  message: string,
+  type: 'info' | 'error' | 'success' | 'warning' = 'info',
+  duration = 4000
+): void {
+  let container = document.querySelector('.banner-container') as HTMLElement | null;
+  if (!container) {
+    container = document.createElement('div');
+    container.className = 'banner-container';
+    document.body.appendChild(container);
+  }
+
+  if (currentBanner) {
+    currentBanner.remove();
+    currentBanner = null;
+  }
+  if (bannerTimer) {
+    clearTimeout(bannerTimer);
+    bannerTimer = null;
+  }
+
+  const banner = document.createElement('div');
+  banner.className = `banner ${type}`;
+  banner.textContent = message;
+  container.appendChild(banner);
+  currentBanner = banner;
+
+  bannerTimer = setTimeout(() => {
+    banner.style.animation = 'bannerOut 0.3s forwards';
+    banner.addEventListener('animationend', () => {
+      banner.remove();
+      if (currentBanner === banner) currentBanner = null;
+    });
+  }, duration);
+}
+
 /** 显示一个自定义输入弹窗，替代 window.prompt */
 export function showPrompt(
   message: string,

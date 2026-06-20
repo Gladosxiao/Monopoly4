@@ -6,8 +6,8 @@
 ## 1. 现状
 
 - 前端渲染基于 `Canvas 2D`，原生 DOM 面板辅助。
-- 地块图标、玩家棋子、卡片/道具/神明等使用**文字符号 + 矢量绘制**。
-- 无现成图片资源目录，构建产物中无静态图片。
+- 地块图标、建筑、卡片/道具/神明等使用**文字符号 + 矢量绘制**。
+- 玩家棋子已使用 **emoji PNG 图片 + 白色描边**，资源位于 `packages/frontend/public/assets/tokens/`。
 
 ## 2. 资源分类
 
@@ -19,7 +19,7 @@
 | `card` | `roadRoller`, `robbery`, `taxCard`, `stayCard`, `redirection`, `avertDisaster`, `revenge`, `redeploy`, `upgradeCard`, `diceControl`, `timeBomb`, `barrier`, `remoteDice`, `swapLocation`, `buyOneGetOne`, `landSwap`, `merge`, `reduceTax`, `rebirth` | 卡片插画 | 96×128 | 192×256 |
 | `item` | `dice`, `remoteDice`, `redDice`, `missile`, `machineDice`, `turtleCard`, `roadblock`, `timeBomb` 等 | 道具图标 | 48×48 | 96×96 |
 | `character` | `sunWukong`, `monopolyKid`, `ayumi`, `miku`, `sanzang` | 角色头像/立绘 | 头像 64×64，立绘 256×320 | 头像 128×128，立绘 512×640 |
-| `token` | `token-red`, `token-blue`, `token-green`, `token-yellow` | 玩家棋子 | 32×32 | 64×64 |
+| `token` | `sun`, `atu`, `qian`, `gongben`, `john`, `salon`, `nin`, `sara`, `tang`, `wumi`, `danny`, `beibei` | 玩家棋子（角色 emoji） | 64×64 | 64×64 |
 | `ui` | `logo`, `bg-lobby`, `bg-board`, `button-primary`, `panel-frame` | UI 背景与装饰 | 按需 | 2048×2048 |
 
 ## 3. 目录结构
@@ -36,7 +36,7 @@ packages/frontend/public/assets/
 └── ui/             # UI 背景与装饰
 ```
 
-> 约定：`public/assets/` 目录下**任一子目录为空**时，对应类别使用默认 Canvas 绘制，不加载图片。
+> 约定：`public/assets/` 目录下**任一子目录为空**时，对应类别使用默认 Canvas 绘制，不加载图片。当前 `tokens/` 目录已有 12 张角色棋子 PNG。
 
 ## 4. 接口预留
 
@@ -156,5 +156,6 @@ function drawTileIcon(
 | 清单格式 | ✅ 文档已定义 |
 | 资源管理器接口 | ✅ 文档已定义 |
 | 尺寸限制 | ✅ 文档已定义 |
-| 实际资源文件 | ⬜ 暂无 |
-| 渲染层接入 | ⬜ 暂无 |
+| 棋子 PNG 资源 | ✅ 已生成 12 张 emoji 棋子 |
+| 棋子渲染层接入 | ✅ `board.ts` 已加载并绘制 PNG + 白色描边 |
+| 其他类别资源 | ⬜ 暂无 |

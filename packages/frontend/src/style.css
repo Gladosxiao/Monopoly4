@@ -198,6 +198,64 @@ select:focus {
   }
 }
 
+/* 顶部 Banner */
+.banner-container {
+  position: fixed;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1100;
+  pointer-events: none;
+}
+
+.banner {
+  padding: 14px 28px;
+  border-radius: 999px;
+  color: #fff;
+  background: rgba(30, 30, 46, 0.95);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  font-size: var(--font-size-base);
+  font-weight: 600;
+  text-align: center;
+  white-space: nowrap;
+  border: 2px solid rgba(255, 255, 255, 0.15);
+  animation: bannerIn 0.25s ease forwards;
+  pointer-events: auto;
+}
+
+.banner.error {
+  background: rgba(192, 57, 43, 0.95);
+  border-color: rgba(231, 76, 60, 0.6);
+}
+
+.banner.success {
+  background: rgba(39, 174, 96, 0.95);
+  border-color: rgba(46, 204, 113, 0.6);
+}
+
+.banner.warning {
+  background: rgba(211, 84, 0, 0.95);
+  border-color: rgba(230, 126, 34, 0.6);
+}
+
+@keyframes bannerIn {
+  from {
+    opacity: 0;
+    transform: translateY(-20px) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes bannerOut {
+  to {
+    opacity: 0;
+    transform: translateY(-16px) scale(0.95);
+  }
+}
+
 /* 简易弹窗 */
 .modal-overlay {
   position: fixed;
@@ -815,6 +873,14 @@ select:focus {
   color: var(--color-text);
 }
 
+.item-cell-equipped {
+  box-shadow: 0 0 0 2px var(--color-success), 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.item-cell-equipped .item-cell-qty {
+  color: var(--color-success);
+}
+
 .month-info {
   margin-top: var(--space-sm);
   padding-top: var(--space-sm);
@@ -1004,6 +1070,11 @@ select:focus {
 
 .stock-down {
   color: var(--color-error);
+}
+
+.stock-chairman {
+  color: var(--color-success);
+  font-weight: 700;
 }
 
 @media (max-width: 900px) {

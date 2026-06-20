@@ -2,8 +2,8 @@
 // 每种道具对应一个 ItemEffect 函数：
 //   (state, user, context) => { success, message }
 
-import type { GameState, Player, Tile, Trap, ItemDefinition, TurnSnapshot } from '@monopoly4/shared';
-import { ITEM_DEFINITIONS } from '@monopoly4/shared';
+import type { GameState, Player, Tile, Trap, ItemDefinition, TurnSnapshot, BuildingType } from '@monopoly4/shared';
+import { ITEM_DEFINITIONS, BUILDING_LABELS } from '@monopoly4/shared';
 import { getCurrentPlayer, payMoney } from '../engine.js';
 import { tryBlockBuildingDestruction, adjustStatusDaysBySpirit } from '../spiritEffects.js';
 
@@ -11,6 +11,7 @@ export interface ItemContext {
   targetTileIndex?: number;
   targetPlayerId?: string;
   diceValue?: number; // 遥控骰子选择的点数
+  buildingType?: BuildingType; // 机器人道具升级/改建分支
 }
 
 export interface ItemEffectResult {
@@ -81,18 +82,26 @@ function addStatusEffect(
 }
 
 function setVehicle(player: Player, itemId: 'bike' | 'car' | undefined): void {
-  // 移除现有交通工具
-  player.items = player.items.filter((i) => i.itemId !== 'bike' && i.itemId !== 'car');
   // 同步更新玩家载具状态，确保 getMaxDiceCount() 读取到最新值
   player.vehicle = itemId ?? 'walk';
-  if (itemId) {
-    player.items.push({ instanceId: generateId(), itemId, quantity: 1 });
-  }
 }
 
-function destroyVehicle(player: Player): void {
+export function destroyVehicle(player: Player): void {
   player.items = player.items.filter((i) => i.itemId !== 'bike' && i.itemId !== 'car');
   player.vehicle = 'walk';
+}
+
+function toggleVehicle(state: GameState, player: Player, itemId: 'bike' | 'car'): { success: boolean; message?: string } {
+  // 已经装备该载具：点击卸下
+  if (player.vehicle === itemId) {
+    setVehicle(player, undefined);
+    log(state, 'item:vehicle', player.id, `${player.username} 卸下${ITEM_DEFINITIONS[itemId].name}，恢复步行`);
+    return { success: true };
+  }
+  // 装备新载具：保留其他载具道具在背包中，仅切换当前装备
+  setVehicle(player, itemId);
+  log(state, 'item:vehicle', player.id, `${player.username} 装备${ITEM_DEFINITIONS[itemId].name}`);
+  return { success: true };
 }
 
 function placeTrap(state: GameState, user: Player, itemId: 'barrier' | 'mine' | 'timeBomb', tileIndex: number): ItemEffectResult {
@@ -123,15 +132,11 @@ function placeTrap(state: GameState, user: Player, itemId: 'barrier' | 'mine' | 
 // ===== 交通工具 =====
 
 const bike: ItemEffect = (state, user) => {
-  setVehicle(user, 'bike');
-  log(state, 'item:vehicle', user.id, `${user.username} 骑上了机车`);
-  return { success: true };
+  return toggleVehicle(state, user, 'bike');
 };
 
 const car: ItemEffect = (state, user) => {
-  setVehicle(user, 'car');
-  log(state, 'item:vehicle', user.id, `${user.username} 开上了汽车`);
-  return { success: true };
+  return toggleVehicle(state, user, 'car');
 };
 
 // ===== 陷阱 =====
@@ -234,9 +239,40 @@ const robot: ItemEffect = (state, user, ctx) => {
   if (!tile || tile.type !== 'property' || tile.ownerId !== user.id) {
     return { success: false, message: '只能选择自己的土地' };
   }
-  if (tile.level >= 5) return { success: false, message: '该建筑已满级' };
-  tile.level += 1;
-  log(state, 'item:robot', user.id, `${user.username} 使用机器人，${tile.name} 免费升 1 级`);
+
+  // 确定目标建筑类型：前端传入则优先使用；否则自动选择默认分支
+  let targetType = ctx.buildingType;
+  if (!targetType) {
+    if (tile.level < 5 && tile.buildingType === 'house') {
+      targetType = 'house';
+    } else if (tile.size === 'small') {
+      targetType = 'chainStore';
+    } else {
+      targetType = 'park';
+    }
+  }
+
+  // 升级分支：保持 house 并提升等级
+  if (targetType === 'house') {
+    if (tile.level >= 5) return { success: false, message: '住宅已满级，请选择改建分支' };
+    tile.level += 1;
+    log(state, 'item:robot', user.id, `${user.username} 使用机器人，${tile.name} 升 1 级`);
+    return { success: true };
+  }
+
+  // 改建分支：切换建筑类型并归零/重置等级
+  const rebuildOptions: BuildingType[] = tile.size === 'small'
+    ? ['house', 'chainStore']
+    : ['park', 'mall', 'hotel', 'gasStation', 'lab'];
+  if (!rebuildOptions.includes(targetType)) {
+    return { success: false, message: '该土地不支持改建为指定建筑' };
+  }
+  if (tile.buildingType === targetType) {
+    return { success: false, message: '已经是该建筑类型' };
+  }
+  tile.buildingType = targetType;
+  tile.level = targetType === 'chainStore' ? 1 : 0;
+  log(state, 'item:robot', user.id, `${user.username} 使用机器人，${tile.name} 改建为 ${BUILDING_LABELS[targetType]}`);
   return { success: true };
 };
 
