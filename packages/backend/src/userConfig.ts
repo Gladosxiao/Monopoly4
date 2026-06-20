@@ -20,6 +20,11 @@ export interface UsersConfig {
 
 const DEFAULT_CONFIG_PATH = path.resolve(__dirname, '../users.config.json');
 
+/** 开发环境默认测试账号，避免新 clone 后无法登录测试。 */
+const DEFAULT_DEV_USERS: UserConfigEntry[] = [
+  { id: 'test', username: 'test', password: 'test123' },
+];
+
 let cachedConfig: UsersConfig | null = null;
 
 /** 重置配置缓存，主要用于测试隔离。 */
@@ -35,8 +40,13 @@ export function loadUsersConfig(): UsersConfig {
   if (cachedConfig) return cachedConfig;
   const configPath = getUsersConfigPath();
   if (!fs.existsSync(configPath)) {
-    console.warn(`[auth] 未找到用户配置文件: ${configPath}，将使用空配置且不开放注册。`);
-    return { allowRegistration: false, showTestHint: false, users: [] };
+    const env = process.env.NODE_ENV;
+    if (env === 'production' || env === 'test') {
+      console.warn(`[auth] 未找到用户配置文件: ${configPath}，将使用空配置且不开放注册。`);
+      return { allowRegistration: false, showTestHint: false, users: [] };
+    }
+    console.warn(`[auth] 未找到用户配置文件: ${configPath}，将使用开发环境默认测试账号（test / test123）。`);
+    return { allowRegistration: true, showTestHint: true, users: DEFAULT_DEV_USERS };
   }
   try {
     const raw = fs.readFileSync(configPath, 'utf-8');

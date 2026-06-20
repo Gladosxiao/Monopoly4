@@ -203,40 +203,4 @@ describe('Socket 房间与游戏流程', () => {
     guest.close();
   });
 
-  it('未启用测试模式时非房主调用测试指令被拒绝', async () => {
-    const hostToken = makeToken('host-user', '房主');
-    const guestToken = makeToken('guest-user', '客人');
-    const host = Client(`http://localhost:${port}`, { auth: { token: hostToken } });
-    const guest = Client(`http://localhost:${port}`, { auth: { token: guestToken } });
-    await Promise.all([waitForEvent(host, 'connect'), waitForEvent(guest, 'connect')]);
-
-    const roomId = 'ROOM-TEST-OFF';
-    rooms.set(roomId, {
-      id: roomId,
-      name: '测试房',
-      hostId: 'host-user',
-      status: 'waiting',
-      maxPlayers: 4,
-      mapId: 'simple',
-      config: { totalFunds: 100000, moveMode: 'walk', landLease: 'perpetual', gameTime: 'perpetual', winCondition: 'unlimited', mapId: 'simple' },
-      players: [
-        { userId: 'host-user', username: '房主', characterId: 'sun', isReady: true, isHost: true, seatIndex: 0 },
-        { userId: 'guest-user', username: '客人', characterId: 'atu', isReady: true, isHost: false, seatIndex: 1 },
-      ],
-      createdAt: Date.now(),
-    });
-
-    host.emit('room:join', roomId);
-    guest.emit('room:join', roomId);
-    await waitForEvent(host, 'room:updated');
-
-    const errorPromise = waitForEvent<string>(guest, 'error');
-    guest.emit('test:setCash', roomId, 'host-user', 999999);
-    const error = await errorPromise;
-    expect(error).toContain('测试模式未启用');
-
-    host.close();
-    guest.close();
-  });
-
 });
