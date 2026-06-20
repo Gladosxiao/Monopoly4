@@ -156,7 +156,7 @@ interface CardUseTarget {
 ## 8. 买地与升级规则
 
 - 小块土地购买后默认 `buildingType = 'house'`。
-- 大块土地购买后默认 `buildingType = 'mall'`（后续可弹窗让玩家选择）。
+- 大块土地购买后默认 `buildingType = 'house'`（后续可弹窗让玩家选择）。
 - `chainStore`、`park`、`gasStation` 不可升级。
 - 其余建筑最高 5 级。
 

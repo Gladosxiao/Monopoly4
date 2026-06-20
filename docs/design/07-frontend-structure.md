@@ -9,51 +9,40 @@ packages/frontend/
 ├── tsconfig.json
 ├── vite.config.ts
 └── src/
-    ├── main.ts                 # 应用入口：初始化路由、认证状态、全局事件
-    ├── router.ts               # 简单前端路由（hash 或 history）与页面清理
+    ├── main.ts                 # 应用入口：路由初始化、页面渲染、全局事件
     ├── api.ts                  # REST API 封装（fetch）
     ├── socket.ts               # Socket.IO 客户端封装
-    ├── state/
-    │   ├── user.ts             # 当前用户状态
-    │   └── game.ts             # 当前游戏状态
-    ├── style.css               # 全局样式、CSS 变量、响应式适配、Banner/Toast
-    ├── pages/
-    │   ├── login.ts            # 登录/注册页
-    │   ├── lobby.ts            # 大厅：房间列表、创建房间
-    │   ├── room.ts             # 房间：玩家列表、准备、开始、角色选择
-    │   └── game.ts             # 游戏主界面（棋盘、操作、背包、日志、股市）
-    ├── ui/
-    │   └── common.ts           # Toast / Banner / Prompt / escapeHtml
     ├── board.ts                # Canvas 棋盘渲染（地块/建筑/棋子/路径/陷阱/神明）
-    ├── moveAnimation.ts        # 玩家棋子逐格移动动画（按 path 顺序停顿前进）
+    ├── style.css               # 全局样式、CSS 变量、响应式适配、Banner/Toast
     ├── minigames/              # 小游戏实现
-    │   ├── index.ts
-    │   ├── manager.ts
-    │   ├── balloon.ts
-    │   ├── luckyDrop.ts
-    │   └── penguinDig.ts
+    │   ├── index.ts            # 小游戏入口
+    │   ├── manager.ts          # 小游戏管理器
+    │   ├── balloon.ts          # 七彩气球
+    │   ├── luckyDrop.ts        # 喜从天降
+    │   └── penguinDig.ts       # 企鹅挖宝
     └── testMode/               # 测试模式面板（右侧 dock）
-        ├── index.ts
-        ├── panel.ts
-        └── socket.ts
+        ├── index.ts            # 测试模式入口
+        ├── panel.ts            # 测试面板 UI
+        └── socket.ts           # 测试模式 Socket 通信
 ```
 
 ## 页面路由
 
+前端为**单页应用**，路由由 `main.ts` 管理（hash 路由）：
+
 | 路由 | 页面 | 说明 |
 |---|---|---|
-| `/login` | LoginPage | 未登录默认跳转；登录后跳转 `/lobby` |
-| `/lobby` | LobbyPage | 房间列表，可创建/加入房间 |
-| `/room/:id` | RoomPage | 房间内等待，选择角色，房主可开始游戏 |
-| `/game/:id` | GamePage | 游戏主界面 |
+| `#/login` | 登录/注册页 | 未登录默认跳转；登录后跳转 `#/lobby` |
+| `#/lobby` | 大厅页 | 房间列表，可创建/加入房间 |
+| `#/room/:id` | 房间页 | 房间内等待，选择角色，房主可开始游戏 |
+| `#/game/:id` | 游戏页 | 游戏主界面（棋盘、操作、背包、日志、股市） |
 
 ### 路由守卫
 
-- `router.ts` 在每次路由切换前检查认证状态：
-  - 未登录用户访问 `/lobby`、`/room/:id`、`/game/:id` → 重定向到 `/login`。
-  - 已登录用户访问 `/login` → 重定向到 `/lobby`。
-  - 访问 `/game/:id` 时校验是否在对局中（通过 GameStateManager 判断），否则重定向到 `/lobby`。
-- 认证状态失效（token 过期且 refresh 失败）→ 清除 auth 状态并跳转 `/login`。
+- `main.ts` 在每次路由切换前检查认证状态：
+  - 未登录用户访问 `#/lobby`、`#/room/:id`、`#/game/:id` → 重定向到 `#/login`。
+  - 已登录用户访问 `#/login` → 重定向到 `#/lobby`。
+- 认证状态失效（token 过期且 refresh 失败）→ 清除 auth 状态并跳转 `#/login`。
 
 ## 渲染方案
 
@@ -64,13 +53,13 @@ packages/frontend/
   - 地块形状与填充：
     - `property` 为圆角矩形，使用 pastel 纯色（`GROUP_COLORS`）；占多格的大地产（`span > 1`）合并绘制为一个跨格大矩形，标题/价格/所有者标识居中；
     - 功能性地块（起点/命运/机会/商店/税务/医院/监狱/小游戏/公司等）绘制为圆形，浅灰白底（`#f5f7fa`）+ 类型色加粗描边；
-    - `card` 与 `coupon10/30/50` 为更小的居中圆角矩形，表示“直接获得、无特殊操作”的格子；
+    - `card` 与 `coupon10/30/50` 为更小的居中圆角矩形，表示"直接获得、无特殊操作"的格子；
   - 顶部标题栏：约占地块高度 28%，深色底（property 为分组色加深、functional 为类型色）+ 白色粗体名称；标题栏底部带一条区分色细线；功能性地块左上角显示白色符号图标；
   - 所有者标识：标题栏下方显示所有者颜色条 + 名字首字圆标签；
   - 地产内容（价格/建筑/等级）：排布在标题栏与所有者标识下方；
   - 建筑等级标记（住宅/连锁店用并列小房子 + 中间 `Lv.X` 数字；特殊建筑用单个图标 + 等级徽章）；
   - 玩家棋子（emoji PNG + 白色描边，使用单格中心定位，多人在同格时错位显示；当前回合脉冲环，当前用户加粗白圈）；
-  - 移动动画：玩家掷骰后，棋子按 `layout.path` 顺序**逐格移动**，每到达一个格子**短暂停顿**约 120ms，再进入下一格；动画由前端 `moveAnimation.ts` 模块驱动，`board.ts` 渲染时读取动画坐标；动画期间玩家无法进行二次操作；
+  - 移动动画：玩家掷骰后，棋子按 `layout.path` 顺序**逐格移动**，每到达一个格子**短暂停顿**约 120ms，再进入下一格；动画期间玩家无法进行二次操作；
   - 陷阱道具（右下角）与神明图标（右上角），均使用单格中心/区域定位；
   - 地块连接路径线：白色半透明实线 + 发光 + 方向箭头，首尾相连用虚线表示；起点用绿色脉冲标记；
   - 地块间距：`snakeLayout` 的 `padding` 按 `tileSize * 0.08` 动态计算，确保相邻格之间有足够间隙。
@@ -97,7 +86,7 @@ packages/frontend/
 - 操作面板：
   - 掷骰：步行时显示 `🎲 掷骰子`；机车/汽车时显示 `🎲 选择骰子数`，提供 `掷 1 颗` / `掷 2 颗` / `掷 3 颗` 按钮；
   - 购买/升级/改建、银行贷款/还款、投注乐透、魔法屋施法、申请理赔、结束回合；
-- 卡片/道具面板：顶部 Tab 切换，网格显示持有卡片与道具，点击使用；车辆道具显示“装备中”高亮，点击切换装备/卸下；
+- 卡片/道具面板：顶部 Tab 切换，网格显示持有卡片与道具，点击使用；车辆道具显示"装备中"高亮，点击切换装备/卸下；
 - 股市面板：显示公司股价、涨跌、持有数量、持股比例（>10% 成为董事长）、成本价与浮动盈亏；
 - 日志面板：游戏事件流水（玩家名按角色颜色、金额金色、卡片/道具按类型着色）；
 - Banner：顶部居中自动消失的事件强提醒（罚款、获钱、住院、失去载具等），新消息顶掉旧消息；
@@ -123,71 +112,53 @@ packages/frontend/
 │                      │  ├ 持有卡片列表（点击使用）│
 │                      │  └ 持有道具列表（点击使用）│
 ├──────────────────────┼──────────────────────────┤
-│  日志面板            │  聊天面板                 │
+│  日志面板            │  股市/公司面板             │
 └──────────────────────┴──────────────────────────┘
 ```
 
-- 移动端：棋盘全宽置顶，下方 UI 面板折叠为可滑动抽屉（Tab 切换：玩家/操作/卡片/聊天）。
-- 组件通信：所有子组件通过 `GameStateManager.subscribe()` 获取状态，通过 EventBus 发送用户操作意图。
+- 移动端：棋盘全宽置顶，下方 UI 面板折叠为可滑动抽屉（Tab 切换：玩家/操作/卡片/日志）。
 
 ## 状态管理
 
 采用轻量级事件驱动方案，不引入 Redux/Pinia 等重型库：
 
 ### 全局认证状态
-- `auth.ts` 管理 token 与当前用户，提供 `AuthManager` 单例。
-- 登录/登出时通过事件总线广播 `auth:changed`，各页面监听后更新 UI。
+- `main.ts` 管理 token 与当前用户，提供 `AuthManager` 单例。
+- 登录/登出时通过事件广播 `auth:changed`，各页面监听后更新 UI。
 
-### 事件总线 (EventBus)
-- `client/src/core/EventBus.ts`：轻量发布订阅模式，用于跨组件通信。
-- 核心事件：`auth:changed`、`game:state`、`game:action`、`game:ended`、`room:updated`。
+### Socket.IO 事件
+- `socket.ts`：Socket.IO 客户端封装，监听服务端 `game:state` 事件更新本地状态。
+- 核心事件：`game:state`、`room:updated`、`error`。
 
-### 游戏状态管理器 (GameStateManager)
-- `client/src/game/GameStateManager.ts`：单例，接收 `game:state` 事件，持有当前 `GameState`。
-- 提供 `getState()`、`subscribe(callback)` 方法，UI 组件订阅状态变更后触发渲染。
-- 接收 `game:action` 事件后，先更新状态再触发动画。
-
-### 页面级状态
-- 每个 Page 类自行管理 DOM 与事件监听，通过 EventBus 与全局状态通信。
-- GamePage 内部组件（Board、Dice、CardUI 等）订阅 GameStateManager，不直接持有状态。
+### 游戏状态
+- `main.ts` 中通过 `GameState` 持有当前游戏状态，UI 组件从该状态读取并渲染。
 
 ## 与后端交互
 
-- HTTP：登录、注册、角色/地图列表、房间 CRUD、商店。
-- WebSocket：加入房间后切换到 socket 通信，接收实时状态。
+- HTTP：登录、注册、房间 CRUD、地图列表。
+- WebSocket：加入房间后切换到 socket 通信，接收实时状态；卡片/道具/股票/贷款/乐透/魔法屋等操作通过 socket 事件处理。
 
 ### 共享模块引用
 
 - 前端通过 Vite 的 `tsconfig paths` 直接引用 `shared` 源码：
   ```json
-  // client/tsconfig.json
+  // packages/frontend/tsconfig.json
   {
     "compilerOptions": {
       "paths": {
-        "@shared/*": ["../shared/src/*"]
+        "@monopoly4/shared": ["../shared/src"]
       }
     }
   }
   ```
 - `vite.config.ts` 配置 alias：
   ```typescript
-  resolve: { alias: { '@shared': path.resolve(__dirname, '../shared/src') } }
+  resolve: { alias: { '@monopoly4/shared': path.resolve(__dirname, '../shared/src') } }
   ```
-- 引用示例：`import { GameState, Tile } from '@shared/types'`。
+- 引用示例：`import { GameState, Tile } from '@monopoly4/shared'`。
 
 ## 响应式适配
 
 - 桌面端：棋盘在左侧，UI 面板在右侧。
 - 移动端：棋盘全宽，UI 面板可折叠为底部抽屉。
 - Canvas 根据容器大小自动缩放（devicePixelRatio 处理）。
-
-## 首期裁剪
-
-> 卡片与道具为 MVP 核心功能，首期实现基础子集；神明、股票、公司等为扩展系统，首期不实现。
-
-为尽快实现可玩版本，首期前端裁剪如下：
-- 只实现 1 张地图（台湾或简化地图）；
-- 住宅升级 + 连锁店改建，特殊建筑（商场/旅馆/加油站/研究所）首期可选实现；
-- 基础卡片子集（约 12 种：遥控骰子、转向卡、停留卡、乌龟卡、购地卡、换地卡、拍卖卡、天使卡、恶魔卡、怪兽卡、拆除卡、机器娃娃）；
-- 基础道具子集（约 8 种：机车、汽车、路障、地雷、定时炸弹、飞弹、遥控骰子、机器娃娃）；
-- 不实现神明、股票、公司、小游戏、新闻、魔法屋等扩展系统。
