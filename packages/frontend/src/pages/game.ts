@@ -351,7 +351,13 @@ export async function renderGamePage(roomId: string): Promise<void> {
     if (String(state.map.tiles.length) !== canvas.dataset.tileCount) {
       const oldCanvas = canvas;
       const newCanvas = createBoardCanvas(state.map.tiles.length);
-      boardWrap.replaceChild(newCanvas, oldCanvas);
+      // 防止旧 canvas 因页面切换/清理已不在 boardWrap 中导致 replaceChild 报错
+      if (oldCanvas.parentNode === boardWrap) {
+        boardWrap.replaceChild(newCanvas, oldCanvas);
+      } else {
+        boardWrap.querySelectorAll('canvas').forEach((c) => c.remove());
+        boardWrap.appendChild(newCanvas);
+      }
       gameCanvas = newCanvas;
       attachBoardEvents(newCanvas);
       currentHoverIndex = -1;

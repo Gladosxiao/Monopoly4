@@ -642,7 +642,7 @@ select:focus {
 
 .game-layout {
   display: grid;
-  grid-template-columns: 2fr 1fr;
+  grid-template-columns: minmax(0, 2fr) minmax(320px, 1fr);
   gap: var(--space-md);
   align-items: stretch;
 }
@@ -865,7 +865,7 @@ select:focus {
 .card-grid,
 .item-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(auto-fill, minmax(72px, 1fr));
   gap: 6px;
 }
 
@@ -1003,31 +1003,37 @@ select:focus {
 
 .stock-top-panel {
   max-height: 240px;
-  overflow-y: auto;
+  overflow: hidden;
   transition: max-height 0.25s ease;
 }
 
 .stock-top-panel.collapsed {
   max-height: none;
-  overflow-y: visible;
+}
+
+.stock-top-panel.collapsed > #stock-market {
+  display: none;
 }
 
 .backpack-wide-panel {
   max-height: 280px;
-  overflow-y: auto;
+  overflow: hidden;
   transition: max-height 0.25s ease;
 }
 
 .backpack-wide-panel.collapsed {
   max-height: none;
-  overflow-y: visible;
+}
+
+.backpack-wide-panel.collapsed > #backpack-wide-content {
+  display: none;
 }
 
 .stock-top-panel > #stock-market,
 .backpack-wide-panel > #backpack-wide-content {
   flex: 1;
   min-height: 0;
-  overflow-y: auto;
+  overflow: auto;
 }
 
 .stock-top-header,
@@ -1076,8 +1082,10 @@ select:focus {
 /* 股市表格 */
 .stock-table {
   width: 100%;
+  min-width: 560px;
   border-collapse: collapse;
   font-size: var(--font-size-sm);
+  white-space: nowrap;
 }
 
 .stock-table th,
@@ -1115,7 +1123,7 @@ select:focus {
   font-weight: 700;
 }
 
-@media (max-width: 900px) {
+@media (max-width: 1200px) {
   .room-content,
   .game-layout {
     grid-template-columns: 1fr;
@@ -1123,6 +1131,13 @@ select:focus {
 
   .side-panel {
     max-height: none;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: var(--space-md);
+  }
+
+  .info-card {
+    min-width: 0;
   }
 
   .game-body {
