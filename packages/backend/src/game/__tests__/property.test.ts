@@ -274,18 +274,13 @@ describe('calculateRent', () => {
 
   it('住宅：同组 3 块加成 50%', () => {
     const state = makeTestState();
+    // 新手村第一组小地产为 index 1/2/3
     setOwner(state, 1, 'p1', 'house', 0);
+    setOwner(state, 2, 'p1', 'house', 0);
     setOwner(state, 3, 'p1', 'house', 0);
-    // group 0 only has 2 tiles in simple map; use group 2 which has 2 tiles too
-    // To test 3 tiles we need group with 3, but simple map groups only have 2.
-    // Use a manual group override for calculation verification.
-    state.map.tiles[1].group = 99;
-    state.map.tiles[3].group = 99;
-    state.map.tiles[5].group = 99;
-    state.map.tiles[5].size = 'small';
-    setOwner(state, 5, 'p1', 'house', 0);
     const owner = state.players[0];
     const visitor = state.players[1];
+    // 蘑菇村 baseRent=3，同组 3 块加成 50%
     expect(calculateRent(state.map.tiles[1], owner, state, visitor).rent).toBe(4);
   });
 
@@ -304,7 +299,8 @@ describe('calculateRent', () => {
     setOwner(state, 21, 'p1', 'mall', 2);
     const owner = state.players[0];
     const visitor = state.players[1];
-    expect(calculateRent(state.map.tiles[21], owner, state, visitor).rent).toBe(24);
+    // 钻石广场 baseRent=30，等级 2
+    expect(calculateRent(state.map.tiles[21], owner, state, visitor).rent).toBe(60);
   });
 
   it('旅馆：baseRent * level * 天数，并附带休息天数', () => {
@@ -313,7 +309,8 @@ describe('calculateRent', () => {
     const owner = state.players[0];
     const visitor = state.players[1];
     const result = calculateRent(state.map.tiles[21], owner, state, visitor);
-    expect(result.rent).toBe(24);
+    // 钻石广场 baseRent=30，等级 2
+    expect(result.rent).toBe(60);
     expect(result.hotelDays).toBe(1);
   });
 

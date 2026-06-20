@@ -27,7 +27,7 @@ describe('卡片商店', () => {
   it('商店格可购买卡片', () => {
     const state = makeTestState();
     state.status = 'acting';
-    state.pendingTileIndex = 24; // shop
+    state.pendingTileIndex = 26; // shop
     expect(canBuyCard(state, 'p1')).toBe(true);
   });
 
@@ -36,7 +36,7 @@ describe('卡片商店', () => {
     const player = state.players[0];
     player.coupons = 10000;
     state.status = 'acting';
-    state.pendingTileIndex = 24; // shop
+    state.pendingTileIndex = 26; // shop
     const shopCards = getShopCards(state);
     const card = shopCards[0];
     const result = buyCard(state, player.id, card.id);
@@ -50,7 +50,7 @@ describe('卡片商店', () => {
     const player = state.players[0];
     player.coupons = 0;
     state.status = 'acting';
-    state.pendingTileIndex = 24; // shop
+    state.pendingTileIndex = 26; // shop
     const card = getShopCards(state)[0];
     const result = buyCard(state, player.id, card.id);
     expect(result.success).toBe(false);
@@ -62,7 +62,7 @@ describe('卡片商店', () => {
     player.coupons = 100000;
     player.cards = Array.from({ length: 15 }, (_, i) => ({ instanceId: `c-${i}`, cardId: 'freePass' }));
     state.status = 'acting';
-    state.pendingTileIndex = 24; // shop
+    state.pendingTileIndex = 26; // shop
     const card = getShopCards(state)[0];
     const result = buyCard(state, player.id, card.id);
     expect(result.success).toBe(false);
@@ -98,7 +98,7 @@ describe('道具商店', () => {
   it('商店格可购买道具', () => {
     const state = makeTestState();
     state.status = 'acting';
-    state.pendingTileIndex = 24; // shop
+    state.pendingTileIndex = 26; // shop
     expect(canBuyItem(state, 'p1')).toBe(true);
   });
 
@@ -107,7 +107,7 @@ describe('道具商店', () => {
     const player = state.players[0];
     player.coupons = 10000;
     state.status = 'acting';
-    state.pendingTileIndex = 24; // shop
+    state.pendingTileIndex = 26; // shop
     const item = getShopItems(state).find((i) => i.id === 'remoteDice')!;
     const result = buyItem(state, player.id, item.id, 2);
     expect(result.success).toBe(true);
@@ -121,7 +121,7 @@ describe('道具商店', () => {
     player.coupons = 100000;
     player.items.push({ instanceId: 'r1', itemId: 'remoteDice', quantity: 9 });
     state.status = 'acting';
-    state.pendingTileIndex = 24; // shop
+    state.pendingTileIndex = 26; // shop
     const result = buyItem(state, player.id, 'remoteDice', 1);
     expect(result.success).toBe(false);
   });

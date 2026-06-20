@@ -63,9 +63,9 @@ describe('generateMap', () => {
     const largeTiles = map.tiles.filter((t) => t.size === 'large').length;
     const smallTiles = map.tiles.filter((t) => t.size === 'small').length;
     const largeCount = new Set(map.tiles.filter((t) => t.size === 'large').map((t) => t.name)).size;
-    assert.equal(largeCount, 4);
-    assert.equal(largeTiles, 8); // 每个大地产占 2 格
-    assert.equal(smallTiles, 12);
+    assert.equal(largeCount, 5);
+    assert.equal(largeTiles, 10); // 每个大地产占 2 格
+    assert.equal(smallTiles, 16);
   });
 
   it('MAP80 模板人均 1 大块 9 小块', () => {
@@ -73,9 +73,9 @@ describe('generateMap', () => {
     const largeTiles = map.tiles.filter((t) => t.size === 'large').length;
     const smallTiles = map.tiles.filter((t) => t.size === 'small').length;
     const largeCount = new Set(map.tiles.filter((t) => t.size === 'large').map((t) => t.name)).size;
-    assert.equal(largeCount, 4);
-    assert.equal(largeTiles, 8);
-    assert.equal(smallTiles, 36);
+    assert.equal(largeCount, 6);
+    assert.equal(largeTiles, 12);
+    assert.equal(smallTiles, 48);
   });
 
   it('没有相邻同类型系统格（默认模板）', () => {
@@ -96,15 +96,15 @@ describe('generateMap', () => {
   it('countTileTypes 统计正确', () => {
     const map = generateMap(PLAYER4_TEMPLATE);
     const counts = countTileTypes(map);
-    assert.equal(counts.property, 20); // 4 大地产 * 2 格 + 12 小地产
+    assert.equal(counts.property, 26); // 5 大地产 * 2 格 + 16 小地产
     assert.equal(counts.start, 1);
   });
 
   it('getPropertyGroups 返回正确分组', () => {
     const map = generateMap(PLAYER4_TEMPLATE);
     const groups = getPropertyGroups(map);
-    assert.equal(groups.length, 3);
-    assert.equal(groups.reduce((sum, g) => sum + g.count, 0), 12);
+    assert.equal(groups.length, 4);
+    assert.equal(groups.reduce((sum, g) => sum + g.count, 0), 16);
   });
 });
 

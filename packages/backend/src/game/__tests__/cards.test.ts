@@ -235,7 +235,7 @@ describe('防御/特殊类卡片', () => {
 describe('商店与剩余卡片', () => {
   it('商店购买卡片', () => {
     const state = makeTestState();
-    state.players[0].position = 24; // 商店
+    state.players[0].position = 26; // 商店
     prepareActingState(state);
     const result = buyCard(state, 'p1', 'stay');
     expect(result.success).toBe(true);

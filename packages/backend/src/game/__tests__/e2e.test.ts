@@ -86,7 +86,7 @@ describe('calculateRent', () => {
     setOwner(state, 21, 'p1', 'mall', 2);
     const owner = state.players[0];
     const visitor = state.players[1];
-    expect(calculateRent(state.map.tiles[21], owner, state, visitor).rent).toBe(24); // 12 * 2 * 1
+    expect(calculateRent(state.map.tiles[21], owner, state, visitor).rent).toBe(60); // 30 * 2 * 1
   });
 
   it('旅馆：baseRent * level * 天数，并附带休息天数', () => {
@@ -95,7 +95,7 @@ describe('calculateRent', () => {
     const owner = state.players[0];
     const visitor = state.players[1];
     const result = calculateRent(state.map.tiles[21], owner, state, visitor);
-    expect(result.rent).toBe(24);
+    expect(result.rent).toBe(60);
     expect(result.hotelDays).toBe(1);
   });
 

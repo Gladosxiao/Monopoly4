@@ -44,13 +44,12 @@ describe('calculateRent', () => {
 
   it('住宅：同组 3 块加成 50%', () => {
     const state = makeThreePlayerState();
+    // 第一组小地产为 index 1/2/3，baseRent 分别为 3/4/5
     setOwner(state, 1, 'p1', 'house', 0);
+    setOwner(state, 2, 'p1', 'house', 0);
     setOwner(state, 3, 'p1', 'house', 0);
-    // 同组只有 2 块，无法测试 3 块加成；使用另一组
-    setOwner(state, 5, 'p2', 'house', 0);
-    setOwner(state, 7, 'p2', 'house', 0);
-    // 石板路 baseRent=5，group 1 有 2 块（5 和 7），加成 20%
-    expect(calculateRent(state.map.tiles[5], state.players[1], state, state.players[0]).rent).toBe(6);
+    // 青青草原 baseRent=4，同组 3 块加成 50%
+    expect(calculateRent(state.map.tiles[2], state.players[0], state, state.players[1]).rent).toBe(6);
   });
 
   it('连锁店：按全图连锁店数量联合收费', () => {
@@ -69,8 +68,8 @@ describe('calculateRent', () => {
     setOwner(state, 21, 'p1', 'mall', 2);
     const owner = state.players[0];
     const visitor = state.players[1];
-    // 商业街 baseRent=12，等级 2，转盘 mock 为 1
-    expect(calculateRent(state.map.tiles[21], owner, state, visitor).rent).toBe(24);
+    // 钻石广场 baseRent=30，等级 2，转盘 mock 为 1
+    expect(calculateRent(state.map.tiles[21], owner, state, visitor).rent).toBe(60);
   });
 
   it('旅馆：baseRent * level * 天数，并附带休息天数', () => {
@@ -79,7 +78,8 @@ describe('calculateRent', () => {
     const owner = state.players[0];
     const visitor = state.players[1];
     const result = calculateRent(state.map.tiles[21], owner, state, visitor);
-    expect(result.rent).toBe(24);
+    // 钻石广场 baseRent=30，等级 2
+    expect(result.rent).toBe(60);
     expect(result.hotelDays).toBe(1);
   });
 
