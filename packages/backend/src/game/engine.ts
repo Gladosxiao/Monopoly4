@@ -86,6 +86,75 @@ import {
 } from './financialSystem/index.js';
 import { saveGameRecord } from '../gameRecords.js';
 
+// ============ 大块地产（span > 1）跨格同步辅助函数 ============
+
+/**
+ * 获取与指定地块属于同一大块地产的所有地块索引（已按 index 升序排列）。
+ * 非大块地产则返回仅包含自身的数组。
+ */
+export function getLargePropertyTileIndices(state: GameState, tileIndex: number): number[] {
+  const tile = state.map.tiles[tileIndex];
+  if (tile.type !== 'property' || tile.size !== 'large' || !tile.span || tile.span <= 1) {
+    return [tileIndex];
+  }
+  return state.map.tiles
+    .filter(
+      (t) => t.type === 'property' && t.size === 'large' && t.name === tile.name
+    )
+    .map((t) => t.index)
+    .sort((a, b) => a - b);
+}
+
+/**
+ * 返回指定地块所属大块地产的“主格”索引（同组中 index 最小者）。
+ * 玩家 properties 数组、买地/升级等核心操作均以主格为准。
+ */
+export function getCanonicalPropertyIndex(state: GameState, tileIndex: number): number {
+  return getLargePropertyTileIndices(state, tileIndex)[0];
+}
+
+/**
+ * 将主格上的所有者/建筑/等级/期限信息同步到同一大块地产的所有子格。
+ */
+export function syncLargeProperty(state: GameState, tileIndex: number): void {
+  const indices = getLargePropertyTileIndices(state, tileIndex);
+  if (indices.length <= 1) return;
+  const master = indices[0];
+  const masterTile = state.map.tiles[master];
+  for (const idx of indices) {
+    if (idx === master) continue;
+    const t = state.map.tiles[idx];
+    t.ownerId = masterTile.ownerId;
+    t.buildingType = masterTile.buildingType;
+    t.level = masterTile.level;
+    t.purchasedAt = masterTile.purchasedAt;
+    t.expiresAt = masterTile.expiresAt;
+  }
+}
+
+/**
+ * 清空同一大块地产的所有子格状态（土地到期、法拍、破产等场景使用）。
+ */
+export function clearLargeProperty(state: GameState, tileIndex: number): void {
+  const indices = getLargePropertyTileIndices(state, tileIndex);
+  for (const idx of indices) {
+    const t = state.map.tiles[idx];
+    t.ownerId = undefined;
+    t.buildingType = undefined;
+    t.level = 0;
+    t.purchasedAt = undefined;
+    t.expiresAt = undefined;
+  }
+}
+
+/**
+ * 根据地块索引获取实际用于判定/计算的地块。
+ * 大块地产统一返回主格，确保站在任意子格时操作的是同一处地产。
+ */
+export function getEffectiveTile(state: GameState, tileIndex: number): Tile {
+  return state.map.tiles[getCanonicalPropertyIndex(state, tileIndex)];
+}
+
 
 /**
  * 根据房间配置创建一局新游戏。
@@ -207,11 +276,7 @@ export function expireLandLeases(state: GameState): void {
     }
   }
   for (const { player, tile, tileIndex } of expired) {
-    tile.ownerId = undefined;
-    tile.buildingType = undefined;
-    tile.level = 0;
-    tile.purchasedAt = undefined;
-    tile.expiresAt = undefined;
+    clearLargeProperty(state, tileIndex);
     player.properties = player.properties.filter((idx) => idx !== tileIndex);
     state.logs.push({
       timestamp: Date.now(),
@@ -501,13 +566,16 @@ export function calculateRent(
   state: GameState,
   visitor: Player
 ): { rent: number; hotelDays?: number; spin?: number; groupBonus?: number } {
-  if (tile.type !== 'property' || !tile.ownerId || tile.ownerId !== owner.id) {
+  // 大块地产任意子格均按主格计算租金
+  const effectiveTile = tile.size === 'large' ? getEffectiveTile(state, tile.index) : tile;
+  if (effectiveTile.type !== 'property' || !effectiveTile.ownerId || effectiveTile.ownerId !== owner.id) {
     return { rent: 0 };
   }
-  if (isRentExempt(visitor, owner, tile, state)) {
+  if (isRentExempt(visitor, owner, effectiveTile, state)) {
     return { rent: 0 };
   }
 
+  tile = effectiveTile;
   const buildingType = tile.buildingType ?? 'house';
   // 连锁店采用全图连锁店数量联合计费，不参与同组加成
   const groupBonus = buildingType === 'chainStore' ? 0 : getGroupBonus(state, tile, owner);
@@ -1099,9 +1167,7 @@ function tryLiquidate(
     const tile = state.map.tiles[idx];
     const auctionValue = Math.max(0, Math.floor(tile.basePrice * (1 + tile.level * 0.5) * state.priceIndex * 0.7));
 
-    tile.ownerId = undefined;
-    tile.level = 0;
-    tile.buildingType = 'house';
+    clearLargeProperty(state, idx);
     player.properties = player.properties.filter((i) => i !== idx);
     player.cash += auctionValue;
     player.liquidationCount += 1;
@@ -1122,7 +1188,9 @@ function transferPropertiesTo(state: GameState, from: Player, to: Player): void 
   for (const tile of state.map.tiles) {
     if (tile.ownerId === from.id) {
       tile.ownerId = to.id;
-      if (!to.properties.includes(tile.index)) {
+      // 大块地产只将主格加入 properties，避免重复计算资产
+      const canonical = getCanonicalPropertyIndex(state, tile.index);
+      if (tile.index === canonical && !to.properties.includes(tile.index)) {
         to.properties.push(tile.index);
       }
     }
@@ -1133,9 +1201,7 @@ function transferPropertiesTo(state: GameState, from: Player, to: Player): void 
 function clearPlayerProperties(state: GameState, player: Player): void {
   for (const tile of state.map.tiles) {
     if (tile.ownerId === player.id) {
-      tile.ownerId = undefined;
-      tile.level = 0;
-      tile.buildingType = 'house';
+      clearLargeProperty(state, tile.index);
     }
   }
   player.properties = [];
@@ -1580,7 +1646,8 @@ function applyEventEffects(state: GameState, player: Player, effects: EventEffec
  */
 export function buyProperty(state: GameState): { success: boolean; message?: string } {
   const player = getCurrentPlayer(state);
-  const tileIndex = state.pendingTileIndex ?? player.position;
+  const rawTileIndex = state.pendingTileIndex ?? player.position;
+  const tileIndex = getCanonicalPropertyIndex(state, rawTileIndex);
   const tile = state.map.tiles[tileIndex];
 
   if (tile.type !== 'property') {
@@ -1622,7 +1689,10 @@ export function buyProperty(state: GameState): { success: boolean; message?: str
   tile.buildingType = tile.size === 'large' ? 'mall' : 'house';
   tile.level = 0;
   setTileLease(state, tile);
-  player.properties.push(tileIndex);
+  if (!player.properties.includes(tileIndex)) {
+    player.properties.push(tileIndex);
+  }
+  syncLargeProperty(state, tileIndex);
   const discountText = fortune.discountReason ? `（${fortune.discountReason}）` : '';
   state.logs.push({
     timestamp: Date.now(),
@@ -1642,7 +1712,8 @@ export function upgradeProperty(
   buildingType?: BuildingType
 ): { success: boolean; message?: string } {
   const player = getCurrentPlayer(state);
-  const tileIndex = state.pendingTileIndex ?? player.position;
+  const rawTileIndex = state.pendingTileIndex ?? player.position;
+  const tileIndex = getCanonicalPropertyIndex(state, rawTileIndex);
   const tile = state.map.tiles[tileIndex];
 
   if (tile.type !== 'property' || tile.ownerId !== player.id) {
@@ -1703,6 +1774,7 @@ export function upgradeProperty(
 
   player.cash -= fortune.cost;
   tile.level += 1;
+  syncLargeProperty(state, tileIndex);
   const discountText = fortune.discountReason ? `（${fortune.discountReason}）` : '';
   state.logs.push({
     timestamp: Date.now(),
@@ -1724,6 +1796,7 @@ export function rebuildTile(
   buildingType: BuildingType
 ): { success: boolean; message?: string } {
   const player = getCurrentPlayer(state);
+  tileIndex = getCanonicalPropertyIndex(state, tileIndex);
   const tile = state.map.tiles[tileIndex];
 
   if (tile.type !== 'property' || tile.ownerId !== player.id) {
@@ -1764,6 +1837,7 @@ export function rebuildTile(
   const oldType = tile.buildingType ?? 'house';
   tile.buildingType = buildingType;
   tile.level = buildingType === 'chainStore' ? 1 : oldType === 'chainStore' ? 0 : tile.level;
+  syncLargeProperty(state, tileIndex);
 
   state.logs.push({
     timestamp: Date.now(),
@@ -2291,13 +2365,15 @@ export function canRoll(state: GameState, playerId: string): boolean {
 
 export function canBuy(state: GameState, playerId: string): boolean {
   if (state.status !== 'acting' || getCurrentPlayer(state).id !== playerId) return false;
-  const tile = state.map.tiles[state.pendingTileIndex ?? getCurrentPlayer(state).position];
+  const rawIdx = state.pendingTileIndex ?? getCurrentPlayer(state).position;
+  const tile = getEffectiveTile(state, rawIdx);
   return tile.type === 'property' && !tile.ownerId;
 }
 
 export function canUpgrade(state: GameState, playerId: string): boolean {
   if (state.status !== 'acting' || getCurrentPlayer(state).id !== playerId) return false;
-  const tile = state.map.tiles[state.pendingTileIndex ?? getCurrentPlayer(state).position];
+  const rawIdx = state.pendingTileIndex ?? getCurrentPlayer(state).position;
+  const tile = getEffectiveTile(state, rawIdx);
   if (tile.type !== 'property' || tile.ownerId !== playerId) return false;
   const bt = tile.buildingType ?? 'house';
   if (bt === 'chainStore' || bt === 'park' || bt === 'gasStation') return false;
@@ -2306,7 +2382,8 @@ export function canUpgrade(state: GameState, playerId: string): boolean {
 
 export function canRebuild(state: GameState, playerId: string): boolean {
   if (state.status !== 'acting' || getCurrentPlayer(state).id !== playerId) return false;
-  const tile = state.map.tiles[state.pendingTileIndex ?? getCurrentPlayer(state).position];
+  const rawIdx = state.pendingTileIndex ?? getCurrentPlayer(state).position;
+  const tile = getEffectiveTile(state, rawIdx);
   return tile.type === 'property' && tile.ownerId === playerId;
 }
 

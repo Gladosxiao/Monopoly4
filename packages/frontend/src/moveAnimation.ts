@@ -79,11 +79,21 @@ export function getCurrentAnimatedTileIndex(
   if (elapsed <= 0) return path[fromPathIdx];
 
   const stepCycle = durationPerStep + pausePerStep;
-  const rawProgress = elapsed / (steps * stepCycle);
-  if (rawProgress >= 1) return null;
+  if (elapsed >= steps * stepCycle) {
+    activeAnimations.delete(player.id);
+    return null;
+  }
 
-  const currentStep = Math.floor(steps * rawProgress);
-  return path[(fromPathIdx + currentStep + total) % total];
+  const cycle = Math.floor(elapsed / stepCycle);
+  const cycleElapsed = elapsed % stepCycle;
+  const currentStep = Math.min(cycle, steps - 1);
+
+  if (cycleElapsed < durationPerStep) {
+    // 移动阶段：正在从 currentStep 往 currentStep + 1 移动
+    return path[(fromPathIdx + currentStep + total) % total];
+  }
+  // 停顿阶段：已经到达 currentStep + 1
+  return path[(fromPathIdx + currentStep + 1 + total) % total];
 }
 
 /**
@@ -122,27 +132,25 @@ export function getAnimatedPlayerPosition(
 
   const stepCycle = durationPerStep + pausePerStep;
   const elapsed = now - startTime;
-  const rawProgress = elapsed / (steps * stepCycle);
-
-  if (rawProgress >= 1) {
+  if (elapsed >= steps * stepCycle) {
     activeAnimations.delete(player.id);
     return null;
   }
 
-  const currentOffset = steps * rawProgress;
-  const currentStep = Math.floor(currentOffset);
-  const stepFraction = currentOffset - currentStep;
+  const cycle = Math.floor(elapsed / stepCycle);
+  const cycleElapsed = elapsed % stepCycle;
+  const currentStep = Math.min(cycle, steps - 1);
 
-  // 停顿阶段：棋子停留在当前格子中心
-  if (stepFraction * stepCycle >= durationPerStep) {
-    const currentIdx = Math.floor((fromPathIdx + currentStep + total) % total);
+  // 停顿阶段：棋子停留在当前已到达的格子中心
+  if (cycleElapsed >= durationPerStep) {
+    const currentIdx = (fromPathIdx + currentStep + 1 + total) % total;
     return { center: getTileCenter(layout, path[currentIdx]), isAnimating: true };
   }
 
   // 移动阶段：向下一格插值
-  const moveFraction = (stepFraction * stepCycle) / durationPerStep;
-  const aIdx = Math.floor((fromPathIdx + currentStep + total) % total);
-  const bIdx = Math.floor((fromPathIdx + currentStep + 1 + total) % total);
+  const moveFraction = cycleElapsed / durationPerStep;
+  const aIdx = (fromPathIdx + currentStep + total) % total;
+  const bIdx = (fromPathIdx + currentStep + 1 + total) % total;
   const a = getTileCenter(layout, path[aIdx]);
   const b = getTileCenter(layout, path[bIdx]);
   return {

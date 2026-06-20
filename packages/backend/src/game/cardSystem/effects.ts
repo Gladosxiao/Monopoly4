@@ -12,7 +12,14 @@ import type {
   BuildingType,
 } from '@monopoly4/shared';
 import { CARD_DEFINITIONS, CARD_IDS, ITEM_DEFINITIONS, getSpiritDefinition } from '@monopoly4/shared';
-import { getCurrentPlayer, payMoney, transferMoney, rebuildTile } from '../engine.js';
+import {
+  getCurrentPlayer,
+  payMoney,
+  transferMoney,
+  rebuildTile,
+  getCanonicalPropertyIndex,
+  syncLargeProperty,
+} from '../engine.js';
 import { tryBlockBuildingDestruction, adjustStatusDaysBySpirit } from '../spiritEffects.js';
 
 export interface CardContext {
@@ -122,7 +129,8 @@ const turtle: CardEffect = (state, caster, ctx) => {
 // ===== 攻击/占地类 =====
 
 const buyLand: CardEffect = (state, caster) => {
-  const tileIndex = state.pendingTileIndex ?? caster.position;
+  const rawTileIndex = state.pendingTileIndex ?? caster.position;
+  const tileIndex = getCanonicalPropertyIndex(state, rawTileIndex);
   const tile = findTile(state, tileIndex);
   if (!tile || tile.type !== 'property' || tile.ownerId) {
     return { success: false, message: '当前地块不可购买' };
@@ -135,7 +143,10 @@ const buyLand: CardEffect = (state, caster) => {
   tile.ownerId = caster.id;
   tile.buildingType = 'house';
   tile.level = 0;
-  caster.properties.push(tileIndex);
+  if (!caster.properties.includes(tileIndex)) {
+    caster.properties.push(tileIndex);
+  }
+  syncLargeProperty(state, tileIndex);
   log(state, 'card:buyLand', caster.id, `${caster.username} 使用购地卡买下 ${tile.name}，花费 $${price}`);
   return { success: true };
 };
@@ -176,7 +187,8 @@ const swapLand: CardEffect = (state, caster, ctx) => {
 };
 
 const auction: CardEffect = (state, caster, ctx) => {
-  const tile = findTile(state, ctx.targetTileIndex);
+  const tileIndex = getCanonicalPropertyIndex(state, ctx.targetTileIndex ?? -1);
+  const tile = findTile(state, tileIndex);
   if (!tile || tile.type !== 'property' || !tile.ownerId || tile.ownerId === caster.id) {
     return { success: false, message: '需要指定对手的已拥有土地' };
   }
@@ -189,8 +201,11 @@ const auction: CardEffect = (state, caster, ctx) => {
   caster.cash -= price;
   owner.cash += price;
   tile.ownerId = caster.id;
-  owner.properties = owner.properties.filter((i) => i !== ctx.targetTileIndex);
-  caster.properties.push(ctx.targetTileIndex!);
+  owner.properties = owner.properties.filter((i) => i !== tileIndex);
+  if (!caster.properties.includes(tileIndex)) {
+    caster.properties.push(tileIndex);
+  }
+  syncLargeProperty(state, tileIndex);
   log(
     state,
     'card:auction',

@@ -27,6 +27,7 @@ import {
   payMoney,
   transferMoney,
   handleTileEffect,
+  syncLargeProperty,
 } from '../engine.js';
 import { toggleReady, selectCharacter } from '../../socket/game.js';
 import { rooms } from '../../store.js';
@@ -166,6 +167,19 @@ describe('buyProperty', () => {
     const result = buyProperty(state);
     expect(result.success).toBe(true);
     expect(state.map.tiles[21].buildingType).toBe('mall');
+    // 同一大块地产的其它子格也同步所有者与建筑
+    expect(state.map.tiles[22].ownerId).toBe('p1');
+    expect(state.map.tiles[22].buildingType).toBe('mall');
+  });
+
+  it('站在大块地产任意子格均可购买', () => {
+    const state = makeTestState();
+    state.pendingTileIndex = 22; // 21 与 22 属于同一商业用地
+    const result = buyProperty(state);
+    expect(result.success).toBe(true);
+    expect(state.map.tiles[21].ownerId).toBe('p1');
+    expect(state.map.tiles[22].ownerId).toBe('p1');
+    expect(state.players[0].properties).toContain(21);
   });
 
   it('现金不足无法购买', () => {
@@ -217,6 +231,19 @@ describe('upgradeProperty', () => {
     expect(result.success).toBe(true);
     expect(state.map.tiles[21].buildingType).toBe('hotel');
     expect(state.map.tiles[21].level).toBe(1);
+    expect(state.map.tiles[22].buildingType).toBe('hotel');
+    expect(state.map.tiles[22].level).toBe(1);
+  });
+
+  it('站在大块地产任意子格均可升级', () => {
+    const state = makeTestState();
+    state.pendingTileIndex = 22; // 站在子格 22
+    setOwner(state, 21, 'p1', 'house', 0); // 主格 21 已拥有
+    syncLargeProperty(state, 21); // 同步给子格 22（setOwner 未自动同步）
+    const result = upgradeProperty(state);
+    expect(result.success).toBe(true);
+    expect(state.map.tiles[21].level).toBe(1);
+    expect(state.map.tiles[22].level).toBe(1);
   });
 });
 

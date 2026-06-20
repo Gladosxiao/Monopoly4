@@ -4,7 +4,7 @@
 
 import type { GameState, Player, Tile, Trap, ItemDefinition, TurnSnapshot, BuildingType } from '@monopoly4/shared';
 import { ITEM_DEFINITIONS, BUILDING_LABELS } from '@monopoly4/shared';
-import { getCurrentPlayer, payMoney } from '../engine.js';
+import { getCurrentPlayer, payMoney, getCanonicalPropertyIndex, syncLargeProperty } from '../engine.js';
 import { tryBlockBuildingDestruction, adjustStatusDaysBySpirit } from '../spiritEffects.js';
 
 export interface ItemContext {
@@ -233,8 +233,9 @@ function placeholder(state: GameState, user: Player, ctx: ItemContext, itemId?: 
 // ===== 研发产物 =====
 
 const robot: ItemEffect = (state, user, ctx) => {
-  const tileIndex = ctx.targetTileIndex;
-  if (tileIndex === undefined) return { success: false, message: '需要指定目标土地' };
+  const rawTileIndex = ctx.targetTileIndex;
+  if (rawTileIndex === undefined) return { success: false, message: '需要指定目标土地' };
+  const tileIndex = getCanonicalPropertyIndex(state, rawTileIndex);
   const tile = findTile(state, tileIndex);
   if (!tile || tile.type !== 'property' || tile.ownerId !== user.id) {
     return { success: false, message: '只能选择自己的土地' };
@@ -256,6 +257,7 @@ const robot: ItemEffect = (state, user, ctx) => {
   if (targetType === 'house') {
     if (tile.level >= 5) return { success: false, message: '住宅已满级，请选择改建分支' };
     tile.level += 1;
+    syncLargeProperty(state, tileIndex);
     log(state, 'item:robot', user.id, `${user.username} 使用机器人，${tile.name} 升 1 级`);
     return { success: true };
   }
@@ -272,6 +274,7 @@ const robot: ItemEffect = (state, user, ctx) => {
   }
   tile.buildingType = targetType;
   tile.level = targetType === 'chainStore' ? 1 : 0;
+  syncLargeProperty(state, tileIndex);
   log(state, 'item:robot', user.id, `${user.username} 使用机器人，${tile.name} 改建为 ${BUILDING_LABELS[targetType]}`);
   return { success: true };
 };

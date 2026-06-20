@@ -918,6 +918,29 @@ select:focus {
   color: var(--color-success);
 }
 
+.card-cell-help,
+.item-cell-help {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 16px;
+  height: 16px;
+  line-height: 16px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.2);
+  color: var(--color-white);
+  font-size: 10px;
+  font-weight: bold;
+  text-align: center;
+  cursor: help;
+  z-index: 2;
+}
+
+.card-cell-help:hover,
+.item-cell-help:hover {
+  background: rgba(255, 255, 255, 0.4);
+}
+
 .month-info {
   margin-top: var(--space-sm);
   padding-top: var(--space-sm);
@@ -1001,30 +1024,32 @@ select:focus {
 }
 
 .stock-top-panel {
-  max-height: 280px;
-  min-height: 150px;
+  max-height: 320px;
+  min-height: 180px;
   overflow: hidden;
   transition: max-height 0.25s ease;
 }
 
 .stock-top-panel.collapsed {
-  max-height: 150px;
+  max-height: 180px;
 }
 
 .backpack-wide-panel {
   max-height: 320px;
-  min-height: 140px;
+  min-height: 180px;
   overflow: hidden;
   transition: max-height 0.25s ease;
 }
 
 .backpack-wide-panel.collapsed {
-  max-height: 56px;
-  min-height: auto;
+  max-height: 180px;
+  min-height: 180px;
 }
 
 .backpack-wide-panel.collapsed > #backpack-wide-content {
-  display: none;
+  display: block;
+  max-height: 120px;
+  overflow: hidden;
 }
 
 .stock-top-panel > #stock-market,

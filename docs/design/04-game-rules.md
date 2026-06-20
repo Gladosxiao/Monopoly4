@@ -65,7 +65,9 @@
 
 ### 独立路段大块土地（Large Property）
 
-- 独立地段，购买后可建造特殊设施。
+- 独立地段，**一块大地产在地图上占据 2 个连续格子**（`span = 2`）。
+- 玩家走到这 2 个格子中的**任意一格**，都可以购买/升级/改建同一处大地产；系统会自动将操作同步到该大地产的所有子格。
+- 购买后所有子格显示相同的所有者、建筑类型与等级；`player.properties` 中只记录该大地产的“主格”（index 最小者），避免总资产重复计算。
 - 可选建筑：
   - **公园（Park）**：任何人路过不收费；建费低廉；**无法再升级**。改建卡可变更回其他建筑。
   - **商场（Mall）**：对手抵达时转 8 格转盘决定消费倍数（1-8），按商场等级 × 倍数收取购物费。
@@ -88,11 +90,13 @@
 - **小游戏格**：走到即进行小游戏，可赚取点券。
 
 代码实现：
-- `Tile.size?: 'small' | 'large'` —— 区分小块/大块土地。
+- `Tile.size?: 'small' | 'large'`、`Tile.span?: number` —— 区分小块/大块土地；大地产占多个连续格子。
 - `Tile.buildingType?: BuildingType` —— 当前建筑类型。
-- `Game.buildSpecialTile(playerId, tileIndex, buildingType): Result` —— 在大块空地上建造公园/商场/旅馆/加油站/研究所。
-- `Game.rebuildToChainStore(playerId, tileIndex): Result` —— 小块住宅改建为连锁店。
-- `Game.rebuildSpecialTile(playerId, tileIndex, buildingType): Result` —— 用改建卡改变大块建筑类型。
+- `Game.getLargePropertyTileIndices(state, tileIndex): number[]` —— 获取同一大地产的所有子格。
+- `Game.getCanonicalPropertyIndex(state, tileIndex): number` —— 获取大地产主格索引。
+- `Game.syncLargeProperty(state, tileIndex): void` —— 将主格状态同步到所有子格。
+- `Game.getEffectiveTile(state, tileIndex): Tile` —— 获取用于判定/计算的有效地块（大地产返回主格）。
+- `Game.buyProperty(state)` / `Game.upgradeProperty(state, buildingType?)` / `Game.rebuildTile(state, tileIndex, buildingType)` —— 买地/升级/改建均自动处理大地产跨格同步。
 - `BuildingEffect.onPass(tile, player)` / `BuildingEffect.onArrive(tile, player)` —— 公园/商场/旅馆/加油站/研究所的过路/抵达效果。
 
 ## 5. 土地购买与升级

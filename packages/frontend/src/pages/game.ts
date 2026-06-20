@@ -568,6 +568,7 @@ export function renderBackpack(container: HTMLElement, state: GameState): void {
       cell.innerHTML = `
         <div class="card-cell-name" style="background:${typeColor}">${def?.name ?? c.cardId}</div>
         <div class="card-cell-type">${def?.type ?? ''}</div>
+        <span class="card-cell-help" title="${escapeHtml(def?.description ?? c.cardId)}">?</span>
       `;
       // 悬停 tooltip
       cell.title = def?.description ?? c.cardId;
@@ -603,6 +604,7 @@ export function renderBackpack(container: HTMLElement, state: GameState): void {
       cell.innerHTML = `
         <div class="item-cell-name" style="background:${typeColor}">${def?.name ?? it.itemId}</div>
         <div class="item-cell-qty">×${it.quantity}${isEquipped ? ' · 装备中' : ''}</div>
+        <span class="item-cell-help" title="${escapeHtml(def?.description ?? it.itemId)}">?</span>
       `;
       // 悬停 tooltip
       cell.title = def?.description ?? it.itemId;
