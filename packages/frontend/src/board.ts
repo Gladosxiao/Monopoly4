@@ -3,12 +3,12 @@
 import type { GameState, Tile, BuildingType, SpiritOnMap } from '@monopoly4/shared';
 import { SPIRIT_DEFINITIONS } from '@monopoly4/shared';
 import {
-  ringLayout,
-  gridLayout,
+  snakeLayout,
   getTileCenter,
   getTileRect,
   interpolatePosition,
   getTileAtPosition,
+  getPathCenters,
   type BoardLayout,
   type Point,
 } from '@monopoly4/map-generator/coords';
@@ -195,6 +195,45 @@ export interface RenderOptions {
 
 let currentLayout: BoardLayout | null = null;
 
+/** 绘制地块路径连接线，展示先后顺序 */
+function drawPathLines(ctx: CanvasRenderingContext2D, layout: BoardLayout): void {
+  const centers = getPathCenters(layout);
+  if (centers.length < 2) return;
+
+  ctx.save();
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.18)';
+  ctx.lineWidth = Math.max(2, layout.tileSize * 0.08);
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+
+  // 普通连接段
+  ctx.beginPath();
+  ctx.moveTo(centers[0].x, centers[0].y);
+  for (let i = 1; i < centers.length; i++) {
+    ctx.lineTo(centers[i].x, centers[i].y);
+  }
+  ctx.stroke();
+
+  // 首尾相连：用虚线表示“瞬移”回到起点
+  const first = centers[0];
+  const last = centers[centers.length - 1];
+  ctx.setLineDash([layout.tileSize * 0.2, layout.tileSize * 0.15]);
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.10)';
+  ctx.beginPath();
+  ctx.moveTo(last.x, last.y);
+  ctx.lineTo(first.x, first.y);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  // 起点特殊标记
+  ctx.fillStyle = 'rgba(46, 204, 113, 0.6)';
+  ctx.beginPath();
+  ctx.arc(first.x, first.y, layout.tileSize * 0.12, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.restore();
+}
+
 export function renderBoard(
   canvas: HTMLCanvasElement,
   state: GameState,
@@ -203,25 +242,40 @@ export function renderBoard(
 ): void {
   const ctx = canvas.getContext('2d')!;
   const dpr = Number(canvas.dataset.dpr || '1');
-  // 逻辑尺寸（CSS 像素），所有绘制坐标均在此坐标系下计算
-  const width = canvas.width / dpr;
-  const height = canvas.height / dpr;
   const now = options.time ?? Date.now();
+
+  // 根据容器实际尺寸调整画布内部分辨率，最大化利用页面空间
+  let cssWidth = canvas.clientWidth;
+  let cssHeight = canvas.clientHeight;
+  if (cssWidth === 0 || cssHeight === 0) {
+    cssWidth = Math.max(400, window.innerWidth - 360);
+    cssHeight = Math.max(300, window.innerHeight - 360);
+  }
+  const prevWidth = Number(canvas.dataset.cssWidth || '0');
+  const prevHeight = Number(canvas.dataset.cssHeight || '0');
+  if (cssWidth !== prevWidth || cssHeight !== prevHeight) {
+    canvas.width = Math.floor(cssWidth * dpr);
+    canvas.height = Math.floor(cssHeight * dpr);
+    canvas.dataset.cssWidth = String(cssWidth);
+    canvas.dataset.cssHeight = String(cssHeight);
+  }
+
+  // 逻辑尺寸（CSS 像素），所有绘制坐标均在此坐标系下计算
+  const width = cssWidth;
+  const height = cssHeight;
 
   ctx.save();
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   ctx.scale(dpr, dpr);
 
   const map = state.map as any;
-  const total = map.tiles.length;
 
-  // 统一使用环形布局；根据格子数动态计算画布尺寸，保证每格可读
-  const targetTileSize = 60;
-  const side = Math.max(1, Math.round(total / 4));
-  const layoutSize = Math.max(800, targetTileSize * (side + 2));
-  currentLayout = ringLayout(map, layoutSize);
-
+  // 使用蛇形布局：S 形蜿蜒铺满可用空间，任意格数都能高效排布
+  currentLayout = snakeLayout(map, width, height);
   const layout = currentLayout;
+
+  // 绘制路径连接线，展示地块先后顺序
+  drawPathLines(ctx, layout);
   const currentPlayer = state.players[state.currentPlayerIndex];
   const currentTileIndex = options.highlightCurrentTile && currentPlayer ? currentPlayer.position : -1;
 
@@ -803,25 +857,13 @@ export function createBoardCanvas(mapTileCount = 40): HTMLCanvasElement {
   const canvas = document.createElement('canvas');
   const dpr = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1;
 
-  // 统一使用环形布局：根据格数计算合适尺寸，保证每格至少 targetTileSize 像素
-  const targetTileSize = 60;
-  const side = Math.max(1, Math.round(mapTileCount / 4));
-  const size = Math.max(800, targetTileSize * (side + 2));
-  const cssWidth = size;
-  const cssHeight = size; // 环形棋盘为正方形
-
-  // 实际像素按 DPR 放大，CSS 尺寸保持逻辑大小，保证高分屏清晰
-  canvas.width = Math.floor(cssWidth * dpr);
-  canvas.height = Math.floor(cssHeight * dpr);
+  // 棋盘将占满父容器；renderBoard 会根据实际 clientWidth/Height 重新设置内部分辨率
   canvas.dataset.tileCount = String(mapTileCount);
   canvas.dataset.dpr = String(dpr);
 
-  // 使用 aspect-ratio + height:auto 保证页面长宽比变化时棋盘不被压扁/拉伸
   canvas.style.width = '100%';
-  canvas.style.height = 'auto';
-  canvas.style.aspectRatio = `${cssWidth} / ${cssHeight}`;
-  canvas.style.maxWidth = `${cssWidth}px`;
-  canvas.style.maxHeight = `${cssHeight}px`;
+  canvas.style.height = '100%';
+  canvas.style.display = 'block';
   canvas.style.background = '#16213e';
   canvas.style.borderRadius = '12px';
   canvas.style.boxShadow = '0 16px 40px rgba(0,0,0,0.45)';

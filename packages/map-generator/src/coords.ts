@@ -2,7 +2,8 @@
  * 坐标与布局工具
  *
  * 为前端渲染提供棋盘坐标计算、角色移动插值和点击位置反查。
- * 支持环形棋盘与网格棋盘两种布局。
+ * 支持环形、网格与蛇形三种布局；蛇形布局优先用于任意格数地图，
+ * 可最大化利用页面空间并清晰展示地块连接关系。
  */
 
 import type { GameMap } from './types.js';
@@ -18,13 +19,93 @@ export interface Rect extends Point {
 }
 
 export interface BoardLayout {
-  type: 'ring' | 'grid';
+  type: 'ring' | 'grid' | 'snake';
   map: GameMap;
+  /** 逻辑宽度（像素） */
+  width: number;
+  /** 逻辑高度（像素） */
+  height: number;
+  /** 保留字段，与 width 一致，兼容旧代码 */
   size: number;
   tileSize: number;
   cols?: number;
   rows?: number;
   padding: number;
+  /** 当前布局下的路径顺序（tile index 数组），用于移动插值 */
+  path: number[];
+}
+
+function buildSnakePath(total: number, cols: number): number[] {
+  const path: number[] = [];
+  const rows = Math.ceil(total / cols);
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const idx = r * cols + c;
+      if (idx >= total) break;
+      const col = r % 2 === 0 ? c : cols - 1 - c;
+      path.push(idx);
+    }
+  }
+  return path;
+}
+
+/**
+ * 创建蛇形棋盘布局。
+ * 路径按 S 形蜿蜒铺满矩形，最大化利用给定宽高，并在相邻格之间展示连接关系。
+ */
+export function snakeLayout(map: GameMap, width: number, height: number): BoardLayout {
+  const total = map.tiles.length;
+  if (total === 0) {
+    return {
+      type: 'snake',
+      map,
+      width,
+      height,
+      size: width,
+      tileSize: 0,
+      cols: 0,
+      rows: 0,
+      padding: 4,
+      path: [],
+    };
+  }
+
+  // 选择列数，使每格尺寸最大且尽量填满矩形
+  const ratio = width / Math.max(1, height);
+  let bestCols = Math.max(1, Math.min(total, Math.round(Math.sqrt(total * ratio))));
+  let bestSize = 0;
+  let bestRows = 1;
+
+  // 在最佳列数附近搜索，避免极端比例
+  const searchRange = 3;
+  for (let cols = Math.max(1, bestCols - searchRange); cols <= Math.min(total, bestCols + searchRange); cols++) {
+    const rows = Math.ceil(total / cols);
+    const tileSize = Math.min(width / cols, height / rows);
+    if (tileSize > bestSize) {
+      bestSize = tileSize;
+      bestCols = cols;
+      bestRows = rows;
+    }
+  }
+
+  const cols = bestCols;
+  const rows = bestRows;
+  const tileSize = bestSize;
+  const padding = 4;
+  const path = buildSnakePath(total, cols);
+
+  return {
+    type: 'snake',
+    map,
+    width,
+    height,
+    size: width,
+    tileSize,
+    cols,
+    rows,
+    padding,
+    path,
+  };
 }
 
 /**
@@ -33,19 +114,21 @@ export interface BoardLayout {
  */
 export function ringLayout(map: GameMap, size = 600): BoardLayout {
   const total = map.tiles.length;
-  // 40 格默认每边 10 格，80 格默认每边 20 格
-  const side = Math.round(total / 4);
+  const side = Math.max(1, Math.round(total / 4));
   const tileSize = size / (side + 2);
   const padding = tileSize;
 
   return {
     type: 'ring',
     map,
+    width: size,
+    height: size,
     size,
     tileSize,
     cols: side,
     rows: side,
     padding,
+    path: map.path.slice(),
   };
 }
 
@@ -58,16 +141,19 @@ export function gridLayout(map: GameMap, cols = 10, tileSize = 60): BoardLayout 
   return {
     type: 'grid',
     map,
+    width: size,
+    height: size,
     size,
     tileSize,
     cols,
     rows,
     padding: 0,
+    path: map.path.slice(),
   };
 }
 
 function ringSideCount(map: GameMap): number {
-  return Math.round(map.tiles.length / 4);
+  return Math.max(1, Math.round(map.tiles.length / 4));
 }
 
 function ringIndexToSegment(map: GameMap, index: number): { side: number; offset: number; sideCount: number } {
@@ -76,6 +162,13 @@ function ringIndexToSegment(map: GameMap, index: number): { side: number; offset
   const side = Math.floor(normalized / sideCount);
   const offset = normalized % sideCount;
   return { side, offset, sideCount };
+}
+
+function snakeRowCol(layout: BoardLayout, index: number): { row: number; col: number } {
+  const cols = layout.cols ?? 1;
+  const row = Math.floor(index / cols);
+  const col = row % 2 === 0 ? index % cols : cols - 1 - (index % cols);
+  return { row, col };
 }
 
 /**
@@ -104,6 +197,16 @@ export function getTileRect(layout: BoardLayout, index: number): Rect {
       y: row * tileSize,
       width: tileSize,
       height: tileSize,
+    };
+  }
+
+  if (type === 'snake') {
+    const { row, col } = snakeRowCol(layout, normalized);
+    return {
+      x: padding + col * tileSize,
+      y: padding + row * tileSize,
+      width: tileSize - padding * 2,
+      height: tileSize - padding * 2,
     };
   }
 
@@ -146,14 +249,16 @@ export function getTileRect(layout: BoardLayout, index: number): Rect {
   return { x, y, width, height };
 }
 
-function cyclicDistance(a: number, b: number, total: number): number {
-  const d = Math.abs(a - b);
-  return Math.min(d, total - d);
+/**
+ * 获取布局下路径经过的所有 tile 中心点，按路径顺序返回。
+ */
+export function getPathCenters(layout: BoardLayout): Point[] {
+  return layout.path.map((idx) => getTileCenter(layout, idx));
 }
 
 /**
  * 在两点之间按 progress（0~1）插值，返回像素坐标。
- * 自动选择最短路径（支持跨边界）。
+ * 沿当前 layout.path 顺序逐格移动；首尾相连时 progress=1 直接瞬移到目标点。
  */
 export function interpolatePosition(
   layout: BoardLayout,
@@ -161,37 +266,49 @@ export function interpolatePosition(
   toIndex: number,
   progress: number
 ): Point {
-  const { map } = layout;
-  const total = map.path.length;
+  const path = layout.path;
+  const total = path.length;
+  if (total === 0) return { x: 0, y: 0 };
+
   const from = ((fromIndex % total) + total) % total;
   const to = ((toIndex % total) + total) % total;
-
-  let forward = (to - from + total) % total;
-  let backward = (from - to + total) % total;
-
-  // 默认走最短路径
-  let direction = forward <= backward ? 1 : -1;
-  let steps = direction === 1 ? forward : backward;
-
-  const currentOffset = steps * progress * direction;
-  const currentIndex = (from + currentOffset + total) % total;
 
   const fromCenter = getTileCenter(layout, from);
   const toCenter = getTileCenter(layout, to);
 
-  // 如果距离很近或 progress 在端点，直接返回端点
   if (progress <= 0) return fromCenter;
   if (progress >= 1) return toCenter;
 
-  // 简单线性插值：先按当前 index 取中心，再向目标方向混合
-  // 由于环形拐角处直线插值会穿到棋盘内部，这里使用分段近似：
-  // 按 currentIndex 所在格的中心作为当前位置，并在最后 10% 平滑接近目标
-  const currentCenter = getTileCenter(layout, Math.floor(currentIndex));
+  // 找到 from/to 在路径顺序中的位置
+  const fromPathIdx = path.indexOf(from);
+  const toPathIdx = path.indexOf(to);
+  if (fromPathIdx < 0 || toPathIdx < 0) {
+    // 不在当前路径中，直接线性插值
+    return {
+      x: fromCenter.x + (toCenter.x - fromCenter.x) * progress,
+      y: fromCenter.y + (toCenter.y - fromCenter.y) * progress,
+    };
+  }
 
-  const smooth = Math.min(1, progress * 2); // 让移动过程更平滑
+  // 默认沿路径正向移动；若反向更短则反向
+  let forward = (toPathIdx - fromPathIdx + total) % total;
+  let backward = (fromPathIdx - toPathIdx + total) % total;
+  const direction = forward <= backward ? 1 : -1;
+  const steps = direction === 1 ? forward : backward;
+  if (steps === 0) return fromCenter;
+
+  const currentOffset = steps * progress;
+  const rawIdx = fromPathIdx + currentOffset * direction;
+  const currentIdx = Math.floor(((rawIdx % total) + total) % total);
+  const nextIdx = Math.floor((((rawIdx + direction) % total) + total) % total);
+  const fraction = rawIdx - Math.floor(rawIdx);
+
+  const a = getTileCenter(layout, path[currentIdx]);
+  const b = getTileCenter(layout, path[nextIdx]);
+
   return {
-    x: fromCenter.x + (toCenter.x - fromCenter.x) * smooth,
-    y: fromCenter.y + (toCenter.y - fromCenter.y) * smooth,
+    x: a.x + (b.x - a.x) * fraction,
+    y: a.y + (b.y - a.y) * fraction,
   };
 }
 
@@ -215,11 +332,7 @@ export function getTileAtPosition(layout: BoardLayout, x: number, y: number): nu
     const halfH = rect.height / 2;
 
     // 点在矩形内或距离中心很近
-    if (
-      Math.abs(dx) <= halfW &&
-      Math.abs(dy) <= halfH &&
-      distance < bestDistance
-    ) {
+    if (Math.abs(dx) <= halfW && Math.abs(dy) <= halfH && distance < bestDistance) {
       bestDistance = distance;
       bestIndex = tile.index;
     }
@@ -232,11 +345,11 @@ export function getTileAtPosition(layout: BoardLayout, x: number, y: number): nu
  * 计算整条路径的总长度（像素近似值）。
  */
 export function estimatePathLength(layout: BoardLayout): number {
-  const { map } = layout;
+  const path = layout.path;
   let length = 0;
-  for (let i = 0; i < map.path.length; i++) {
-    const a = getTileCenter(layout, map.path[i]);
-    const b = getTileCenter(layout, map.path[(i + 1) % map.path.length]);
+  for (let i = 0; i < path.length; i++) {
+    const a = getTileCenter(layout, path[i]);
+    const b = getTileCenter(layout, path[(i + 1) % path.length]);
     length += Math.hypot(b.x - a.x, b.y - a.y);
   }
   return length;
