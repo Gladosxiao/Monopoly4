@@ -28,10 +28,10 @@ function createBrainFactory(config: PlaytestConfig): BrainFactory {
     return createOpencodeAgentBrainFactory(createHeuristicBrainFactory());
   }
   return createHeuristicBrainFactory({
-    buyAggressiveness: config.strategy?.buyAggressiveness ?? 0.95,
-    upgradeAggressiveness: config.strategy?.upgradeAggressiveness ?? 0.95,
-    allowLoan: config.strategy?.allowLoan ?? false,
-    useCards: config.strategy?.useCards ?? false,
+    buyAggressiveness: config.strategy?.buyAggressiveness ?? 1.0,
+    upgradeAggressiveness: config.strategy?.upgradeAggressiveness ?? 1.0,
+    allowLoan: config.strategy?.allowLoan ?? true,
+    useCards: config.strategy?.useCards ?? true,
   });
 }
 
