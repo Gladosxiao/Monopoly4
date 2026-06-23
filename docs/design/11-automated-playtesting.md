@@ -19,13 +19,16 @@ packages/backend/src/playtest/
 ├── types.ts              # 共享类型
 ├── engine/
 │   ├── gameSession.ts    # 房间创建、Socket 连接、状态监听
-│   ├── actionExecutor.ts # 将 LLM 决策转换为 socket 事件
-│   └── validator.ts      # 游戏规则不变量校验
+│   ├── actionExecutor.ts # 将大脑决策转换为 socket 事件
+│   ├── validator.ts      # 游戏规则不变量校验
+│   └── watchdog.ts       # 对局卡死监控与自动恢复
 ├── agents/
-│   ├── llmPlayer.ts      # LLM 玩家抽象接口
-│   └── opencodeAgentPlayer.ts  # 基于 OMO slim playtester agent 的实现
+│   ├── llmPlayer.ts      # PlayerBrain 抽象接口
+│   ├── heuristicBrain.ts # 启发式默认大脑（策略化卡片/道具）
+│   └── opencodeAgentBrain.ts  # LLM 大脑（解析失败回退启发式）
 ├── scenarios/
-│   └── freePlay.ts       # 4 人自由对局场景
+│   ├── freePlay.ts       # 4 人自由对局场景
+│   └── pressureTest.ts   # 数值压力测试（10 圈淘汰）
 └── reports/
     └── reporter.ts       # 问题记录与 Markdown 报告生成
 
@@ -198,9 +201,27 @@ GitHub Actions 中每晚运行：
 | 测试非确定性 | 固定种子地图与角色，记录完整状态便于复现 |
 | LLM 费用高 | 仅 nightly 运行，本地调试时可选关闭 |
 
+## 压力测试
+
+`pressureTest` 场景专门验证数值平衡：
+- 初始资金：1000（4 玩家）
+- 地图：`economy`（高房价、地产为王）
+- 策略：buy/upgradeAggressiveness = 1.0，允许贷款，启用卡片/道具
+- 目标：3 轮测试中至少 2 轮在 10 圈（40 回合）内出现玩家破产
+
+该测试不修改全局默认配置，而是通过 `PlaytestConfig.gameConfig` 注入高压参数。
+
+## Watchdog 守护
+
+`engine/watchdog.ts` 在对局期间持续监控状态变化：
+- 超过阈值（默认 10s）无状态更新则判定为卡死
+- 尝试通过 `game:skip` 推进当前玩家回合
+- 连续 3 次恢复失败后导出当前状态快照并记录 critical issue
+
 ## 近期实现优先级
 
-1. P0: 游戏会话管理 + 4 人 AI 接入 + 基本动作执行
-2. P1: 不变量校验 + Markdown 报告
-3. P2: 多策略玩家角色 + 复杂动作（卡片/道具/股票）
-3. P3: CI 集成 + 历史趋势统计
+1. P0: 游戏会话管理 + 4 人 AI 接入 + 基本动作执行 ✓
+2. P1: 不变量校验 + Markdown 报告 ✓
+3. P2: 多策略玩家角色 + 复杂动作（卡片/道具/股票） ✓（启发式版本）
+4. P3: 数值压力测试 + Watchdog 守护 ✓
+5. P4: CI 集成 + 历史趋势统计
