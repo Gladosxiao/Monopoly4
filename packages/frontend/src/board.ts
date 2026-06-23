@@ -87,15 +87,15 @@ const BUILDING_LABELS: Record<BuildingType, string> = {
   lab: '研究所',
 };
 
-/** 建筑/指示物色系：暖灰低饱和，与地图、棋子独立 */
+/** 建筑/指示物色系：加深饱和度，确保在浅色地块上可辨 */
 const BUILDING_COLORS: Record<BuildingType, string> = {
-  house: '#e8c547',
-  chainStore: '#d68c45',
-  park: '#6dbf7c',
-  mall: '#5dade2',
-  hotel: '#af7ac5',
-  gasStation: '#ec7063',
-  lab: '#48c9b0',
+  house: '#d4a017',
+  chainStore: '#c0392b',
+  park: '#27ae60',
+  mall: '#2980b9',
+  hotel: '#8e44ad',
+  gasStation: '#c0392b',
+  lab: '#16a085',
 };
 
 /** 神明类型对应的颜色 */
@@ -420,14 +420,14 @@ function drawPathLines(ctx: CanvasRenderingContext2D, layout: BoardLayout): void
   if (centers.length < 2) return;
 
   ctx.save();
-  const lineW = Math.max(3, layout.tileSize * 0.1);
+  const lineW = Math.max(2, layout.tileSize * 0.05);
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
 
-  // 普通连接段：更亮的白色 + 外层发光
-  ctx.shadowColor = 'rgba(255, 255, 255, 0.35)';
-  ctx.shadowBlur = layout.tileSize * 0.15;
-  ctx.strokeStyle = 'rgba(255, 255, 255, 0.45)';
+  // 普通连接段：柔和白色细线，不喧宾夺主
+  ctx.shadowColor = 'rgba(255, 255, 255, 0.15)';
+  ctx.shadowBlur = layout.tileSize * 0.06;
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.22)';
   ctx.lineWidth = lineW;
   ctx.beginPath();
   ctx.moveTo(centers[0].x, centers[0].y);
@@ -438,7 +438,7 @@ function drawPathLines(ctx: CanvasRenderingContext2D, layout: BoardLayout): void
   ctx.shadowColor = 'transparent';
 
   // 方向箭头：每隔几段在路径中点绘制小箭头
-  ctx.fillStyle = 'rgba(255, 255, 255, 0.55)';
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.35)';
   const arrowStep = Math.max(1, Math.floor(centers.length / 12));
   for (let i = 0; i < centers.length - 1; i += arrowStep) {
     const a = centers[i];
@@ -446,7 +446,7 @@ function drawPathLines(ctx: CanvasRenderingContext2D, layout: BoardLayout): void
     const mx = (a.x + b.x) / 2;
     const my = (a.y + b.y) / 2;
     const angle = Math.atan2(b.y - a.y, b.x - a.x);
-    const size = layout.tileSize * 0.1;
+    const size = layout.tileSize * 0.06;
     ctx.save();
     ctx.translate(mx, my);
     ctx.rotate(angle);
@@ -462,9 +462,9 @@ function drawPathLines(ctx: CanvasRenderingContext2D, layout: BoardLayout): void
   // 首尾相连：用虚线表示“瞬移”回到起点
   const first = centers[0];
   const last = centers[centers.length - 1];
-  ctx.setLineDash([layout.tileSize * 0.25, layout.tileSize * 0.18]);
-  ctx.strokeStyle = 'rgba(255, 255, 255, 0.25)';
-  ctx.lineWidth = lineW * 0.8;
+  ctx.setLineDash([layout.tileSize * 0.2, layout.tileSize * 0.15]);
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
+  ctx.lineWidth = lineW * 0.7;
   ctx.beginPath();
   ctx.moveTo(last.x, last.y);
   ctx.lineTo(first.x, first.y);
@@ -532,8 +532,8 @@ function getShapeMetrics(shape: TileShape, rect: Rect): ShapeMetrics {
   const minDim = Math.min(w, h);
   const radius = Math.max(3, minDim * 0.1);
   const headerH = Math.max(14, h * 0.28);
-  // 圆形格进一步缩小为 tile 短边的 30%，名称居中显示
-  const r = shape === 'circle' ? minDim * 0.3 : minDim / 2;
+  // 圆形格统一为 tile 短边的 35%，名称居中显示
+  const r = shape === 'circle' ? minDim * 0.35 : minDim / 2;
   return { x, y, w, h, radius, headerH, cx: x + w / 2, cy: y + h / 2, r };
 }
 
@@ -860,13 +860,19 @@ export function renderBoard(
       ? block.indices.some((i) => options.selectableTileIndexes?.has(i))
       : options.selectableTileIndexes?.has(tile.index));
 
-    // 主体底色：property 纯色，functional 浅灰白底
+    // 主体底色：property 纯色，functional 浅灰白底，card/coupon 柔和底
     let bodyFill: string;
     if (isProperty) {
       bodyFill = groupColor;
       if (tile.ownerId) {
         const owner = state.players.find((p) => p.id === tile.ownerId);
         if (owner) bodyFill = blendColor(bodyFill, owner.color + '44');
+      }
+    } else if (shape === 'small') {
+      bodyFill = '#e8ecf1';
+      if (tile.ownerId) {
+        const owner = state.players.find((p) => p.id === tile.ownerId);
+        if (owner) bodyFill = blendColor(bodyFill, owner.color + '18');
       }
     } else {
       bodyFill = '#f5f7fa';
@@ -920,7 +926,7 @@ export function renderBoard(
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
         setTextShadow(ctx, 'rgba(0,0,0,0.85)');
-        ctx.fillStyle = '#f1c40f';
+        ctx.fillStyle = '#d4a017';
         ctx.fillText(`+${couponValue}`, drawCenter.x, drawCenter.y + iconSize * 0.55);
         clearTextShadow(ctx);
         ctx.restore();
@@ -933,7 +939,7 @@ export function renderBoard(
       ctx.save();
       // 根据名称长度自动缩放字体，确保不超出小圆
       const maxFontSize = Math.max(8, minDim * 0.22);
-      const maxWidth = m.r * 1.6;
+      const maxWidth = m.r * 1.4;
       ctx.font = `bold ${maxFontSize}px sans-serif`;
       let nameFontSize = maxFontSize;
       const nameWidth = ctx.measureText(tile.name).width;
@@ -996,7 +1002,7 @@ export function renderBoard(
         ctx.fill();
         ctx.restore();
 
-        const tokenSize = Math.max(12, minDim * 0.28);
+        const tokenSize = Math.max(16, minDim * 0.35);
         const tokenR = tokenSize / 2;
         const tokenX = m.x + tokenR + 4;
         const tokenY = barY + barH + tokenR + 2;
@@ -1018,7 +1024,7 @@ export function renderBoard(
         const badgeY = m.y + m.headerH + badgeSize / 2 + 3;
         drawLevelBadge(ctx, badgeX, badgeY, badgeSize, tile.level);
 
-        const iconSize = minDim * 0.28;
+        const iconSize = minDim * 0.35;
         const buildingType = tile.buildingType ?? 'house';
         const centerY = contentTop + (m.h - (contentTop - m.y)) / 2 - minDim * 0.03;
         drawBuildingWithLevel(ctx, drawCenter.x, centerY, iconSize, buildingType, tile.level);
@@ -1029,9 +1035,9 @@ export function renderBoard(
         ctx.font = `bold ${Math.max(8, minDim * 0.12)}px sans-serif`;
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        ctx.fillStyle = '#f1c40f';
+        ctx.fillStyle = '#e8c547';
         const rentText = approximate && displayRent > 0 ? `≈$${formatMoney(displayRent)}` : `$${formatMoney(displayRent)}`;
-        ctx.fillText(rentText, drawCenter.x, centerY + minDim * 0.24);
+        ctx.fillText(rentText, drawCenter.x, centerY + minDim * 0.26);
         clearTextShadow(ctx);
       } else {
         const priceFontSize = Math.max(9, minDim * 0.15);
@@ -1334,9 +1340,9 @@ function drawLevelBadge(
   ctx.save();
 
   // 外圈金色光环
-  ctx.shadowColor = 'rgba(241, 196, 15, 0.6)';
-  ctx.shadowBlur = r * 0.4;
-  ctx.fillStyle = '#f1c40f';
+  ctx.shadowColor = 'rgba(212, 160, 23, 0.5)';
+  ctx.shadowBlur = r * 0.3;
+  ctx.fillStyle = '#d4a017';
   ctx.beginPath();
   ctx.arc(cx, cy, r, 0, Math.PI * 2);
   ctx.fill();
