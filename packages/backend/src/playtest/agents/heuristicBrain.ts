@@ -16,13 +16,27 @@ import type { PlayerBrain, ActionDecision, AvailableAction } from '../types.js';
 
 export class HeuristicBrain implements PlayerBrain {
   readonly name: string;
-  private buyThreshold: number;
-  private upgradeThreshold: number;
+  private buyAggressiveness: number;
+  private upgradeAggressiveness: number;
+  private allowLoan: boolean;
+  private useCards: boolean;
 
-  constructor(name: string, options?: { buyThreshold?: number; upgradeThreshold?: number }) {
+  constructor(
+    name: string,
+    options?: {
+      buyThreshold?: number;
+      upgradeThreshold?: number;
+      buyAggressiveness?: number;
+      upgradeAggressiveness?: number;
+      allowLoan?: boolean;
+      useCards?: boolean;
+    }
+  ) {
     this.name = name;
-    this.buyThreshold = options?.buyThreshold ?? 0.3; // 资金低于 30% 时不买
-    this.upgradeThreshold = options?.upgradeThreshold ?? 0.5; // 资金低于 50% 时不升级
+    this.buyAggressiveness = options?.buyAggressiveness ?? 1 - (options?.buyThreshold ?? 0.3);
+    this.upgradeAggressiveness = options?.upgradeAggressiveness ?? 1 - (options?.upgradeThreshold ?? 0.5);
+    this.allowLoan = options?.allowLoan ?? true;
+    this.useCards = options?.useCards ?? true;
   }
 
   async decide(state: GameState, me: Player, availableActions: AvailableAction[]): Promise<ActionDecision> {
@@ -74,7 +88,8 @@ export class HeuristicBrain implements PlayerBrain {
     const buyAction = availableActions.find((a) => a.type === 'buyProperty');
     if (buyAction) {
       const price = (tile.basePrice ?? 0) * state.priceIndex;
-      if (me.cash >= price && me.cash > totalWealth * this.buyThreshold) {
+      const reserveRatio = 1 - this.buyAggressiveness;
+      if (me.cash >= price && me.cash > totalWealth * reserveRatio) {
         return { action: 'buyProperty', reason: `购买 ${tile.name}（价格 ${price}）` };
       }
     }
@@ -83,13 +98,14 @@ export class HeuristicBrain implements PlayerBrain {
     const upgradeAction = availableActions.find((a) => a.type === 'upgradeProperty');
     if (upgradeAction) {
       const upgradeCost = (tile.basePrice ?? 0) * state.priceIndex * ((tile.level ?? 0) + 1);
-      if (me.cash >= upgradeCost && me.cash > totalWealth * this.upgradeThreshold) {
+      const reserveRatio = 1 - this.upgradeAggressiveness;
+      if (me.cash >= upgradeCost && me.cash > totalWealth * reserveRatio) {
         return { action: 'upgradeProperty', reason: `升级 ${tile.name} 到等级 ${(tile.level ?? 0) + 1}` };
       }
     }
 
     // 3. 商店格 → 买卡片/道具（随机选择）
-    if (tile.type === 'shop') {
+    if (tile.type === 'shop' && this.useCards) {
       if (me.cash >= 500 && Math.random() < 0.5) {
         // 买一些常见卡片
         const cardIds = ['priceRise', 'seal', 'freePass', 'turnBack', 'dismissSpirit'];
@@ -119,12 +135,12 @@ export class HeuristicBrain implements PlayerBrain {
     }
 
     // 6. 资金紧张时贷款（在起点附近）
-    if (me.cash < totalWealth * 0.15 && me.loan === 0 && me.position <= 2) {
+    if (this.allowLoan && me.cash < totalWealth * 0.15 && me.loan === 0 && me.position <= 2) {
       return { action: 'takeLoan', target: { amount: 5000 }, reason: '资金紧张，贷款 5000' };
     }
 
     // 7. 随机使用卡片（20% 概率）
-    if (me.cards.length > 0 && Math.random() < 0.2) {
+    if (this.useCards && me.cards.length > 0 && Math.random() < 0.2) {
       const card = me.cards[Math.floor(Math.random() * me.cards.length)];
       return { action: 'useCard', target: { cardId: card.cardId }, reason: `随机使用卡片 ${card.cardId}` };
     }
@@ -135,6 +151,15 @@ export class HeuristicBrain implements PlayerBrain {
 }
 
 /** 创建启发式大脑工厂 */
-export function createHeuristicBrainFactory(options?: { buyThreshold?: number; upgradeThreshold?: number }): (name: string) => HeuristicBrain {
+export function createHeuristicBrainFactory(
+  options?: {
+    buyThreshold?: number;
+    upgradeThreshold?: number;
+    buyAggressiveness?: number;
+    upgradeAggressiveness?: number;
+    allowLoan?: boolean;
+    useCards?: boolean;
+  }
+): (name: string) => HeuristicBrain {
   return (name: string) => new HeuristicBrain(name, options);
 }

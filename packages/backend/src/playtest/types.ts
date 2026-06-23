@@ -85,12 +85,29 @@ export interface PlayerBrain {
 /** 大脑类型 */
 export type BrainType = 'heuristic' | 'llm';
 
+/** 场景类型 */
+export type ScenarioType = 'freePlay' | 'pressureTest';
+
+/** 玩家策略配置 */
+export interface PlayerStrategyConfig {
+  /** 买地激进程度：0-1，越高越倾向于在资金紧张时买地 */
+  buyAggressiveness?: number;
+  /** 升级激进程度：0-1 */
+  upgradeAggressiveness?: number;
+  /** 是否尽可能贷款 */
+  allowLoan?: boolean;
+  /** 是否使用卡片/道具 */
+  useCards?: boolean;
+}
+
 /** 测试配置 */
 export interface PlaytestConfig {
   /** 最大回合数（每名玩家每轮算 1 回合） */
   maxTurns?: number;
   /** 大脑类型 */
   brainType?: BrainType;
+  /** 场景类型 */
+  scenario?: ScenarioType;
   /** 单次动作超时（毫秒） */
   actionTimeout?: number;
   /** 是否输出详细日志 */
@@ -105,6 +122,47 @@ export interface PlaytestConfig {
   llmModel?: string;
   /** 玩家数量（默认 4） */
   playerCount?: number;
+  /** 游戏配置覆盖 */
+  gameConfig?: Partial<{
+    totalFunds: number;
+    mapId: string;
+    winCondition: string;
+    landLease: string;
+    gameTime: string;
+    moveMode: string;
+  }>;
+  /** 玩家策略配置 */
+  strategy?: PlayerStrategyConfig;
+}
+
+// ==================== 数值指标 ====================
+
+/** 单回合数值快照 */
+export interface TurnMetrics {
+  turn: number;
+  day: number;
+  month: number;
+  priceIndex: number;
+  totalAssets: number;
+  totalFundsConfigured: number;
+  /** 过路费占资产总值比例（%） */
+  rentToAssetRatio: number;
+  /** 最高单次过路费 */
+  maxRentPaid: number;
+  /** 最高地价 */
+  maxPropertyPrice: number;
+  /** 平均地价 */
+  avgPropertyPrice: number;
+  /** 玩家资金分布 */
+  playerCash: Record<string, number>;
+}
+
+/** 淘汰事件 */
+export interface EliminationEvent {
+  turn: number;
+  playerId: string;
+  username: string;
+  reason: 'bankruptcy' | 'time' | 'target';
 }
 
 // ==================== 问题报告 ====================
@@ -142,6 +200,10 @@ export interface PlaytestReport {
   players: PlayerConfig[];
   issues: Issue[];
   criticalIssues: Issue[];
+  /** 数值指标时间序列 */
+  metrics?: TurnMetrics[];
+  /** 淘汰事件 */
+  eliminations?: EliminationEvent[];
   finalState?: {
     players: Array<{
       id: string;

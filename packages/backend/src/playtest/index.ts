@@ -7,6 +7,7 @@
 import type { PlaytestConfig, PlaytestReport } from './types.js';
 import { createGameSession, closeSession } from './engine/gameSession.js';
 import { runFreePlay } from './scenarios/freePlay.js';
+import { runPressureTest } from './scenarios/pressureTest.js';
 import { Reporter } from './reports/reporter.js';
 
 /**
@@ -30,8 +31,12 @@ export async function runPlaytest(config: PlaytestConfig = {}): Promise<Playtest
     // 1. 创建游戏会话
     session = await createGameSession(config);
 
-    // 2. 运行自由对局场景
-    const report = await runFreePlay(session, config, (issue) => reporter.record(issue));
+    // 2. 运行对应场景
+    const scenario = config.scenario ?? 'freePlay';
+    const report =
+      scenario === 'pressureTest'
+        ? await runPressureTest(session, config, (issue) => reporter.record(issue))
+        : await runFreePlay(session, config, (issue) => reporter.record(issue));
 
     // 3. 合并问题到报告
     report.issues = reporter.getIssues();

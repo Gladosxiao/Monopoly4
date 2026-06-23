@@ -183,6 +183,12 @@ export async function createGameSession(config: PlaytestConfig): Promise<GameSes
   const roomId = `PLAYTEST-${Date.now().toString(36).toUpperCase()}`;
   session.roomId = roomId;
 
+  // 合并自定义游戏配置
+  const gameConfig: GameConfig = {
+    ...DEFAULT_GAME_CONFIG,
+    ...(config.gameConfig as Partial<GameConfig>),
+  };
+
   // 直接在内存中创建房间（复用 store）
   const room: Room = {
     id: roomId,
@@ -190,8 +196,8 @@ export async function createGameSession(config: PlaytestConfig): Promise<GameSes
     hostId: players[0].userId,
     status: 'waiting',
     maxPlayers: 4,
-    mapId: 'simple',
-    config: { ...DEFAULT_GAME_CONFIG },
+    mapId: gameConfig.mapId ?? 'simple',
+    config: gameConfig,
     players: [
       {
         userId: players[0].userId,
