@@ -16,6 +16,7 @@ import type { GameSession, PlayerConnection } from '../engine/gameSession.js';
 import { waitForState, sleep } from '../engine/gameSession.js';
 import { executeAction, getAvailableActions } from '../engine/actionExecutor.js';
 import { validateGameState } from '../engine/validator.js';
+import { Watchdog } from '../engine/watchdog.js';
 import { createHeuristicBrainFactory } from '../agents/heuristicBrain.js';
 import { createOpencodeAgentBrainFactory } from '../agents/opencodeAgentBrain.js';
 import type { BrainFactory } from '../agents/llmPlayer.js';
@@ -60,6 +61,14 @@ export async function runFreePlay(
 
   const verbose = config.verbose ?? false;
 
+  // 启动 watchdog 监控卡死
+  const watchdog = new Watchdog(session, recordIssue, {
+    staleTimeoutMs: config.actionTimeout ?? 10000,
+    maxRecoveryAttempts: 3,
+    exportStuckState: true,
+  });
+  watchdog.start();
+
   if (verbose) {
     console.log(`[FreePlay] 开始对局，maxTurns=${maxTurns}`);
     for (const [id, brain] of brains) {
@@ -86,6 +95,7 @@ export async function runFreePlay(
 
     // 非 rolling/acting 状态，等待
     if (state.status !== 'rolling' && state.status !== 'acting') {
+      watchdog.notifyStateChanged();
       await sleep(200);
       consecutiveNoAction++;
       if (consecutiveNoAction > MAX_NO_ACTION) {
@@ -174,6 +184,7 @@ export async function runFreePlay(
 
       // 校验状态
       if (session.latestState) {
+        watchdog.notifyStateChanged();
         const issues = validateGameState(session.latestState, totalTurns);
         for (const issue of issues) {
           recordIssue(issue);
@@ -196,6 +207,8 @@ export async function runFreePlay(
     // 短暂等待，让服务器处理
     await sleep(100);
   }
+
+  watchdog.stop();
 
   const endTime = new Date();
   const finalState = session.latestState;

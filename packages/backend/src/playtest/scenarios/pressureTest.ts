@@ -18,6 +18,7 @@ import type { GameSession, PlayerConnection } from '../engine/gameSession.js';
 import { waitForState, sleep } from '../engine/gameSession.js';
 import { executeAction, getAvailableActions } from '../engine/actionExecutor.js';
 import { validateGameState } from '../engine/validator.js';
+import { Watchdog } from '../engine/watchdog.js';
 import { createHeuristicBrainFactory } from '../agents/heuristicBrain.js';
 import { createOpencodeAgentBrainFactory } from '../agents/opencodeAgentBrain.js';
 import type { BrainFactory } from '../agents/llmPlayer.js';
@@ -88,6 +89,14 @@ export async function runPressureTest(
   const metrics: TurnMetrics[] = [];
   const eliminations: EliminationEvent[] = [];
 
+  // 启动 watchdog 监控卡死
+  const watchdog = new Watchdog(session, recordIssue, {
+    staleTimeoutMs: config.actionTimeout ?? 10000,
+    maxRecoveryAttempts: 3,
+    exportStuckState: true,
+  });
+  watchdog.start();
+
   if (verbose) {
     console.log(`[PressureTest] 开始压力测试，maxTurns=${maxTurns}`);
   }
@@ -105,6 +114,7 @@ export async function runPressureTest(
     }
 
     if (state.status !== 'rolling' && state.status !== 'acting') {
+      watchdog.notifyStateChanged();
       await sleep(200);
       consecutiveNoAction++;
       if (consecutiveNoAction > MAX_NO_ACTION) {
@@ -191,6 +201,7 @@ export async function runPressureTest(
       await sleep(100);
       const newState = session.latestState;
       if (newState) {
+        watchdog.notifyStateChanged();
         metrics.push(collectMetrics(newState, totalTurns));
         const issues = validateGameState(newState, totalTurns);
         for (const issue of issues) recordIssue(issue);
@@ -222,6 +233,8 @@ export async function runPressureTest(
 
     await sleep(100);
   }
+
+  watchdog.stop();
 
   const endTime = new Date();
   const finalState = session.latestState;
