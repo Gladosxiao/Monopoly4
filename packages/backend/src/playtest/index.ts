@@ -8,6 +8,8 @@ import type { PlaytestConfig, PlaytestReport } from './types.js';
 import { createGameSession, closeSession } from './engine/gameSession.js';
 import { runFreePlay } from './scenarios/freePlay.js';
 import { runPressureTest } from './scenarios/pressureTest.js';
+import { runInteractionTest } from './scenarios/interactionTest.js';
+import { runStockTest } from './scenarios/stockTest.js';
 import { Reporter } from './reports/reporter.js';
 
 /**
@@ -33,10 +35,21 @@ export async function runPlaytest(config: PlaytestConfig = {}): Promise<Playtest
 
     // 2. 运行对应场景
     const scenario = config.scenario ?? 'freePlay';
-    const report =
-      scenario === 'pressureTest'
-        ? await runPressureTest(session, config, (issue) => reporter.record(issue))
-        : await runFreePlay(session, config, (issue) => reporter.record(issue));
+    let report: PlaytestReport;
+    switch (scenario) {
+      case 'pressureTest':
+        report = await runPressureTest(session, config, (issue) => reporter.record(issue));
+        break;
+      case 'interactionTest':
+        report = await runInteractionTest(session, config, (issue) => reporter.record(issue));
+        break;
+      case 'stockTest':
+        report = await runStockTest(session, config, (issue) => reporter.record(issue));
+        break;
+      default:
+        report = await runFreePlay(session, config, (issue) => reporter.record(issue));
+        break;
+    }
 
     // 3. 合并问题到报告
     report.issues = reporter.getIssues();

@@ -138,18 +138,50 @@ export class HeuristicBrain implements PlayerBrain {
       };
     }
 
-    // 6. 有贷款且资金够 → 还款
+    // 6. 股票交易（资金充裕且股票价格低时买入）
+    const stockDecision = this.decideTradeStock(state, me, availableActions);
+    if (stockDecision) return stockDecision;
+
+    // 7. 有贷款且资金够 → 还款
     if (me.loan > 0 && me.cash > me.loan * 1.2) {
       return { action: 'repayLoan', target: { amount: Math.min(me.loan, me.cash) }, reason: '偿还贷款' };
     }
 
-    // 7. 资金紧张时贷款（在起点附近）
+    // 8. 资金紧张时贷款（在起点附近）
     if (this.allowLoan && me.cash < totalWealth * 0.15 && me.loan === 0 && me.position <= 2) {
       return { action: 'takeLoan', target: { amount: 5000 }, reason: '资金紧张，贷款 5000' };
     }
 
-    // 8. 默认跳过
+    // 9. 默认跳过
     return { action: 'skipTurn', reason: '无可盈利操作，跳过' };
+  }
+
+  /** 股票交易决策 */
+  private decideTradeStock(state: GameState, me: Player, availableActions: AvailableAction[]): ActionDecision | null {
+    if (!state.stocks || state.stocks.length === 0) return null;
+
+    const tradeActions = availableActions.filter((a) => a.type === 'tradeStock');
+    if (tradeActions.length === 0) return null;
+
+    const totalWealth = me.cash + me.deposit - me.loan;
+
+    // 只买入低价股，保留至少 30% 资金
+    const affordableStock = tradeActions.find((a) => {
+      const stock = state.stocks!.find((s) => s.id === a.params?.stockId);
+      return stock && me.cash > stock.price * 100 + totalWealth * 0.3;
+    });
+
+    if (affordableStock) {
+      const stockId = affordableStock.params?.stockId as string;
+      const stock = state.stocks!.find((s) => s.id === stockId);
+      return {
+        action: 'tradeStock',
+        target: { stockId, stockQuantity: 100 },
+        reason: `买入低价股票 ${stock?.name ?? stockId} 100 股`,
+      };
+    }
+
+    return null;
   }
 
   /** 策略性使用卡片 */

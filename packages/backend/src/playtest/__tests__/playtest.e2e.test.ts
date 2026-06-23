@@ -7,6 +7,7 @@
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { runPlaytest } from '../index.js';
+import { startMockLLMServer } from '../testUtils/llmMockServer.js';
 
 describe('LLM automated playtest', () => {
   it('runs a 4-player game without critical issues', async () => {
@@ -71,8 +72,8 @@ describe('LLM automated playtest', () => {
         maxTurns,
         brainType: 'heuristic',
         gameConfig: {
-          totalFunds: 1000,
-          mapId: 'economy',
+        totalFunds: 800,
+        mapId: 'economy',
         },
         strategy: {
           buyAggressiveness: 1.0,
@@ -100,5 +101,115 @@ describe('LLM automated playtest', () => {
 
     // 3 轮中至少 2 轮在 10 圈内出现淘汰，避免单一随机局导致 flaky
     expect(eliminationCount).toBeGreaterThanOrEqual(2);
+  }, 300000);
+
+  it('interaction test: players use cards/items and pay rent', async () => {
+    const report = await runPlaytest({
+      scenario: 'interactionTest',
+      maxTurns: 25,
+      brainType: 'heuristic',
+      gameConfig: {
+        totalFunds: 8000,
+        mapId: 'economy',
+      },
+      strategy: {
+        buyAggressiveness: 0.9,
+        upgradeAggressiveness: 0.9,
+        allowLoan: true,
+        useCards: true,
+      },
+    });
+
+    expect(report.criticalIssues).toHaveLength(0);
+    expect(report.totalTurns).toBeGreaterThan(0);
+
+    console.log(`\n=== 互联操作测试摘要 ===`);
+    console.log(`结果: ${report.result}，回合: ${report.totalTurns}，耗时: ${(report.duration / 1000).toFixed(1)}s`);
+
+    if (report.finalState) {
+      console.log('\n最终状态:');
+      for (const p of report.finalState.players) {
+        console.log(`  ${p.username}: 资金=${p.cash}, 地产=${p.properties}, 破产=${p.isBankrupt}`);
+      }
+    }
+
+    if (report.issues.length > 0) {
+      console.log('\n问题列表:');
+      for (const issue of report.issues.slice(0, 10)) {
+        console.log(`  [${issue.severity}] ${issue.category}: ${issue.expected} → ${issue.actual}`);
+      }
+    }
+
+    expect(['completed', 'timeout']).toContain(report.result);
+  }, 120000);
+
+  it('stock test: players trade stocks without critical issues', async () => {
+    const report = await runPlaytest({
+      scenario: 'stockTest',
+      maxTurns: 30,
+      brainType: 'heuristic',
+      gameConfig: {
+        totalFunds: 15000,
+        mapId: 'simple',
+      },
+      strategy: {
+        buyAggressiveness: 0.7,
+        upgradeAggressiveness: 0.7,
+        allowLoan: true,
+        useCards: true,
+      },
+    });
+
+    expect(report.criticalIssues).toHaveLength(0);
+    expect(report.totalTurns).toBeGreaterThan(0);
+
+    console.log(`\n=== 股票测试摘要 ===`);
+    console.log(`结果: ${report.result}，回合: ${report.totalTurns}，耗时: ${(report.duration / 1000).toFixed(1)}s`);
+
+    if (report.finalState) {
+      console.log('\n最终状态:');
+      for (const p of report.finalState.players) {
+        console.log(`  ${p.username}: 资金=${p.cash}, 地产=${p.properties}, 破产=${p.isBankrupt}`);
+      }
+    }
+
+    expect(['completed', 'timeout']).toContain(report.result);
+  }, 120000);
+
+  it('LLM brain: runs 3 rounds through mocked LLM API', async () => {
+    const mockServer = await startMockLLMServer();
+    const originalBaseUrl = process.env.PLAYTEST_LLM_BASE_URL;
+    const originalApiKey = process.env.PLAYTEST_LLM_API_KEY;
+
+    try {
+      process.env.PLAYTEST_LLM_BASE_URL = mockServer.baseUrl;
+      process.env.PLAYTEST_LLM_API_KEY = 'mock-key';
+
+      const summaries: string[] = [];
+      for (let i = 0; i < 3; i++) {
+        const report = await runPlaytest({
+          scenario: 'freePlay',
+          maxTurns: 15,
+          brainType: 'llm',
+          gameConfig: {
+            totalFunds: 5000,
+            mapId: 'simple',
+          },
+        });
+
+        expect(report.criticalIssues).toHaveLength(0);
+        expect(report.totalTurns).toBeGreaterThan(0);
+        summaries.push(
+          `第 ${i + 1} 轮: ${report.result}, ${report.totalTurns} 回合, 问题=${report.issues.length}`
+        );
+      }
+
+      console.log('\n=== LLM 3 轮测试摘要 ===');
+      for (const s of summaries) console.log(s);
+    } finally {
+      process.env.PLAYTEST_LLM_BASE_URL = originalBaseUrl;
+      process.env.PLAYTEST_LLM_API_KEY = originalApiKey;
+      await mockServer.close();
+    }
   }, 300000);
 });

@@ -86,7 +86,7 @@ export interface PlayerBrain {
 export type BrainType = 'heuristic' | 'llm';
 
 /** 场景类型 */
-export type ScenarioType = 'freePlay' | 'pressureTest';
+export type ScenarioType = 'freePlay' | 'pressureTest' | 'interactionTest' | 'stockTest';
 
 /** 玩家策略配置 */
 export interface PlayerStrategyConfig {
