@@ -244,16 +244,16 @@ export async function runPressureTest(
     });
   }
 
-  // 验证物价指数确实变化过
+  // 记录物价指数变化情况（压力测试主要目标是淘汰，priceIndex 未变化仅作信息提示）
   const priceIndexChanged = metrics.some((m, i) => i > 0 && m.priceIndex !== metrics[0].priceIndex);
   if (!priceIndexChanged) {
     recordIssue({
-      severity: 'medium',
+      severity: 'info',
       category: '物价指数',
       turn: totalTurns,
-      expected: '游戏过程中物价指数应发生变化',
-      actual: '整个测试期间物价指数未变化',
-      details: 'priceIndex 由总资产/总资金决定，若无人大量买地升级或总资产未增长，指数不会上涨。',
+      expected: '游戏过程中物价指数通常会因总资产增长而变化',
+      actual: '本次压力测试期间物价指数未变化',
+      details: 'priceIndex 由总资产/总资金决定。高压场景下玩家快速破产，总资产可能未超过初始配置。',
     });
   }
 

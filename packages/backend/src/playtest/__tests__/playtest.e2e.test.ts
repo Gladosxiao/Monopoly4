@@ -58,4 +58,48 @@ describe('LLM automated playtest', () => {
     expect(report.totalTurns).toBeGreaterThanOrEqual(0);
     expect(report.players).toHaveLength(4);
   }, 60000);
+
+  it('pressure test: eliminates at least 1 player within 10 rounds', async () => {
+    const report = await runPlaytest({
+      scenario: 'pressureTest',
+      maxTurns: 40,
+      brainType: 'heuristic',
+      gameConfig: {
+        totalFunds: 3000,
+        mapId: 'economy',
+      },
+      strategy: {
+        buyAggressiveness: 0.95,
+        upgradeAggressiveness: 0.95,
+        allowLoan: true,
+        useCards: true,
+      },
+    });
+
+    expect(report.criticalIssues).toHaveLength(0);
+    expect(report.totalTurns).toBeGreaterThan(0);
+
+    console.log(`\n=== 压力测试摘要 ===`);
+    console.log(`结果: ${report.result}，回合: ${report.totalTurns}，耗时: ${(report.duration / 1000).toFixed(1)}s`);
+    console.log(`淘汰事件: ${report.eliminations?.length ?? 0}`);
+    console.log(`物价指数变化: ${report.metrics ? report.metrics[0]?.priceIndex + ' -> ' + report.metrics[report.metrics.length - 1]?.priceIndex : 'N/A'}`);
+
+    if (report.finalState) {
+      console.log('\n最终状态:');
+      for (const p of report.finalState.players) {
+        console.log(`  ${p.username}: 资金=${p.cash}, 存款=${p.deposit}, 地产=${p.properties}, 破产=${p.isBankrupt}`);
+      }
+    }
+
+    if (report.issues.length > 0) {
+      console.log('\n问题列表:');
+      for (const issue of report.issues.slice(0, 10)) {
+        console.log(`  [${issue.severity}] ${issue.category}: ${issue.expected} → ${issue.actual}`);
+      }
+    }
+
+    // 目标：10 圈（40 回合）内至少 1 人破产
+    const eliminatedWithin10 = report.eliminations?.filter((e) => e.turn <= 40) ?? [];
+    expect(eliminatedWithin10.length).toBeGreaterThanOrEqual(1);
+  }, 120000);
 });
