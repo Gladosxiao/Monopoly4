@@ -35,3 +35,6 @@ tsconfig.tsbuildinfo
 
 # Coverage reports
 coverage/
+
+# Playtest reports
+packages/backend/playtest-reports/
