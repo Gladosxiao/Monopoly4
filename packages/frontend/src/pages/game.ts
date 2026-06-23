@@ -215,8 +215,8 @@ export async function renderGamePage(roomId: string): Promise<void> {
   container.className = 'page game-page';
   container.innerHTML = `
     <header>
-      <h1>游戏中 - 房间 ${roomId}</h1>
-      <button id="btn-exit">退出</button>
+      <h1>🎲 游戏中 <span class="room-tag">${escapeHtml(roomId)}</span></h1>
+      <button id="btn-exit" class="ghost btn-sm">退出房间</button>
     </header>
     <div class="game-body">
       <div class="game-content">
@@ -476,20 +476,65 @@ export async function renderGamePage(roomId: string): Promise<void> {
   }
 }
 
+/** 渲染单个玩家的信息卡片（label-value grid 布局，去除管道符） */
 export function renderPlayerInfoCard(player: Player, state: GameState, isSelf = false): HTMLDivElement {
   const div = document.createElement('div');
   div.className = `player-info ${isSelf ? 'player-info-self' : ''}`;
   const isCurrent = state.players[state.currentPlayerIndex].id === player.id;
+  const totalCash = player.cash + player.deposit;
+  const itemCount = player.items.reduce((s, i) => s + i.quantity, 0);
+  const initial = (player.username || '?').charAt(0).toUpperCase();
+
+  // 资产状态用颜色编码：净现金（>0 绿色，=0 灰色，<0 红色）
+  const netClass = player.loan > 0 && player.cash < player.loan ? 'is-negative' : 'is-positive';
+  const loanClass = player.loan > 0 ? 'is-negative' : '';
+
   div.innerHTML = `
     <div class="player-info-header">
-      <strong style="color:${player.color}">${player.username}</strong>
-      ${isCurrent ? '<span class="current-turn">← 当前回合</span>' : ''}
+      <span class="player-avatar" style="background:${player.color}">${escapeHtml(initial)}</span>
+      <strong style="color:${player.color}">${escapeHtml(player.username)}</strong>
       ${player.isAI ? '<span class="badge bot">AI</span>' : ''}
+      ${isCurrent ? '<span class="current-turn-indicator">当前回合</span>' : ''}
     </div>
-    <div class="info-section">现金: $${player.cash} | 存款: $${player.deposit} | 贷款: $${player.loan} | 点券: ${player.coupons}</div>
-    <div class="info-section">地产: ${player.properties.length} 处 | 保险: ${player.insuranceDays} 天</div>
-    <div class="info-section">卡片: ${player.cards.length}/15 | 道具: ${player.items.reduce((s, i) => s + i.quantity, 0)}</div>
-    ${player.spirit ? `<div class="info-section">神明: ${player.spirit.spiritId}</div>` : ''}
+    <div class="player-stats">
+      <div class="player-stat">
+        <span class="stat-label">💵 现金</span>
+        <span class="stat-value is-money">$${player.cash.toLocaleString()}</span>
+      </div>
+      <div class="player-stat">
+        <span class="stat-label">🏦 存款</span>
+        <span class="stat-value">$${player.deposit.toLocaleString()}</span>
+      </div>
+      <div class="player-stat">
+        <span class="stat-label">💰 总资产</span>
+        <span class="stat-value ${netClass}">$${totalCash.toLocaleString()}</span>
+      </div>
+      <div class="player-stat">
+        <span class="stat-label">📝 贷款</span>
+        <span class="stat-value ${loanClass}">$${player.loan.toLocaleString()}</span>
+      </div>
+      <div class="player-stat">
+        <span class="stat-label">🎟️ 点券</span>
+        <span class="stat-value">${player.coupons}</span>
+      </div>
+      <div class="player-stat">
+        <span class="stat-label">🏘️ 地产</span>
+        <span class="stat-value">${player.properties.length}</span>
+      </div>
+      <div class="player-stat">
+        <span class="stat-label">🛡️ 保险</span>
+        <span class="stat-value">${player.insuranceDays} 天</span>
+      </div>
+      <div class="player-stat">
+        <span class="stat-label">🃏 卡片</span>
+        <span class="stat-value">${player.cards.length}/15</span>
+      </div>
+      <div class="player-stat">
+        <span class="stat-label">🎒 道具</span>
+        <span class="stat-value">${itemCount}</span>
+      </div>
+    </div>
+    ${player.spirit ? `<div class="player-stat"><span class="stat-label">✨ 神明</span><span class="stat-value">${escapeHtml(player.spirit.spiritId)}</span></div>` : ''}
     ${player.isBankrupt ? '<div class="bankrupt">已破产</div>' : ''}
   `;
   return div;
@@ -628,223 +673,256 @@ export function renderActions(container: HTMLElement, state: GameState): void {
 
   if (state.status === 'ended') {
     const winner = state.players.find((p) => p.id === state.winnerId);
-    el.innerHTML = `<div class="winner">🎉 ${winner?.username || '未知'} 获胜！</div>`;
+    el.innerHTML = `
+      <div class="winner-card">
+        <div class="trophy">🏆</div>
+        <div class="winner-label">本局冠军</div>
+        <div class="winner-name">${escapeHtml(winner?.username || '未知')}</div>
+      </div>
+    `;
     return;
   }
 
-  if (isMyTurn) {
-    if (state.status === 'rolling') {
-      const maxDice = currentPlayer.vehicle === 'walk' ? 1 : currentPlayer.vehicle === 'bike' ? 2 : 3;
-      if (maxDice === 1) {
-        const btn = document.createElement('button');
-        btn.innerHTML = '🎲 掷骰子';
-        btn.addEventListener('click', () => rollDice(state.roomId, 1));
-        el.appendChild(btn);
-      } else {
-        const label = document.createElement('div');
-        label.textContent = `🎲 选择骰子数（最多 ${maxDice} 颗）`;
-        label.style.fontSize = '13px';
-        label.style.color = 'var(--color-text-muted)';
-        el.appendChild(label);
-        for (let i = 1; i <= maxDice; i++) {
-          const btn = document.createElement('button');
-          btn.innerHTML = `🎲 掷 ${i} 颗骰子`;
-          btn.addEventListener('click', () => rollDice(state.roomId, i));
-          el.appendChild(btn);
-        }
+  if (!isMyTurn) {
+    el.innerHTML = `
+      <div class="waiting-state">
+        <div class="waiting-icon">⏳</div>
+        <div class="waiting-text">等待 <span class="waiting-player">${escapeHtml(currentPlayer.username)}</span> 操作…</div>
+      </div>
+    `;
+    return;
+  }
+
+  if (state.status === 'rolling') {
+    const group = createGroup('🎲 骰子', 'primary');
+    const maxDice = currentPlayer.vehicle === 'walk' ? 1 : currentPlayer.vehicle === 'bike' ? 2 : 3;
+    if (maxDice === 1) {
+      const btn = createButton('🎲 掷骰子', () => rollDice(state.roomId, 1));
+      group.buttons.appendChild(btn);
+    } else {
+      const title = group.title;
+      const hint = document.createElement('div');
+      hint.style.fontSize = 'var(--font-size-xs)';
+      hint.style.color = 'var(--color-text-muted)';
+      hint.textContent = `选择骰子数（最多 ${maxDice} 颗）`;
+      group.body.appendChild(hint);
+      for (let i = 1; i <= maxDice; i++) {
+        const btn = createButton(`🎲 掷 ${i} 颗`, () => rollDice(state.roomId, i));
+        group.buttons.appendChild(btn);
       }
-    } else if (state.status === 'acting') {
-      const tileIndex = state.pendingTileIndex ?? currentPlayer.position;
-      const tile = state.map.tiles[tileIndex];
+    }
+    el.appendChild(group.el);
+    return;
+  }
 
-      if (tile.type === 'property' && !tile.ownerId) {
-        const btn = document.createElement('button');
-        btn.textContent = `购买 ${tile.name} ($${Math.floor(tile.basePrice * state.priceIndex)})`;
-        btn.addEventListener('click', () => buyProperty(state.roomId));
-        el.appendChild(btn);
-      } else if (tile.type === 'shop') {
-        if (state.config.enableCards !== false) {
-          const shopCardBtn = document.createElement('button');
-          shopCardBtn.textContent = '购买卡片';
-          shopCardBtn.addEventListener('click', async () => {
-            const cardChoices = Object.values(CARD_DEFINITIONS)
-              .filter((c) => c.cost > 0)
-              .map((c, i) => ({ value: String(i + 1), label: `${i + 1}. ${c.name} (${c.cost}点)` }));
-            const choice = await showPrompt('选择要购买的卡片：', { choices: cardChoices });
-            const idx = parseInt(choice || '', 10) - 1;
-            const card = Object.values(CARD_DEFINITIONS).filter((c) => c.cost > 0)[idx];
-            if (card) buyCard(state.roomId, card.id);
-          });
-          el.appendChild(shopCardBtn);
-        }
+  if (state.status === 'acting') {
+    const tileIndex = state.pendingTileIndex ?? currentPlayer.position;
+    const tile = state.map.tiles[tileIndex];
 
-        if (state.config.enableItems !== false) {
-          const shopItemBtn = document.createElement('button');
-          shopItemBtn.textContent = '购买道具';
-          shopItemBtn.addEventListener('click', async () => {
-            const itemChoices = Object.values(ITEM_DEFINITIONS)
-              .filter((i) => i.cost > 0)
-              .map((it, i) => ({ value: String(i + 1), label: `${i + 1}. ${it.name} (${it.cost}点)` }));
-            const choice = await showPrompt('选择要购买的道具：', { choices: itemChoices });
+    // ====== 资产操作组（购买/升级/改建）======
+    if (tile.type === 'property' && !tile.ownerId) {
+      const group = createGroup('💰 购买地产', 'primary');
+      const cost = Math.floor(tile.basePrice * state.priceIndex);
+      const btn = createButton(`购买 ${tile.name} ($${cost.toLocaleString()})`, () => buyProperty(state.roomId));
+      group.buttons.appendChild(btn);
+      el.appendChild(group.el);
+    } else if (tile.type === 'property' && tile.ownerId === currentPlayer.id) {
+      const bt = tile.buildingType ?? 'house';
+      const canUp = bt !== 'chainStore' && bt !== 'park' && bt !== 'gasStation' && tile.level < 5;
+      if (canUp) {
+        const cost = Math.floor(tile.basePrice * (tile.level + 1) * 0.5 * state.priceIndex);
+        const group = createGroup('🏗️ 建筑管理', 'primary');
+        const upBtn = createButton(`升级 ${tile.name} ($${cost.toLocaleString()})`, async () => {
+          // 大块土地首次升级时允许选择特殊建筑类型
+          if (tile.size === 'large' && bt === 'house') {
+            const options = [
+              { value: 'mall', label: '商场（转盘租金）' },
+              { value: 'hotel', label: '旅馆（转盘租金+住宿）' },
+              { value: 'gasStation', label: '加油站（按步数收费）' },
+              { value: 'park', label: '公园（免收过路费）' },
+              { value: 'lab', label: '研究所（免收过路费）' },
+            ];
+            const choice = await showPrompt('选择要建造的特殊建筑：', {
+              choices: options.map((o, i) => ({ value: String(i + 1), label: `${i + 1}. ${o.label}` })),
+            });
             const idx = parseInt(choice || '', 10) - 1;
-            const item = Object.values(ITEM_DEFINITIONS).filter((i) => i.cost > 0)[idx];
-            if (item) buyItem(state.roomId, item.id);
-          });
-          el.appendChild(shopItemBtn);
-        }
-      } else if (tile.type === 'property' && tile.ownerId === currentPlayer.id) {
-        const bt = tile.buildingType ?? 'house';
-        const canUp = bt !== 'chainStore' && bt !== 'park' && bt !== 'gasStation' && tile.level < 5;
-        if (canUp) {
-          const btn = document.createElement('button');
-          const cost = Math.floor(tile.basePrice * (tile.level + 1) * 0.5 * state.priceIndex);
-          btn.textContent = `升级 ${tile.name} ($${cost})`;
-          btn.addEventListener('click', async () => {
-            // 大块土地首次升级时允许选择特殊建筑类型
-            if (tile.size === 'large' && bt === 'house') {
-              const options = [
-                { value: 'mall', label: '商场（转盘租金）' },
-                { value: 'hotel', label: '旅馆（转盘租金+住宿）' },
-                { value: 'gasStation', label: '加油站（按步数收费）' },
-                { value: 'park', label: '公园（免收过路费）' },
-                { value: 'lab', label: '研究所（免收过路费）' },
-              ];
-              const choice = await showPrompt('选择要建造的特殊建筑：', {
-                choices: options.map((o, i) => ({ value: String(i + 1), label: `${i + 1}. ${o.label}` })),
-              });
-              const idx = parseInt(choice || '', 10) - 1;
-              if (idx >= 0 && idx < options.length) {
-                upgradeProperty(state.roomId, options[idx].value as BuildingType);
-              }
-            } else {
-              upgradeProperty(state.roomId);
+            if (idx >= 0 && idx < options.length) {
+              upgradeProperty(state.roomId, options[idx].value as BuildingType);
             }
-          });
-          el.appendChild(btn);
-        }
-
-        // 改建按钮
-        const rebuildBtn = document.createElement('button');
-        rebuildBtn.textContent = '改建';
-        rebuildBtn.addEventListener('click', async () => {
-          const options = tile.size === 'small'
-            ? [
-                { value: 'house', label: '住宅' },
-                { value: 'chainStore', label: '连锁店' },
-              ]
-            : [
-                { value: 'park', label: '公园' },
-                { value: 'mall', label: '商场' },
-                { value: 'hotel', label: '旅馆' },
-                { value: 'gasStation', label: '加油站' },
-                { value: 'lab', label: '研究所' },
-              ];
-          const choice = await showPrompt('选择建筑类型：', {
-            choices: options.map((o, i) => ({ value: String(i + 1), label: `${i + 1}. ${o.label}` })),
-          });
-          const idx = parseInt(choice || '', 10) - 1;
-          if (idx >= 0 && idx < options.length) {
-            rebuildTile(state.roomId, tileIndex, options[idx].value as BuildingType);
+          } else {
+            upgradeProperty(state.roomId);
           }
         });
-        el.appendChild(rebuildBtn);
+        group.buttons.appendChild(upBtn);
+        el.appendChild(group.el);
       }
 
-      // 医院/监狱格解救 NPC
-      if (tile.type === 'hospital' || tile.type === 'prison') {
-        const captiveNpcs = state.npcs.filter((n) => !n.rescued && state.map.path[n.pathIndex] === tileIndex);
+      // 改建按钮（独立分组）
+      const rebuildGroup = createGroup('🔨 改建');
+      const rebuildBtn = createButton('改建建筑类型', async () => {
+        const options = tile.size === 'small'
+          ? [
+              { value: 'house', label: '住宅' },
+              { value: 'chainStore', label: '连锁店' },
+            ]
+          : [
+              { value: 'park', label: '公园' },
+              { value: 'mall', label: '商场' },
+              { value: 'hotel', label: '旅馆' },
+              { value: 'gasStation', label: '加油站' },
+              { value: 'lab', label: '研究所' },
+            ];
+        const choice = await showPrompt('选择建筑类型：', {
+          choices: options.map((o, i) => ({ value: String(i + 1), label: `${i + 1}. ${o.label}` })),
+        });
+        const idx = parseInt(choice || '', 10) - 1;
+        if (idx >= 0 && idx < options.length) {
+          rebuildTile(state.roomId, tileIndex, options[idx].value as BuildingType);
+        }
+      });
+      rebuildGroup.buttons.appendChild(rebuildBtn);
+      el.appendChild(rebuildGroup.el);
+    } else if (tile.type === 'shop') {
+      const group = createGroup('🛒 商店');
+      if (state.config.enableCards !== false) {
+        const btn = createButton('购买卡片', async () => {
+          const cardChoices = Object.values(CARD_DEFINITIONS)
+            .filter((c) => c.cost > 0)
+            .map((c, i) => ({ value: String(i + 1), label: `${i + 1}. ${c.name} (${c.cost}点)` }));
+          const choice = await showPrompt('选择要购买的卡片：', { choices: cardChoices });
+          const idx = parseInt(choice || '', 10) - 1;
+          const card = Object.values(CARD_DEFINITIONS).filter((c) => c.cost > 0)[idx];
+          if (card) buyCard(state.roomId, card.id);
+        });
+        group.buttons.appendChild(btn);
+      }
+      if (state.config.enableItems !== false) {
+        const btn = createButton('购买道具', async () => {
+          const itemChoices = Object.values(ITEM_DEFINITIONS)
+            .filter((i) => i.cost > 0)
+            .map((it, i) => ({ value: String(i + 1), label: `${i + 1}. ${it.name} (${it.cost}点)` }));
+          const choice = await showPrompt('选择要购买的道具：', { choices: itemChoices });
+          const idx = parseInt(choice || '', 10) - 1;
+          const item = Object.values(ITEM_DEFINITIONS).filter((i) => i.cost > 0)[idx];
+          if (item) buyItem(state.roomId, item.id);
+        });
+        group.buttons.appendChild(btn);
+      }
+      el.appendChild(group.el);
+    } else if (tile.type === 'lottery') {
+      const group = createGroup('🎰 乐透');
+      const btn = createButton('投注乐透 ($1000)', async () => {
+        const input = await showPrompt('选择 0-9 的号码：');
+        const number = parseInt(input || '', 10);
+        if (!Number.isNaN(number)) placeLotteryBet(state.roomId, number);
+      });
+      group.buttons.appendChild(btn);
+      el.appendChild(group.el);
+    } else if (tile.type === 'magic') {
+      const group = createGroup('✨ 魔法屋');
+      const btn = createButton('魔法屋施法', async () => {
+        const targets = state.players.filter((p) => !p.isBankrupt);
+        const targetChoice = await showPrompt('选择目标：', {
+          choices: targets.map((p, i) => ({ value: String(i + 1), label: `${i + 1}. ${p.username}` })),
+        });
+        const targetIdx = parseInt(targetChoice || '', 10) - 1;
+        const target = targets[targetIdx];
+        if (!target) return;
+        const spellChoice = await showPrompt('选择法术：', {
+          choices: [
+            { value: '1', label: '1. 交换现金' },
+            { value: '2', label: '2. 送走神明' },
+            { value: '3', label: '3. 抢夺卡片' },
+            { value: '4', label: '4. 关进监狱3天' },
+          ],
+        });
+        const spellIdx = parseInt(spellChoice || '', 10);
+        const spells: ('swapCash' | 'dismissSpirit' | 'stealCard' | 'jail')[] = [
+          'swapCash', 'dismissSpirit', 'stealCard', 'jail',
+        ];
+        const spell = spells[spellIdx - 1];
+        if (spell) castMagicSpell(state.roomId, target.id, spell);
+      });
+      group.buttons.appendChild(btn);
+      el.appendChild(group.el);
+    }
+
+    // ====== 救援组 ======
+    if (tile.type === 'hospital' || tile.type === 'prison') {
+      const captiveNpcs = state.npcs.filter((n) => !n.rescued && state.map.path[n.pathIndex] === tileIndex);
+      if (captiveNpcs.length > 0) {
+        const group = createGroup('🆘 救援');
         for (const npc of captiveNpcs) {
           const def = NPC_DEFINITIONS[npc.type];
-          const btn = document.createElement('button');
-          btn.textContent = `解救 ${def.name}`;
-          btn.addEventListener('click', () => rescueNpc(state.roomId, npc.id));
-          el.appendChild(btn);
+          const btn = createButton(`解救 ${def.name}`, () => rescueNpc(state.roomId, npc.id));
+          group.buttons.appendChild(btn);
         }
+        el.appendChild(group.el);
       }
-
-      // 银行贷款与还款（起点/银行格可贷款，有贷款时随时可还款）
-      if (tile.type === 'start') {
-        const loanBtn = document.createElement('button');
-        loanBtn.textContent = '银行贷款';
-        loanBtn.addEventListener('click', async () => {
-          const input = await showPrompt('输入贷款金额：');
-          const amount = parseInt(input || '', 10);
-          if (amount > 0) takeLoan(state.roomId, amount);
-        });
-        el.appendChild(loanBtn);
-      }
-      if (currentPlayer.loan > 0) {
-        const repayBtn = document.createElement('button');
-        repayBtn.textContent = '偿还贷款';
-        repayBtn.addEventListener('click', async () => {
-          const input = await showPrompt(`输入还款金额（最大 $${Math.min(currentPlayer.cash, currentPlayer.loan)}）：`);
-          const amount = parseInt(input || '', 10);
-          if (amount > 0) repayLoan(state.roomId, amount);
-        });
-        el.appendChild(repayBtn);
-      }
-
-      // 乐透格投注
-      if (tile.type === 'lottery') {
-        const lotteryBtn = document.createElement('button');
-        lotteryBtn.textContent = '投注乐透 ($1000)';
-        lotteryBtn.addEventListener('click', async () => {
-          const input = await showPrompt('选择 0-9 的号码：');
-          const number = parseInt(input || '', 10);
-          if (!Number.isNaN(number)) placeLotteryBet(state.roomId, number);
-        });
-        el.appendChild(lotteryBtn);
-      }
-
-      // 魔法屋施法
-      if (tile.type === 'magic') {
-        const magicBtn = document.createElement('button');
-        magicBtn.textContent = '魔法屋施法';
-        magicBtn.addEventListener('click', async () => {
-          const targets = state.players.filter((p) => !p.isBankrupt);
-          const targetChoice = await showPrompt('选择目标：', {
-            choices: targets.map((p, i) => ({ value: String(i + 1), label: `${i + 1}. ${p.username}` })),
-          });
-          const targetIdx = parseInt(targetChoice || '', 10) - 1;
-          const target = targets[targetIdx];
-          if (!target) return;
-          const spellChoice = await showPrompt('选择法术：', {
-            choices: [
-              { value: '1', label: '1. 交换现金' },
-              { value: '2', label: '2. 送走神明' },
-              { value: '3', label: '3. 抢夺卡片' },
-              { value: '4', label: '4. 关进监狱3天' },
-            ],
-          });
-          const spellIdx = parseInt(spellChoice || '', 10);
-          const spells: ('swapCash' | 'dismissSpirit' | 'stealCard' | 'jail')[] = [
-            'swapCash',
-            'dismissSpirit',
-            'stealCard',
-            'jail',
-          ];
-          const spell = spells[spellIdx - 1];
-          if (spell) castMagicSpell(state.roomId, target.id, spell);
-        });
-        el.appendChild(magicBtn);
-      }
-
-      // 理赔按钮
-      if (currentPlayer.insuranceDays > 0) {
-        const claimBtn = document.createElement('button');
-        claimBtn.textContent = '申请理赔';
-        claimBtn.addEventListener('click', () => claimInsurance(state.roomId));
-        el.appendChild(claimBtn);
-      }
-
-      const skipBtn = document.createElement('button');
-      skipBtn.textContent = '结束回合';
-      skipBtn.addEventListener('click', () => skipTurn(state.roomId));
-      el.appendChild(skipBtn);
     }
-  } else {
-    el.innerHTML = `<div>等待 ${currentPlayer.username} 操作...</div>`;
+
+    // ====== 金融组 ======
+    const financeBtns: HTMLButtonElement[] = [];
+    if (tile.type === 'start') {
+      financeBtns.push(createButton('🏦 银行贷款', async () => {
+        const input = await showPrompt('输入贷款金额：');
+        const amount = parseInt(input || '', 10);
+        if (amount > 0) takeLoan(state.roomId, amount);
+      }));
+    }
+    if (currentPlayer.loan > 0) {
+      financeBtns.push(createButton('💳 偿还贷款', async () => {
+        const input = await showPrompt(`输入还款金额（最大 $${Math.min(currentPlayer.cash, currentPlayer.loan).toLocaleString()}）：`);
+        const amount = parseInt(input || '', 10);
+        if (amount > 0) repayLoan(state.roomId, amount);
+      }));
+    }
+    if (currentPlayer.insuranceDays > 0) {
+      financeBtns.push(createButton('🛡️ 申请理赔', () => claimInsurance(state.roomId)));
+    }
+    if (financeBtns.length > 0) {
+      const group = createGroup('💼 金融');
+      financeBtns.forEach((b) => group.buttons.appendChild(b));
+      el.appendChild(group.el);
+    }
+
+    // ====== 回合控制组（始终在最底部）======
+    const controlGroup = createGroup('回合控制');
+    const skipBtn = createButton('结束回合 →', () => skipTurn(state.roomId));
+    skipBtn.classList.add('ghost');
+    controlGroup.buttons.classList.add('single');
+    controlGroup.buttons.appendChild(skipBtn);
+    el.appendChild(controlGroup.el);
   }
+}
+
+/** 创建带标题的操作分组容器 */
+function createGroup(titleText: string, modifier: '' | 'primary' | 'danger' = ''): {
+  el: HTMLDivElement;
+  body: HTMLDivElement;
+  title: HTMLHeadingElement;
+  buttons: HTMLDivElement;
+} {
+  const el = document.createElement('div');
+  el.className = `action-group${modifier ? ' ' + modifier : ''}`;
+  const title = document.createElement('h4');
+  title.className = 'action-group-title';
+  title.textContent = titleText;
+  const body = document.createElement('div');
+  const buttons = document.createElement('div');
+  buttons.className = 'action-group-buttons';
+  body.appendChild(title);
+  body.appendChild(buttons);
+  el.appendChild(body);
+  return { el, body, title, buttons };
+}
+
+/** 创建统一风格的操作按钮 */
+function createButton(text: string, onClick: () => void): HTMLButtonElement {
+  const btn = document.createElement('button');
+  btn.textContent = text;
+  btn.addEventListener('click', onClick);
+  return btn;
 }
 
 export function renderStockMarket(container: HTMLElement, state: GameState): void {
@@ -913,7 +991,7 @@ export function renderStockMarket(container: HTMLElement, state: GameState): voi
     const holding = currentPlayer?.stockHoldings[stock.id] ?? 0;
     const costBasis = currentPlayer?.stockCostBasis[stock.id] ?? 0;
     const chairman = company?.chairmanPlayerId
-      ? state.players.find((p) => p.id === company.chairmanPlayerId)?.username
+      ? state.players.find((p) => p.id === company.chairmanPlayerId)?.username || '无'
       : '无';
     const tr = document.createElement('tr');
     const fluctuationClass = stock.fluctuation >= 0 ? 'stock-up' : 'stock-down';
@@ -926,12 +1004,15 @@ export function renderStockMarket(container: HTMLElement, state: GameState): voi
     const isChairman = company?.chairmanPlayerId === currentPlayer?.id;
     const ratioClass = isChairman ? 'stock-chairman' : '';
     tr.innerHTML = `
-      <td>${stock.name}<br><small>董事长：${chairman}</small></td>
-      <td>$${stock.price}</td>
+      <td>
+        <span class="stock-name">${escapeHtml(stock.name)}</span>
+        <span class="stock-meta">董事长：${escapeHtml(chairman)}</span>
+      </td>
+      <td><span class="stock-price">$${stock.price.toLocaleString()}</span></td>
       <td class="${fluctuationClass}">${fluctuationSign}${stock.fluctuation}%</td>
       <td>${holding}</td>
       <td class="${ratioClass}">${ratioText}<br><small>阈值>10%</small></td>
-      <td>$${costBasis}<br><small class="${plClass}">${plSign}$${unrealized}</small></td>
+      <td>$${costBasis}<br><small class="${plClass}">${plSign}$${unrealized.toLocaleString()}</small></td>
       <td></td>
     `;
     const actions = tr.querySelector('td:last-child')!;
@@ -940,20 +1021,45 @@ export function renderStockMarket(container: HTMLElement, state: GameState): voi
     const isMyTurn = currentPlayer?.id === state.players[state.currentPlayerIndex].id;
     const canTrade = stock.suspendedDays <= 0;
 
-    const addTradeBtn = (label: string, qty: number) => {
+    // 买入组
+    const buyLabel = document.createElement('div');
+    buyLabel.className = 'stock-actions-label buy';
+    buyLabel.textContent = '买入';
+    actions.appendChild(buyLabel);
+    const buyGroup = document.createElement('div');
+    buyGroup.className = 'stock-actions-group buy';
+    const addBuyBtn = (label: string, qty: number) => {
       const btn = document.createElement('button');
       btn.textContent = label;
-      btn.disabled = !canTrade || (qty > 0 ? !isMyTurn : holding < qty);
+      btn.disabled = !canTrade || !isMyTurn;
+      btn.title = `买入 ${qty} 股`;
       btn.addEventListener('click', () => tradeStock(state.roomId, stock.id, qty));
-      actions.appendChild(btn);
+      buyGroup.appendChild(btn);
     };
+    addBuyBtn('1', 1);
+    addBuyBtn('10', 10);
+    addBuyBtn('100', 100);
+    actions.appendChild(buyGroup);
 
-    addTradeBtn('买1', 1);
-    addTradeBtn('买10', 10);
-    addTradeBtn('买100', 100);
-    addTradeBtn('卖1', -1);
-    addTradeBtn('卖10', -10);
-    addTradeBtn('卖100', -100);
+    // 卖出组
+    const sellLabel = document.createElement('div');
+    sellLabel.className = 'stock-actions-label sell';
+    sellLabel.textContent = '卖出';
+    actions.appendChild(sellLabel);
+    const sellGroup = document.createElement('div');
+    sellGroup.className = 'stock-actions-group sell';
+    const addSellBtn = (label: string, qty: number) => {
+      const btn = document.createElement('button');
+      btn.textContent = label;
+      btn.disabled = !canTrade || holding < Math.abs(qty);
+      btn.title = `卖出 ${Math.abs(qty)} 股`;
+      btn.addEventListener('click', () => tradeStock(state.roomId, stock.id, qty));
+      sellGroup.appendChild(btn);
+    };
+    addSellBtn('1', -1);
+    addSellBtn('10', -10);
+    addSellBtn('100', -100);
+    actions.appendChild(sellGroup);
 
     tbody.appendChild(tr);
   });

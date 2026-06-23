@@ -15,23 +15,30 @@ export async function renderLobbyPage(error?: string): Promise<void> {
 
   const container = document.createElement('div');
   container.className = 'page lobby-page';
+  const initial = (user.username || '?').charAt(0).toUpperCase();
   container.innerHTML = `
     <header>
-      <h1>大富翁4 Web</h1>
+      <h1>🎲 大富翁4 Web</h1>
       <div class="user-info">
-        <span>${user.username}</span>
-        <button id="btn-logout">退出</button>
+        <span class="user-avatar">${escapeHtml(initial)}</span>
+        <span class="user-name">${escapeHtml(user.username)}</span>
+        <button id="btn-logout" class="ghost btn-sm">退出</button>
       </div>
     </header>
     ${error ? `<div class="error">${escapeHtml(error)}</div>` : ''}
     <div class="lobby-actions">
-      <input type="text" id="room-name" placeholder="房间名" />
-      <select id="map-select"></select>
-      <button id="btn-create">创建房间</button>
-      <input type="text" id="join-id" placeholder="输入房间号加入" />
-      <button id="btn-join">加入</button>
+      <div class="lobby-action">
+        <input type="text" id="room-name" placeholder="新房间名" />
+        <select id="map-select" title="选择地图"></select>
+        <button id="btn-create" class="lobby-primary">创建房间</button>
+      </div>
+      <div class="lobby-divider"></div>
+      <div class="lobby-action">
+        <input type="text" id="join-id" placeholder="输入房间号加入" />
+        <button id="btn-join">加入</button>
+      </div>
     </div>
-    <h2>房间列表</h2>
+    <h2 class="section-title">房间列表</h2>
     <ul id="room-list"></ul>
   `;
   app.appendChild(container);

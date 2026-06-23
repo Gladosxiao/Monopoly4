@@ -40,11 +40,11 @@ export async function renderRoomPage(roomId: string, error?: string): Promise<vo
   container.className = 'page room-page';
   container.innerHTML = `
     <header>
-      <h1>房间 ${currentRoom.name}</h1>
-      <button id="btn-back">返回大厅</button>
+      <h1>房间 <span class="room-name-text">${escapeHtml(currentRoom.name)}</span></h1>
+      <button id="btn-back" class="ghost">← 返回大厅</button>
     </header>
     ${error ? `<div class="error">${escapeHtml(error)}</div>` : ''}
-    <div class="room-id">房间号：<strong>${currentRoom.id}</strong></div>
+    <div class="room-id">房间号 <strong>${currentRoom.id}</strong></div>
     <div class="room-content">
       <div class="players-panel">
         <h2>玩家</h2>
@@ -55,8 +55,8 @@ export async function renderRoomPage(roomId: string, error?: string): Promise<vo
         <div id="character-select"></div>
         <div class="action-buttons">
           <button id="btn-ready">准备</button>
-          <button id="btn-start" style="display:none">开始游戏</button>
-          ${isTestMode() ? '<button id="btn-add-bot" class="btn-bot">添加AI机器人</button>' : ''}
+          <button id="btn-start" class="lobby-primary" style="display:none">开始游戏</button>
+          ${isTestMode() ? '<button id="btn-add-bot" class="btn-bot">+ 添加AI</button>' : ''}
         </div>
       </div>
     </div>
@@ -126,16 +126,21 @@ export function renderRoomPlayers(container: HTMLElement, room: Room): void {
   list.innerHTML = '';
   room.players.forEach((p) => {
     const char = CHARACTERS.find((c) => c.id === p.characterId);
+    const color = char?.color || 'var(--color-primary)';
+    const initial = (p.username || '?').charAt(0).toUpperCase();
     const li = document.createElement('li');
     li.innerHTML = `
       <div class="player-main">
-        <span class="player-name" style="color:${char?.color || 'var(--color-white)'}">${p.username}</span>
-        <span class="player-char">${char?.name || p.characterId}</span>
+        <span class="player-avatar" style="background:${color}">${escapeHtml(initial)}</span>
+        <div class="player-info-text">
+          <span class="player-name" style="color:${color}">${escapeHtml(p.username)}</span>
+          <span class="player-char">${escapeHtml(char?.name || p.characterId)}</span>
+        </div>
       </div>
       <span class="player-badges">
-        ${p.isAI ? '<span class="badge bot">🤖 AI</span>' : ''}
+        ${p.isAI ? '<span class="badge bot">AI</span>' : ''}
         ${p.isHost ? '<span class="badge host">房主</span>' : ''}
-        <span class="player-ready ${p.isReady ? 'ready' : ''}">${p.isReady ? '✅ 已准备' : '⏳ 未准备'}</span>
+        <span class="player-ready ${p.isReady ? 'ready' : ''}">${p.isReady ? '✓ 已准备' : '未准备'}</span>
       </span>
     `;
     list.appendChild(li);

@@ -32,16 +32,23 @@ export async function renderLoginPage(error?: string): Promise<void> {
   const container = document.createElement('div');
   container.className = 'page login-page';
   container.innerHTML = `
-    <h1>大富翁4 Web</h1>
+    <div class="brand">
+      <span class="logo">🎲</span>
+      <h1>大富翁4 Web</h1>
+      <span class="tagline">Monopoly 4 · Online</span>
+    </div>
     <div class="auth-box">
       <h2>登录</h2>
       ${error ? `<div class="error">${escapeHtml(error)}</div>` : ''}
-      <div class="auth-hint">测试账号：test / test123</div>
-      <input type="text" id="username" placeholder="用户名" />
-      <input type="password" id="password" placeholder="密码" />
+      <div class="auth-hint">
+        <span class="hint-label">默认账号</span>
+        <code>test</code> / <code>test123</code>
+      </div>
+      <input type="text" id="username" placeholder="用户名" autocomplete="username" />
+      <input type="password" id="password" placeholder="密码" autocomplete="current-password" />
       <div class="buttons">
         <button id="btn-login">登录</button>
-        ${allowRegistration ? '<button id="btn-register">注册</button>' : ''}
+        ${allowRegistration ? '<button id="btn-register" class="btn-register">注册新账号</button>' : ''}
       </div>
     </div>
   `;
