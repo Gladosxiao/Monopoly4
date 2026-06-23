@@ -11,8 +11,17 @@
  * 6. 默认 → 跳过
  */
 
-import type { GameState, Player } from '@monopoly4/shared';
-import type { PlayerBrain, ActionDecision, AvailableAction } from '../types.js';
+import type { GameState, Player, Tile } from '@monopoly4/shared';
+import type { PlayerBrain, ActionDecision, AvailableAction, ActionTarget } from '../types.js';
+
+/** 卡片效果分类 */
+const DEFENSE_CARDS = new Set(['freePass', 'dismissSpirit', 'angel']);
+const OFFENSE_CARDS = new Set(['priceRise', 'seal', 'turnAround', 'stay', 'turtle', 'frame', 'snatch', 'equalPoverty', 'monster', 'demolish']);
+const LAND_CARDS = new Set(['swapLand', 'auction', 'swapHouse', 'rebuild']);
+
+/** 道具分类 */
+const TRAP_ITEMS = new Set(['barrier', 'mine', 'timeBomb']);
+const ATTACK_ITEMS = new Set(['missile', 'nukeMissile']);
 
 export class HeuristicBrain implements PlayerBrain {
   readonly name: string;
@@ -104,22 +113,22 @@ export class HeuristicBrain implements PlayerBrain {
       }
     }
 
-    // 3. 商店格 → 买卡片/道具（随机选择）
-    if (tile.type === 'shop' && this.useCards) {
-      if (me.cash >= 500 && Math.random() < 0.5) {
-        // 买一些常见卡片
-        const cardIds = ['priceRise', 'seal', 'freePass', 'turnBack', 'dismissSpirit'];
-        const cardId = cardIds[Math.floor(Math.random() * cardIds.length)];
-        return { action: 'buyCard', target: { cardId }, reason: `在商店购买卡片 ${cardId}` };
-      }
-      if (me.cash >= 300 && Math.random() < 0.3) {
-        const itemIds = ['remoteDice', 'barrier', 'mine'];
-        const itemId = itemIds[Math.floor(Math.random() * itemIds.length)];
-        return { action: 'buyItem', target: { itemId, itemQuantity: 1 }, reason: `在商店购买道具 ${itemId}` };
-      }
+    // 3. 使用卡片/道具（有策略）
+    if (this.useCards) {
+      const cardDecision = this.decideUseCard(state, me, availableActions);
+      if (cardDecision) return cardDecision;
+
+      const itemDecision = this.decideUseItem(state, me, availableActions);
+      if (itemDecision) return itemDecision;
     }
 
-    // 4. 解救 NPC
+    // 4. 商店格 → 购买卡片/道具（按需购买）
+    if (tile.type === 'shop' && this.useCards) {
+      const shopDecision = this.decideShopPurchase(state, me, availableActions);
+      if (shopDecision) return shopDecision;
+    }
+
+    // 5. 解救 NPC
     const rescueAction = availableActions.find((a) => a.type === 'rescueNpc');
     if (rescueAction) {
       return {
@@ -129,24 +138,324 @@ export class HeuristicBrain implements PlayerBrain {
       };
     }
 
-    // 5. 有贷款且资金够 → 还款
+    // 6. 有贷款且资金够 → 还款
     if (me.loan > 0 && me.cash > me.loan * 1.2) {
       return { action: 'repayLoan', target: { amount: Math.min(me.loan, me.cash) }, reason: '偿还贷款' };
     }
 
-    // 6. 资金紧张时贷款（在起点附近）
+    // 7. 资金紧张时贷款（在起点附近）
     if (this.allowLoan && me.cash < totalWealth * 0.15 && me.loan === 0 && me.position <= 2) {
       return { action: 'takeLoan', target: { amount: 5000 }, reason: '资金紧张，贷款 5000' };
     }
 
-    // 7. 随机使用卡片（20% 概率）
-    if (this.useCards && me.cards.length > 0 && Math.random() < 0.2) {
-      const card = me.cards[Math.floor(Math.random() * me.cards.length)];
-      return { action: 'useCard', target: { cardId: card.cardId }, reason: `随机使用卡片 ${card.cardId}` };
-    }
-
     // 8. 默认跳过
     return { action: 'skipTurn', reason: '无可盈利操作，跳过' };
+  }
+
+  /** 策略性使用卡片 */
+  private decideUseCard(state: GameState, me: Player, availableActions: AvailableAction[]): ActionDecision | null {
+    const useCardAction = availableActions.find((a) => a.type === 'useCard');
+    if (!useCardAction || me.cards.length === 0) return null;
+
+    // 1. 坏神明附身 → 送神符
+    const badSpirit = me.spirit && ['smallMisfortuneGod', 'bigMisfortuneGod'].includes(me.spirit.spiritId);
+    const dismissSpiritCard = me.cards.find((c) => c.cardId === 'dismissSpirit');
+    if (badSpirit && dismissSpiritCard) {
+      return { action: 'useCard', target: { cardId: 'dismissSpirit' }, reason: '送走衰神/穷神' };
+    }
+
+    // 2. 前方有对手高级地产且资金紧张 → 免租卡
+    const freePassCard = me.cards.find((c) => c.cardId === 'freePass');
+    if (freePassCard && me.cash < state.config.totalFunds * 0.15) {
+      const dangerAhead = this.hasDangerousEnemyTileAhead(state, me, 6);
+      if (dangerAhead) {
+        return { action: 'useCard', target: { cardId: 'freePass' }, reason: '前方有强敌地产，使用免租卡' };
+      }
+    }
+
+    // 3. 对手高级地产路段 → 涨价卡/查封卡
+    const priceRiseCard = me.cards.find((c) => c.cardId === 'priceRise');
+    if (priceRiseCard) {
+      const targetTile = this.findEnemyHighValueTile(state, me);
+      if (targetTile) {
+        return {
+          action: 'useCard',
+          target: { cardId: 'priceRise', cardTarget: { targetTileIndex: targetTile.index } },
+          reason: `对 ${targetTile.name} 路段使用涨价卡`,
+        };
+      }
+    }
+
+    // 4. 自己有关键地产被对手涨价 → 查封卡保护
+    const sealCard = me.cards.find((c) => c.cardId === 'seal');
+    if (sealCard) {
+      const myImportantTile = this.findMyImportantTile(state, me);
+      if (myImportantTile) {
+        return {
+          action: 'useCard',
+          target: { cardId: 'seal', cardTarget: { targetTileIndex: myImportantTile.index } },
+          reason: `查封保护 ${myImportantTile.name}`,
+        };
+      }
+    }
+
+    // 5. 落后时使用干扰卡
+    const myRank = this.getWealthRank(state, me);
+    if (myRank >= 3) {
+      const disruptCard = me.cards.find((c) => ['turnAround', 'stay', 'turtle', 'equalPoverty'].includes(c.cardId));
+      if (disruptCard) {
+        const targetPlayer = this.findRichestEnemy(state, me);
+        return {
+          action: 'useCard',
+          target: { cardId: disruptCard.cardId, cardTarget: targetPlayer ? { targetPlayerId: targetPlayer.id } : undefined },
+          reason: `落后时使用 ${disruptCard.cardId} 干扰领先玩家`,
+        };
+      }
+    }
+
+    // 6. 攻击对手高等级建筑
+    const destroyCard = me.cards.find((c) => ['monster', 'demolish'].includes(c.cardId));
+    if (destroyCard) {
+      const targetTile = this.findEnemyHighLevelTile(state, me);
+      if (targetTile) {
+        return {
+          action: 'useCard',
+          target: { cardId: destroyCard.cardId, cardTarget: { targetTileIndex: targetTile.index } },
+          reason: `摧毁对手高级建筑 ${targetTile.name}`,
+        };
+      }
+    }
+
+    return null;
+  }
+
+  /** 策略性使用道具 */
+  private decideUseItem(state: GameState, me: Player, availableActions: AvailableAction[]): ActionDecision | null {
+    // 装备交通工具
+    const vehicleItems = ['bike', 'car'] as const;
+    for (const v of vehicleItems) {
+      const hasItem = me.items.some((i) => i.itemId === v);
+      const isEquipped = me.vehicle === v;
+      const equipAction = availableActions.find((a) => a.type === 'useItem' && a.params?.itemId === v);
+      if (hasItem && !isEquipped && equipAction) {
+        return { action: 'useItem', target: { itemId: v }, reason: `装备 ${v} 提升移动力` };
+      }
+    }
+
+    // 前方有陷阱 → 机器娃娃
+    const robotItem = me.items.find((i) => i.itemId === 'robot');
+    if (robotItem && this.hasTrapAhead(state, me, 6)) {
+      return { action: 'useItem', target: { itemId: 'robot' }, reason: '前方有陷阱，使用机器娃娃' };
+    }
+
+    // 遥控骰子：需要精确到达某格时
+    const remoteDiceItem = me.items.find((i) => i.itemId === 'remoteDice');
+    const remoteDiceAction = availableActions.find((a) => a.type === 'useItem' && a.params?.itemId === 'remoteDice');
+    if (remoteDiceItem && remoteDiceAction) {
+      const desiredRoll = this.findDesiredRoll(state, me);
+      if (desiredRoll > 0 && desiredRoll <= 6) {
+        return {
+          action: 'useItem',
+          target: { itemId: 'remoteDice', itemTarget: { diceValue: desiredRoll } },
+          reason: `遥控骰子掷 ${desiredRoll}，目标关键格`,
+        };
+      }
+    }
+
+    // 放置陷阱：在自己高级地产前或对手前方
+    const trapItems = ['mine', 'timeBomb', 'barrier'] as const;
+    for (const trapId of trapItems) {
+      const hasItem = me.items.some((i) => i.itemId === trapId);
+      const placeAction = availableActions.find((a) => a.type === 'useItem' && a.params?.itemId === trapId);
+      if (hasItem && placeAction) {
+        const targetTile = this.findTrapPlacement(state, me, trapId);
+        if (targetTile) {
+          return {
+            action: 'useItem',
+            target: { itemId: trapId, itemTarget: { targetTileIndex: targetTile.index } },
+            reason: `在 ${targetTile.name} 放置 ${trapId}`,
+          };
+        }
+      }
+    }
+
+    // 飞弹摧毁对手高级建筑
+    const missileItem = me.items.find((i) => i.itemId === 'missile' || i.itemId === 'nukeMissile');
+    if (missileItem) {
+      const targetTile = this.findEnemyHighLevelTile(state, me);
+      if (targetTile) {
+        return {
+          action: 'useItem',
+          target: { itemId: missileItem.itemId, itemTarget: { targetTileIndex: targetTile.index } },
+          reason: `飞弹摧毁 ${targetTile.name}`,
+        };
+      }
+    }
+
+    return null;
+  }
+
+  /** 商店购买决策 */
+  private decideShopPurchase(state: GameState, me: Player, availableActions: AvailableAction[]): ActionDecision | null {
+    const totalWealth = me.cash + me.deposit;
+    if (totalWealth < 800) return null;
+
+    // 优先补充免租卡和送神符
+    if (me.cash >= 500) {
+      const neededDefense = !me.cards.some((c) => c.cardId === 'freePass');
+      if (neededDefense) {
+        return { action: 'buyCard', target: { cardId: 'freePass' }, reason: '购买免租卡防御' };
+      }
+    }
+
+    // 购买遥控骰子
+    if (me.cash >= 500 && !me.items.some((i) => i.itemId === 'remoteDice')) {
+      return { action: 'buyItem', target: { itemId: 'remoteDice', itemQuantity: 1 }, reason: '购买遥控骰子' };
+    }
+
+    // 购买攻击性卡片
+    if (me.cash >= 500 && me.cards.length < 10) {
+      const attackCards = ['priceRise', 'monster', 'demolish'];
+      const cardId = attackCards[Math.floor(Math.random() * attackCards.length)];
+      return { action: 'buyCard', target: { cardId }, reason: `购买攻击卡 ${cardId}` };
+    }
+
+    return null;
+  }
+
+  // ==================== 辅助判断函数 ====================
+
+  /** 前方是否有对手高价值地产 */
+  private hasDangerousEnemyTileAhead(state: GameState, me: Player, maxDistance: number): boolean {
+    const tileCount = state.map.tiles.length;
+    for (let d = 1; d <= maxDistance; d++) {
+      const idx = (me.position + d) % tileCount;
+      const tile = state.map.tiles[idx];
+      if (tile.type === 'property' && tile.ownerId && tile.ownerId !== me.id && (tile.level ?? 0) >= 2) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /** 寻找对手高价值地产（用于涨价卡） */
+  private findEnemyHighValueTile(state: GameState, me: Player): Tile | null {
+    let best: Tile | null = null;
+    let bestValue = 0;
+    for (const tile of state.map.tiles) {
+      if (tile.type === 'property' && tile.ownerId && tile.ownerId !== me.id && tile.group !== undefined) {
+        const value = (tile.basePrice ?? 0) * (1 + (tile.level ?? 0) * 0.5);
+        if (value > bestValue) {
+          bestValue = value;
+          best = tile;
+        }
+      }
+    }
+    return best;
+  }
+
+  /** 寻找对手高等级建筑（用于摧毁） */
+  private findEnemyHighLevelTile(state: GameState, me: Player): Tile | null {
+    let best: Tile | null = null;
+    let bestLevel = 2;
+    for (const tile of state.map.tiles) {
+      if (tile.type === 'property' && tile.ownerId && tile.ownerId !== me.id && (tile.level ?? 0) >= bestLevel) {
+        bestLevel = tile.level ?? 0;
+        best = tile;
+      }
+    }
+    return best;
+  }
+
+  /** 寻找自己的重要地产（用于查封保护） */
+  private findMyImportantTile(state: GameState, me: Player): Tile | null {
+    let best: Tile | null = null;
+    let bestValue = 0;
+    for (const tile of state.map.tiles) {
+      if (tile.type === 'property' && tile.ownerId === me.id && (tile.level ?? 0) >= 2) {
+        const value = (tile.basePrice ?? 0) * (1 + (tile.level ?? 0) * 0.5);
+        if (value > bestValue) {
+          bestValue = value;
+          best = tile;
+        }
+      }
+    }
+    return best;
+  }
+
+  /** 获取自己的资产排名（1=最富） */
+  private getWealthRank(state: GameState, me: Player): number {
+    const wealths = state.players
+      .filter((p) => !p.isBankrupt)
+      .map((p) => ({ id: p.id, wealth: p.cash + p.deposit - p.loan }));
+    wealths.sort((a, b) => b.wealth - a.wealth);
+    const rank = wealths.findIndex((w) => w.id === me.id);
+    return rank >= 0 ? rank + 1 : state.players.length;
+  }
+
+  /** 寻找最富有的对手 */
+  private findRichestEnemy(state: GameState, me: Player): Player | null {
+    let richest: Player | null = null;
+    let maxWealth = -Infinity;
+    for (const p of state.players) {
+      if (p.id !== me.id && !p.isBankrupt) {
+        const wealth = p.cash + p.deposit - p.loan;
+        if (wealth > maxWealth) {
+          maxWealth = wealth;
+          richest = p;
+        }
+      }
+    }
+    return richest;
+  }
+
+  /** 前方是否有陷阱 */
+  private hasTrapAhead(state: GameState, me: Player, maxDistance: number): boolean {
+    const tileCount = state.map.tiles.length;
+    for (let d = 1; d <= maxDistance; d++) {
+      const idx = (me.position + d) % tileCount;
+      if (state.map.tiles[idx].traps && state.map.tiles[idx].traps!.length > 0) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /** 寻找期望的遥控骰子点数 */
+  private findDesiredRoll(state: GameState, me: Player): number {
+    const tileCount = state.map.tiles.length;
+    for (let roll = 1; roll <= 6; roll++) {
+      const targetIdx = (me.position + roll) % tileCount;
+      const tile = state.map.tiles[targetIdx];
+      // 优先到达：空地产（可买）、自己地产（可升级）、商店
+      if (tile.type === 'property' && (!tile.ownerId || tile.ownerId === me.id)) {
+        return roll;
+      }
+      if (tile.type === 'shop') {
+        return roll;
+      }
+    }
+    return 0;
+  }
+
+  /** 寻找陷阱放置位置 */
+  private findTrapPlacement(state: GameState, me: Player, trapId: string): Tile | null {
+    const tileCount = state.map.tiles.length;
+    // 优先放在自己高级地产前方 1-3 格
+    const myTiles = state.map.tiles.filter(
+      (t) => t.type === 'property' && t.ownerId === me.id && (t.level ?? 0) >= 2
+    );
+    for (const myTile of myTiles) {
+      for (let d = 1; d <= 3; d++) {
+        const idx = (myTile.index - d + tileCount) % tileCount;
+        const tile = state.map.tiles[idx];
+        if (tile.type === 'property' && (!tile.traps || tile.traps.length === 0)) {
+          return tile;
+        }
+      }
+    }
+    // 次选：对手前方必经之路
+    return null;
   }
 }
 
