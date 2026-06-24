@@ -145,6 +145,10 @@ function extractJSON(text: string): unknown {
   return null;
 }
 
+export interface OpencodeAgentBrainState {
+  messages: ChatMessage[];
+}
+
 export class OpencodeAgentBrain implements PlayerBrain {
   readonly name: string;
   private config: LLMConfig;
@@ -156,6 +160,16 @@ export class OpencodeAgentBrain implements PlayerBrain {
     this.name = name;
     this.config = { ...getLLMConfig(), ...config };
     this.fallback = fallback;
+  }
+
+  /** 导出对话状态，用于断点续跑 */
+  exportState(): OpencodeAgentBrainState {
+    return { messages: this.messages.slice() };
+  }
+
+  /** 导入对话状态，用于断点续跑 */
+  importState(state: OpencodeAgentBrainState): void {
+    this.messages = state.messages.slice();
   }
 
   /** 保持对话上下文长度可控，避免无限增长 */

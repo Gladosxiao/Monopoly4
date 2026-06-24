@@ -247,6 +247,141 @@ export async function createGameSession(config: PlaytestConfig): Promise<GameSes
   return session;
 }
 
+/** 断点续跑所需的 checkpoint 数据 */
+export interface PlaytestCheckpoint {
+  gameState: GameState;
+  room: Room;
+  totalTurns: number;
+  /** 每个玩家 userId -> brain 序列化状态 */
+  brainsState: Record<string, unknown>;
+  config: PlaytestConfig;
+}
+
+/**
+ * 从 checkpoint 恢复游戏会话。
+ *
+ * 与 createGameSession 不同，不会创建新游戏，而是把已保存的 GameState / Room
+ * 重新注入内存 store，并让 4 个 socket 客户端重新加入房间，随后广播当前状态。
+ * 调用方拿到 session 后即可继续 runFreePlay 主循环。
+ */
+export async function resumeGameSession(
+  checkpoint: PlaytestCheckpoint,
+  config: PlaytestConfig
+): Promise<GameSession> {
+  const playerCount = checkpoint.gameState.players.length;
+  const actionTimeout = config.actionTimeout ?? 15000;
+
+  // 清理残留状态
+  rooms.clear();
+  games.clear();
+  socketRoomMap.clear();
+
+  // 1. 创建 HTTP + Socket.IO 服务器
+  const app = express();
+  app.use(express.json());
+  const httpServer = createServer(app);
+  const io = setupSocketIO(httpServer);
+
+  await new Promise<void>((resolve) => {
+    httpServer.listen(config.port ?? 0, () => resolve());
+  });
+  const addr = httpServer.address();
+  const port = typeof addr === 'string' ? 0 : addr!.port;
+
+  // 2. 创建玩家连接（与 checkpoint 中的玩家一致）
+  const playerInfos = checkpoint.gameState.players.map((p) => ({
+    userId: p.id,
+    username: p.username,
+    characterId: p.characterId,
+  }));
+  const players: PlayerConnection[] = playerInfos.map((info) => ({
+    config: {
+      userId: info.userId,
+      username: info.username,
+      characterId: info.characterId,
+      brainType: config.brainType ?? 'heuristic',
+    },
+    socket: null as unknown as ClientSocket,
+    token: makeToken(info.userId, info.username),
+    userId: info.userId,
+  }));
+
+  const session: GameSession = {
+    httpServer,
+    io,
+    port,
+    roomId: checkpoint.room.id,
+    players,
+    latestState: checkpoint.gameState,
+    stateResolvers: [],
+    errors: [],
+    gameLogs: [],
+  };
+
+  // 3. 连接所有 socket
+  await Promise.all(
+    players.map((p) => {
+      return new Promise<void>((resolve, reject) => {
+        const timer = setTimeout(() => reject(new Error(`恢复连接超时: ${p.config.username}`)), actionTimeout);
+        const socket = Client(`http://localhost:${port}`, {
+          auth: { token: p.token },
+          transports: ['websocket'],
+        });
+        p.socket = socket;
+
+        socket.on('connect', () => {
+          clearTimeout(timer);
+          resolve();
+        });
+
+        socket.on('connect_error', (err) => {
+          clearTimeout(timer);
+          reject(new Error(`恢复连接失败 ${p.config.username}: ${err.message}`));
+        });
+
+        // 监听 game:state 事件
+        socket.on('game:state', (state: GameState) => {
+          session.latestState = state;
+          const remaining: typeof session.stateResolvers = [];
+          for (const r of session.stateResolvers) {
+            if (r.predicate(state)) {
+              clearTimeout(r.timer);
+              r.resolve(state);
+            } else {
+              remaining.push(r);
+            }
+          }
+          session.stateResolvers = remaining;
+        });
+
+        socket.on('error', (msg: string) => {
+          session.errors.push(`[${p.config.username}] ${msg}`);
+        });
+      });
+    })
+  );
+
+  // 4. 恢复 room 和 game state 到内存 store
+  rooms.set(checkpoint.room.id, checkpoint.room);
+  games.set(checkpoint.room.id, checkpoint.gameState);
+
+  // 5. 让所有玩家重新加入房间（触发 socketRoomMap 设置与 socket.io room join）
+  for (const p of players) {
+    p.socket.emit('room:join', checkpoint.room.id);
+  }
+  // 等待 join 完成
+  await sleep(300);
+
+  // 6. 广播当前游戏状态，让客户端同步
+  io.to(checkpoint.room.id).emit('game:state', checkpoint.gameState);
+
+  if (config.verbose) {
+    console.log(`[GameSession] 已从 checkpoint 恢复，roomId=${checkpoint.room.id}，turns=${checkpoint.totalTurns}`);
+  }
+
+  return session;
+}
+
 /** 等待游戏状态满足谓词条件 */
 export function waitForState(
   session: GameSession,

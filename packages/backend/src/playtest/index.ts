@@ -2,11 +2,12 @@
  * 自动化对局测试框架 - 主入口
  *
  * 导出 runPlaytest 函数，供 Vitest 测试和独立脚本使用。
+ * 导出 runPlaytestWithResume 函数，支持断点续跑。
  */
 
 import type { PlaytestConfig, PlaytestReport } from './types.js';
-import { createGameSession, closeSession } from './engine/gameSession.js';
-import { runFreePlay } from './scenarios/freePlay.js';
+import { createGameSession, closeSession, resumeGameSession, type PlaytestCheckpoint } from './engine/gameSession.js';
+import { runFreePlay, loadCheckpoint, clearCheckpoint, type ResumeOptions } from './scenarios/freePlay.js';
 import { runPressureTest } from './scenarios/pressureTest.js';
 import { runInteractionTest } from './scenarios/interactionTest.js';
 import { runStockTest } from './scenarios/stockTest.js';
@@ -104,6 +105,105 @@ export async function runPlaytest(config: PlaytestConfig = {}): Promise<Playtest
         await closeSession(session);
       } catch {
         // 忽略关闭错误
+      }
+    }
+  }
+}
+
+/**
+ * 运行支持断点续跑的自动化对局测试。
+ *
+ * - 首次运行：创建新游戏，每隔 checkpointInterval 操作保存 checkpoint。
+ * - 进程中断后再次调用：检测到 checkpoint 存在则从该点恢复继续。
+ * - 对局正常结束后自动清除 checkpoint。
+ *
+ * @param config 测试配置
+ * @param checkpointPath checkpoint 文件路径
+ * @param checkpointInterval 每隔多少操作保存一次（默认 20）
+ * @returns 测试报告
+ */
+export async function runPlaytestWithResume(
+  config: PlaytestConfig = {},
+  checkpointPath: string,
+  checkpointInterval = 20
+): Promise<PlaytestReport> {
+  const reporter = new Reporter();
+  let session;
+  let resume: ResumeOptions | undefined;
+  let checkpoint: PlaytestCheckpoint | null = null;
+
+  try {
+    // 检测是否存在 checkpoint
+    checkpoint = loadCheckpoint(checkpointPath);
+    if (checkpoint) {
+      console.log(`[Playtest] 检测到 checkpoint，从 turn ${checkpoint.totalTurns} 恢复`);
+      session = await resumeGameSession(checkpoint, config);
+      resume = {
+        checkpointPath,
+        checkpointInterval,
+        startTurns: checkpoint.totalTurns,
+        brainsState: checkpoint.brainsState as Record<string, unknown>,
+      };
+    } else {
+      console.log(`[Playtest] 无 checkpoint，创建新游戏`);
+      session = await createGameSession(config);
+      resume = { checkpointPath, checkpointInterval };
+    }
+
+    // 运行 freePlay 场景（断点续跑仅支持 freePlay）
+    const report = await runFreePlay(session, config, (issue) => reporter.record(issue), resume);
+
+    // 合并问题到报告
+    report.issues = reporter.getIssues();
+    report.criticalIssues = reporter.getIssuesBySeverity('critical');
+
+    // 保存报告
+    try {
+      const filepath = await reporter.saveReport(report);
+      console.log(`[Playtest] 报告已保存: ${filepath}`);
+    } catch (err: any) {
+      console.warn(`[Playtest] 保存报告失败: ${err.message}`);
+    }
+
+    return report;
+  } catch (err: any) {
+    const report: PlaytestReport = {
+      startTime: new Date().toISOString(),
+      endTime: new Date().toISOString(),
+      duration: 0,
+      scenario: '4 人自由对局',
+      totalTurns: checkpoint?.totalTurns ?? 0,
+      result: 'error',
+      players: [],
+      issues: reporter.getIssues(),
+      criticalIssues: reporter.getIssuesBySeverity('critical'),
+    };
+
+    reporter.record({
+      severity: 'critical',
+      category: '框架异常',
+      turn: checkpoint?.totalTurns ?? 0,
+      expected: '测试正常运行',
+      actual: `异常: ${err.message}`,
+      details: err.stack,
+    });
+
+    report.issues = reporter.getIssues();
+    report.criticalIssues = reporter.getIssuesBySeverity('critical');
+
+    try {
+      await reporter.saveReport(report);
+    } catch {
+      // 忽略
+    }
+
+    return report;
+  } finally {
+    if (session) {
+      try {
+        await closeSession(session);
+      } catch {
+        // 忽略
       }
     }
   }

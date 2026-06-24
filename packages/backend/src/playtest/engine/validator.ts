@@ -5,8 +5,33 @@
  * 发现违规时返回 Issue 列表。
  */
 
-import type { GameState, Player } from '@monopoly4/shared';
+import type { GameState, Player, Tile } from '@monopoly4/shared';
 import type { Issue, IssueSeverity } from '../types.js';
+
+/** 计算玩家地产总价值（含等级加成） */
+function calculatePropertyValue(state: GameState, player: Player): number {
+  let total = 0;
+  for (const idx of player.properties) {
+    const tile = state.map.tiles[idx];
+    if (tile && tile.type === 'property') {
+      total += Math.floor((tile.basePrice ?? 0) * (1 + (tile.level ?? 0) * 0.5) * state.priceIndex);
+    }
+  }
+  return total;
+}
+
+/** 计算玩家股票总市值 */
+function calculateStockValue(state: GameState, player: Player): number {
+  if (!player.stockHoldings || !state.stocks) return 0;
+  let total = 0;
+  for (const [stockId, shares] of Object.entries(player.stockHoldings)) {
+    const stock = state.stocks.find((s) => s.id === stockId);
+    if (stock) {
+      total += Math.floor(stock.price * shares);
+    }
+  }
+  return total;
+}
 
 /**
  * 校验游戏状态的所有不变量。
@@ -28,15 +53,21 @@ export function validateGameState(state: GameState, turn: number): Issue[] {
         details: `玩家 ${player.username} (${player.id}) 现金为负`,
       });
     }
-    if (!player.isBankrupt && (player.cash + player.deposit - player.loan) < -10000) {
-      // 允许小范围负数（因为贷款等操作可能导致短暂负值）
+    // 完整净资产 = 现金 + 存款 - 贷款 + 地产价值 + 股票市值
+    const netAsset =
+      player.cash +
+      player.deposit -
+      player.loan +
+      calculatePropertyValue(state, player) +
+      calculateStockValue(state, player);
+    if (!player.isBankrupt && netAsset < -10000) {
       issues.push({
         severity: 'high',
         category: '资金异常',
         turn,
         playerId: player.id,
-        expected: '净资产不低于 -10000',
-        actual: `cash + deposit - loan = ${player.cash + player.deposit - player.loan}`,
+        expected: '完整净资产不低于 -10000',
+        actual: `净资产 = ${netAsset} (现金${player.cash}+存${player.deposit}-贷${player.loan}+地产${calculatePropertyValue(state, player)}+股票${calculateStockValue(state, player)})`,
       });
     }
   }

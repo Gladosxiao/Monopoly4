@@ -2,9 +2,11 @@
  * 4 人自由对局场景
  *
  * 管理主循环：等待状态更新 → 判断当前玩家 → 获取可用动作 → 调用大脑决策 → 执行动作 → 校验。
+ * 支持断点续跑：每隔 checkpointInterval 个操作保存一次 checkpoint 到文件，
+ * 进程中断后可由 runPlaytestWithResume 从最近 checkpoint 恢复继续。
  */
 
-import type { GameState, Player } from '@monopoly4/shared';
+import type { GameState, Player, Room } from '@monopoly4/shared';
 import type {
   PlaytestConfig,
   PlayerBrain,
@@ -12,14 +14,28 @@ import type {
   Issue,
   PlayerConfig,
 } from '../types.js';
-import type { GameSession, PlayerConnection } from '../engine/gameSession.js';
+import type { GameSession, PlayerConnection, PlaytestCheckpoint } from '../engine/gameSession.js';
 import { waitForState, sleep } from '../engine/gameSession.js';
 import { executeAction, getAvailableActions } from '../engine/actionExecutor.js';
 import { validateGameState } from '../engine/validator.js';
 import { Watchdog } from '../engine/watchdog.js';
 import { createHeuristicBrainFactory } from '../agents/heuristicBrain.js';
-import { createOpencodeAgentBrainFactory } from '../agents/opencodeAgentBrain.js';
+import { createOpencodeAgentBrainFactory, OpencodeAgentBrain } from '../agents/opencodeAgentBrain.js';
 import type { BrainFactory } from '../agents/llmPlayer.js';
+import { writeFileSync, readFileSync, existsSync } from 'node:fs';
+import { resolve } from 'node:path';
+
+/** 断点续跑选项 */
+export interface ResumeOptions {
+  /** checkpoint 文件路径 */
+  checkpointPath: string;
+  /** 每隔多少操作保存一次 checkpoint */
+  checkpointInterval: number;
+  /** 已完成的操作数（从 checkpoint 恢复时传入） */
+  startTurns?: number;
+  /** 已保存的 brains 状态（从 checkpoint 恢复时传入） */
+  brainsState?: Record<string, unknown>;
+}
 
 /**
  * 创建大脑工厂
@@ -31,18 +47,77 @@ function createBrainFactory(config: PlaytestConfig): BrainFactory {
   return createHeuristicBrainFactory();
 }
 
+/** 保存 checkpoint 到文件 */
+function saveCheckpoint(path: string, checkpoint: PlaytestCheckpoint): void {
+  try {
+    writeFileSync(path, JSON.stringify(checkpoint));
+  } catch (err: any) {
+    console.warn(`[FreePlay] 保存 checkpoint 失败: ${err.message}`);
+  }
+}
+
+/** 读取 checkpoint 文件 */
+export function loadCheckpoint(path: string): PlaytestCheckpoint | null {
+  try {
+    if (!existsSync(path)) return null;
+    const raw = readFileSync(path, 'utf-8');
+    return JSON.parse(raw) as PlaytestCheckpoint;
+  } catch (err: any) {
+    console.warn(`[FreePlay] 读取 checkpoint 失败: ${err.message}`);
+    return null;
+  }
+}
+
+/** 删除 checkpoint 文件 */
+export function clearCheckpoint(path: string): void {
+  try {
+    if (existsSync(path)) {
+      writeFileSync(path, '');
+    }
+  } catch {
+    // 忽略
+  }
+}
+
+/** 导出所有 LLM brain 的对话状态 */
+function exportBrainsState(brains: Map<string, PlayerBrain>): Record<string, unknown> {
+  const state: Record<string, unknown> = {};
+  for (const [userId, brain] of brains) {
+    if (brain instanceof OpencodeAgentBrain) {
+      state[userId] = brain.exportState();
+    }
+  }
+  return state;
+}
+
+/** 导入 LLM brain 的对话状态 */
+function importBrainsState(brains: Map<string, PlayerBrain>, state: Record<string, unknown>): void {
+  for (const [userId, brain] of brains) {
+    if (brain instanceof OpencodeAgentBrain && state[userId]) {
+      const raw = state[userId] as { messages: Array<{ role: string; content: string }> };
+      const messages = raw.messages.map((m) => ({
+        role: m.role as 'system' | 'user' | 'assistant',
+        content: m.content,
+      }));
+      brain.importState({ messages });
+    }
+  }
+}
+
 /**
  * 运行 4 人自由对局场景。
  *
  * @param session 已创建并启动的游戏会话
  * @param config 测试配置
- * @param reporter 问题记录回调
+ * @param recordIssue 问题记录回调
+ * @param resume 可选的断点续跑选项
  * @returns 测试报告
  */
 export async function runFreePlay(
   session: GameSession,
   config: PlaytestConfig,
-  recordIssue: (issue: Issue) => void
+  recordIssue: (issue: Issue) => void,
+  resume?: ResumeOptions
 ): Promise<PlaytestReport> {
   const startTime = new Date();
   const maxTurns = config.maxTurns ?? 20;
@@ -54,12 +129,19 @@ export async function runFreePlay(
     brains.set(p.userId, brainFactory(p.config.username));
   }
 
-  // 跟踪回合数
-  let totalTurns = 0;
+  // 如果是断点续跑，恢复 brain 对话状态
+  if (resume?.brainsState) {
+    importBrainsState(brains, resume.brainsState);
+  }
+
+  // 跟踪回合数（断点续跑时从已完成的操作数继续）
+  let totalTurns = resume?.startTurns ?? 0;
   let consecutiveNoAction = 0;
   const MAX_NO_ACTION = 50; // 连续无动作次数上限，防止死循环
 
   const verbose = config.verbose ?? false;
+  const checkpointInterval = resume?.checkpointInterval ?? 20;
+  const checkpointPath = resume?.checkpointPath;
 
   // 启动 watchdog 监控卡死
   const watchdog = new Watchdog(session, recordIssue, {
@@ -70,7 +152,7 @@ export async function runFreePlay(
   watchdog.start();
 
   if (verbose) {
-    console.log(`[FreePlay] 开始对局，maxTurns=${maxTurns}`);
+    console.log(`[FreePlay] 开始对局，maxTurns=${maxTurns}，startTurns=${totalTurns}`);
     for (const [id, brain] of brains) {
       const p = session.players.find((pp) => pp.userId === id);
       console.log(`  ${p?.config.username} (${brain.name}) - ${p?.config.characterId}`);
@@ -192,6 +274,28 @@ export async function runFreePlay(
       }
 
       totalTurns++;
+
+      // 定期保存 checkpoint
+      if (checkpointPath && totalTurns % checkpointInterval === 0) {
+        const currentState = session.latestState;
+        if (currentState) {
+          // 从 store 获取 room 信息
+          const { rooms } = await import('../../store.js');
+          const room = rooms.get(session.roomId);
+          if (room) {
+            saveCheckpoint(checkpointPath, {
+              gameState: currentState,
+              room,
+              totalTurns,
+              brainsState: exportBrainsState(brains),
+              config,
+            });
+            if (verbose) {
+              console.log(`[FreePlay] 已保存 checkpoint @ turn ${totalTurns}`);
+            }
+          }
+        }
+      }
     } catch (err: any) {
       recordIssue({
         severity: 'medium',
@@ -209,6 +313,11 @@ export async function runFreePlay(
   }
 
   watchdog.stop();
+
+  // 对局结束后清除 checkpoint
+  if (checkpointPath) {
+    clearCheckpoint(checkpointPath);
+  }
 
   const endTime = new Date();
   const finalState = session.latestState;
