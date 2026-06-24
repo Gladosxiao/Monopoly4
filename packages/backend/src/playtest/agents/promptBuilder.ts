@@ -163,9 +163,27 @@ const OUTPUT_FORMAT = `
 `;
 
 /**
- * 构建完整 LLM prompt。
+ * 构建一次性 system prompt：包含规则、卡片/道具表、策略提示、输出格式。
+ * 在多轮对话中只在第一次发送，后续不再重复。
  */
-export function buildPrompt(
+export function buildSystemPrompt(): string {
+  return `你是大富翁4玩家，目标是利用策略赢得游戏。
+
+${RULES_SUMMARY}
+
+${buildCardReference()}
+
+${buildItemReference()}
+
+${STRATEGY_HINTS}
+
+${OUTPUT_FORMAT}`;
+}
+
+/**
+ * 构建每次决策的 user prompt：只包含当前场面、自身状态、可用操作、最近事件。
+ */
+export function buildUserPrompt(
   state: GameState,
   me: Player,
   availableActions: AvailableAction[],
@@ -174,17 +192,9 @@ export function buildPrompt(
   const playerSummary = buildPlayerSummary(me, state);
   const boardSummary = buildBoardSummary(state, me);
   const actionsGuide = buildActionsGuide(availableActions);
-  const cardRef = buildCardReference();
-  const itemRef = buildItemReference();
   const logsStr = recentLogs.length > 0 ? recentLogs.join('\n') : '（无）';
 
-  return `你是大富翁4玩家 ${me.username}，请根据以下信息做出最优决策以赢得游戏。
-
-${RULES_SUMMARY}
-
-${cardRef}
-
-${itemRef}
+  return `你是玩家 ${me.username}，请根据当前信息做出最优决策。
 
 ## 你的状态
 ${playerSummary}
@@ -197,7 +207,5 @@ ${actionsGuide}
 ## 最近事件
 ${logsStr}
 
-${STRATEGY_HINTS}
-
-${OUTPUT_FORMAT}`;
+只输出一个 JSON 对象。`;
 }
