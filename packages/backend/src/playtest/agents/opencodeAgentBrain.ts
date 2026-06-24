@@ -166,6 +166,23 @@ export class OpencodeAgentBrain implements PlayerBrain {
       return this.fallback.decide(state, me, availableActions);
     }
 
+    // 仅在关键策略决策时调用 LLM，简单操作使用启发式以提升速度
+    const criticalActions = new Set<ActionType>([
+      'buyProperty',
+      'upgradeProperty',
+      'rebuildTile',
+      'useCard',
+      'buyCard',
+      'useItem',
+      'buyItem',
+      'tradeStock',
+      'castMagicSpell',
+    ]);
+    const hasCriticalAction = availableActions.some((a) => criticalActions.has(a.type));
+    if (!hasCriticalAction) {
+      return this.fallback.decide(state, me, availableActions);
+    }
+
     const recentLogs = state.logs.slice(-10).map((l) => l.message);
 
     for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
