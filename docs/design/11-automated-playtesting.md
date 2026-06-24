@@ -218,10 +218,54 @@ GitHub Actions 中每晚运行：
 - 尝试通过 `game:skip` 推进当前玩家回合
 - 连续 3 次恢复失败后导出当前状态快照并记录 critical issue
 
+## LLM Prompt 与策略优化
+
+`agents/promptBuilder.ts` 负责为 LLM 构建完整 prompt：
+- 从 `docs/design/04-game-rules.md` 提炼核心规则摘要
+- 注入全量 30 张卡片与 13 种道具的说明（id / 名称 / 目标类型 / 效果 / 价格）
+- 提供当前场面信息：玩家资金/地产/卡片/道具/神明、关键地块、股票行情
+- 为每个可用操作附带完整 target 参数说明
+- 输出格式强制要求 `{ action, target, reason }` 的 JSON
+
+`agents/opencodeAgentBrain.ts` 通过 OpenAI-compatible API 调用 LLM：
+- 默认模型 `mimo-v2.5`
+- 支持环境变量 `PLAYTEST_LLM_API_KEY` / `PLAYTEST_LLM_BASE_URL` / `PLAYTEST_LLM_MODEL`
+- JSON 输出校验失败或 API 异常时自动重试 3 次，最终回退到启发式大脑
+- 打印每次调用的 token 消耗，便于诊断额度
+
+## 真实 LLM 长对局测试
+
+配置环境变量后运行：
+
+```bash
+export PLAYTEST_LLM_API_KEY="sk-..."
+export PLAYTEST_LLM_BASE_URL="https://api.xiaomimimo.com/v1"
+export PLAYTEST_LLM_MODEL="mimo-v2.5"
+npm run test -w packages/backend -- src/playtest/__tests__/playtest.e2e.test.ts -t "real MIMO API"
+```
+
+测试用例：
+- 3 轮自由对局
+- 每轮 120 次操作（4 玩家 × 30 回合）
+- 初始资金 10000，`economy` 地图
+- 要求无 critical 问题，验证 LLM 能在长对局中持续做出有效决策
+
+> 注意：真实 LLM 调用较慢（mimo-v2.5 约 10-15 秒/次），完整 3 轮测试可能需要 60-90 分钟。未配置 key 时该用例自动跳过。
+
+## 多模态与前端显示迭代（未来）
+
+LLM 支持多模态后，可进一步将前端棋盘截图输入 LLM，验证其对当前场面的识别是否与游戏状态一致。若识别结果与实际状态不符，则迭代 `packages/frontend/src/board.ts` 的渲染逻辑：
+- 地块文字/图标清晰度
+- 玩家棋子与神明/陷阱的层级关系
+- 建筑等级与特殊建筑的可辨识度
+- 当前回合高亮与玩家资产提示
+
 ## 近期实现优先级
 
 1. P0: 游戏会话管理 + 4 人 AI 接入 + 基本动作执行 ✓
 2. P1: 不变量校验 + Markdown 报告 ✓
 3. P2: 多策略玩家角色 + 复杂动作（卡片/道具/股票） ✓（启发式版本）
 4. P3: 数值压力测试 + Watchdog 守护 ✓
-5. P4: CI 集成 + 历史趋势统计
+5. P4: LLM Prompt 优化与真实 LLM 长对局测试 ✓
+6. P5: CI 集成 + 历史趋势统计
+7. P6: 多模态前端显示验证
