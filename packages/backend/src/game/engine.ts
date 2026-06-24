@@ -172,7 +172,7 @@ export function createGame(roomId: string, config: GameConfig, roomPlayers: Room
       cash: config.totalFunds,
       deposit: 0,
       loan: 0,
-      coupons: 300,
+      coupons: 500,
       vehicle: config.moveMode,
       position: 0,
       properties: [],

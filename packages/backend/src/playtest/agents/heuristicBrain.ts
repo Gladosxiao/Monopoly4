@@ -329,27 +329,41 @@ export class HeuristicBrain implements PlayerBrain {
 
   /** 商店购买决策 */
   private decideShopPurchase(state: GameState, me: Player, availableActions: AvailableAction[]): ActionDecision | null {
-    const totalWealth = me.cash + me.deposit;
-    if (totalWealth < 800) return null;
+    const availableBuyCards = availableActions.filter((a) => a.type === 'buyCard');
+    const availableBuyItems = availableActions.filter((a) => a.type === 'buyItem');
+    if (availableBuyCards.length === 0 && availableBuyItems.length === 0) return null;
 
-    // 优先补充免租卡和送神符
-    if (me.cash >= 500) {
-      const neededDefense = !me.cards.some((c) => c.cardId === 'freePass');
-      if (neededDefense) {
-        return { action: 'buyCard', target: { cardId: 'freePass' }, reason: '购买免租卡防御' };
-      }
+    // 优先补充关键防御道具
+    const hasFreePass = me.cards.some((c) => c.cardId === 'freePass');
+    if (!hasFreePass && availableBuyCards.some((a) => a.params?.cardId === 'freePass')) {
+      return { action: 'buyCard', target: { cardId: 'freePass' }, reason: '购买免租卡防御' };
     }
 
-    // 购买遥控骰子
-    if (me.cash >= 500 && !me.items.some((i) => i.itemId === 'remoteDice')) {
+    // 购买遥控骰子（最重要道具）
+    const hasRemoteDice = me.items.some((i) => i.itemId === 'remoteDice');
+    if (!hasRemoteDice && availableBuyItems.some((a) => a.params?.itemId === 'remoteDice')) {
       return { action: 'buyItem', target: { itemId: 'remoteDice', itemQuantity: 1 }, reason: '购买遥控骰子' };
     }
 
-    // 购买攻击性卡片
-    if (me.cash >= 500 && me.cards.length < 10) {
-      const attackCards = ['priceRise', 'monster', 'demolish'];
-      const cardId = attackCards[Math.floor(Math.random() * attackCards.length)];
-      return { action: 'buyCard', target: { cardId }, reason: `购买攻击卡 ${cardId}` };
+    // 购买路障/地雷用于陷阱
+    const trapItems = ['barrier', 'mine'];
+    for (const trapId of trapItems) {
+      if (!me.items.some((i) => i.itemId === trapId) && availableBuyItems.some((a) => a.params?.itemId === trapId)) {
+        return { action: 'buyItem', target: { itemId: trapId, itemQuantity: 1 }, reason: `购买${trapId}放置陷阱` };
+      }
+    }
+
+    // 补充攻击卡片
+    const attackCards = ['priceRise', 'monster', 'demolish', 'seal'];
+    for (const cardId of attackCards) {
+      if (me.cards.length < 8 && availableBuyCards.some((a) => a.params?.cardId === cardId)) {
+        return { action: 'buyCard', target: { cardId }, reason: `购买攻击卡 ${cardId}` };
+      }
+    }
+
+    // 购买飞弹
+    if (!me.items.some((i) => i.itemId === 'missile') && availableBuyItems.some((a) => a.params?.itemId === 'missile')) {
+      return { action: 'buyItem', target: { itemId: 'missile', itemQuantity: 1 }, reason: '购买飞弹攻击对手' };
     }
 
     return null;

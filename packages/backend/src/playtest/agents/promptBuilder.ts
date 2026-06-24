@@ -43,10 +43,46 @@ function formatTile(state: GameState, tile: Tile): string {
   return `#${tile.index}${tile.name}价${price}主${owner}Lv${tile.level ?? 0}组${tile.group ?? '-'}`;
 }
 
+/** 构建周边环境（前方 6 格） */
+function buildSurroundings(state: GameState, me: Player): string {
+  const tileCount = state.map.tiles.length;
+  const tiles: string[] = [];
+  for (let d = 1; d <= 6; d++) {
+    const idx = (me.position + d) % tileCount;
+    const t = state.map.tiles[idx];
+    const owner = t.ownerId ? (state.players.find((p) => p.id === t.ownerId)?.username ?? '?') : '';
+    if (t.type === 'property') {
+      const price = Math.round((t.basePrice ?? 0) * state.priceIndex);
+      tiles.push(`+${d}#${idx}${t.name} 价${price} 主${owner || '无'} Lv${t.level ?? 0}`);
+    } else if (t.type === 'shop') {
+      tiles.push(`+${d}#${idx}商店(可买卡片道具)`);
+    } else if (t.type === 'fate') {
+      tiles.push(`+${d}#${idx}命运`);
+    } else {
+      tiles.push(`+${d}#${idx}${t.name}`);
+    }
+  }
+  return `前方6格: ${tiles.join(' | ')}`;
+}
+
+/** 构建其他玩家位置与资产 */
+function buildOpponents(state: GameState, me: Player): string {
+  const others = state.players.filter((p) => p.id !== me.id && !p.isBankrupt);
+  if (others.length === 0) return '';
+  const lines = others.map((p) => {
+    const tile = state.map.tiles[p.position];
+    const posDesc = tile ? `#${p.position}${tile.name}` : `#${p.position}`;
+    const owner = tile?.ownerId ? (state.players.find((pp) => pp.id === tile.ownerId)?.username ?? '?') : '';
+    const spirit = p.spirit?.spiritId ?? '-';
+    return `${p.username}@${posDesc} 现金${p.cash} 存${p.deposit} 贷${p.loan} 地${p.properties.length} 卡${p.cards.length} 道${p.items.length} 神${spirit}`;
+  });
+  return `对手: ${lines.join('; ')}`;
+}
+
 /** 构建场面当前信息 */
 function buildBoardSummary(state: GameState, me: Player): string {
   const lines = [
-    `地图:${state.map.name}(${state.map.tiles.length}格) 物价:${state.priceIndex.toFixed(2)} 第${state.day}天 当前:${state.players[state.currentPlayerIndex]?.username}`,
+    `地图:${state.map.name}(${state.map.tiles.length}格) 物价:${state.priceIndex.toFixed(2)} 第${state.day}天`,
   ];
 
   lines.push('玩家:' + state.players.map((p) => {
@@ -151,14 +187,37 @@ function buildActionsGuide(actions: AvailableAction[]): string {
 /** 策略提示 */
 const STRATEGY_HINTS = `
 ## 策略提示
-优先买同组空地产并升级；对强敌地产用涨价/查封卡，对领先玩家用均贫/陷害/冬眠/梦游/乌龟卡；用遥控骰子走位；在己方高级地产前放路障/地雷/炸弹；用机器娃娃清陷阱，飞弹/核弹拆对手建筑；资金充裕买股票，紧张时贷款；坏神附身用送神符。
+
+### 资产增长
+- 优先买同组空地产并升级（每升1级租金+50%，同组2块+20% 3块+50%）
+- **股价≤120大量买入**（tradeStock quantity=100-500），股价≥180分批卖出
+- 持股>10%自动成董事长获分红；优先买航空公司(低价80-160)或电脑公司(100-150)股票
+- 利用物价指数：物价<1.2买入地产/股票，物价>1.8靠收租获利
+
+### 卡片/道具（必须使用！）
+- **若持有卡片必须考虑useCard**：免租卡防高额过路费，涨价卡攻对手地产，均贫卡拉平差距
+- 坏神明附身立即用送神符驱除；前方有陷阱用机器娃娃清除
+- 在自己Lv2+地产前1-3格放路障/地雷/炸弹，增加对手踩中概率
+- 用飞弹/核弹拆对手Lv3+建筑；遥控骰子精确走位到目标格
+
+### 干扰对手
+- 对资金最多者使用均贫卡/陷害卡/冬眠卡/梦游卡/乌龟卡
+- 对强敌Lv3+地产用涨价卡或查封卡；用摧毁卡/怪兽卡拆对手高级建筑
+- 用抢夺卡获取对手现金；换地卡/换房卡夺对手地产；转转卡改变对手方向
+
+### 点券使用
+- **若有点券(≥300)且经过商店，必须buyItem购买道具**（优先遥控骰子/飞弹/路障）
+- 点券充足(≥500)时buyCard购买攻击卡（涨价卡/摧毁卡/均贫卡）
+- 若现金充裕(≥3000)也可用现金buyItem/buyCard
 `;
 
 /** 输出格式说明 */
 const OUTPUT_FORMAT = `
 ## 输出格式
 只输出JSON：{"action":"...","target":{...},"reason":"..."}
-常见target: roll{diceCount}, useCard{cardId,cardTarget}, useItem{itemId,itemTarget}, tradeStock{stockId,stockQuantity}, takeLoan/repayLoan{amount}, placeLotteryBet{number}, rescueNpc{npcId}, rebuildTile{tileIndex,buildingType}
+常见target: roll{diceCount}, buyProperty{}, upgradeProperty{}, tradeStock{stockId,stockQuantity(正买负卖)},
+useCard{cardId,cardTarget}, useItem{itemId,itemTarget}, buyCard{cardId}, buyItem{itemId,itemQuantity}
+takeLoan/repayLoan{amount}, castMagicSpell{targetPlayerId,spell}, rebuildTile{tileIndex,buildingType}
 务必使用可用操作列表中的action，useCard/useItem必须提供完整target。
 `;
 
@@ -192,12 +251,20 @@ export function buildUserPrompt(
   const playerSummary = buildPlayerSummary(me, state);
   const boardSummary = buildBoardSummary(state, me);
   const actionsGuide = buildActionsGuide(availableActions);
+  const surroundings = buildSurroundings(state, me);
+  const opponents = buildOpponents(state, me);
   const logsStr = recentLogs.length > 0 ? recentLogs.join('\n') : '（无）';
 
   return `你是玩家 ${me.username}，请根据当前信息做出最优决策。
 
 ## 你的状态
 ${playerSummary}
+
+## 周遭环境
+${surroundings}
+
+## 对手情报
+${opponents}
 
 ## 当前场面
 ${boardSummary}

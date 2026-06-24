@@ -186,24 +186,28 @@ export class OpencodeAgentBrain implements PlayerBrain {
       return this.fallback.decide(state, me, availableActions);
     }
 
-    // 仅在关键策略决策时调用 LLM，简单操作使用启发式以提升速度
-    const criticalActions = new Set<ActionType>([
+    // LLM 专注战略决策，卡片/道具等战术操作交由启发式大脑（策略更完善）
+    const strategicActions = new Set<ActionType>([
       'buyProperty',
       'upgradeProperty',
       'rebuildTile',
-      'useCard',
-      'buyCard',
-      'useItem',
-      'buyItem',
       'tradeStock',
       'castMagicSpell',
     ]);
-    const hasCriticalAction = availableActions.some((a) => criticalActions.has(a.type));
-    if (!hasCriticalAction) {
+    const hasStrategicAction = availableActions.some((a) => strategicActions.has(a.type));
+    if (!hasStrategicAction) {
       return this.fallback.decide(state, me, availableActions);
     }
 
     const recentLogs = state.logs.slice(-10).map((l) => l.message);
+
+    // 商店购买优先交由启发式大脑（策略完善）
+    const shopActions = availableActions.filter(
+      (a) => a.type === 'buyCard' || a.type === 'buyItem'
+    );
+    if (shopActions.length > 0) {
+      return this.fallback.decide(state, me, availableActions);
+    }
 
     // 初始化 system prompt（仅一次）
     if (this.messages.length === 0) {

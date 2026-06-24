@@ -133,6 +133,10 @@ export interface PlaytestConfig {
   }>;
   /** 玩家策略配置 */
   strategy?: PlayerStrategyConfig;
+  /** 快照采集间隔（每 N 回合） */
+  snapshotInterval?: number;
+  /** HTML 统计报告输出路径 */
+  htmlReportPath?: string;
 }
 
 // ==================== 数值指标 ====================

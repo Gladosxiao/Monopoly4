@@ -63,7 +63,7 @@ describe('createGame', () => {
     expect(p1.cash).toBe(DEFAULT_TEST_CONFIG.totalFunds);
     expect(p1.deposit).toBe(0);
     expect(p1.loan).toBe(0);
-    expect(p1.coupons).toBe(300);
+    expect(p1.coupons).toBe(500);
     expect(p1.position).toBe(0);
     expect(p1.properties).toEqual([]);
     expect(p1.cards).toEqual([]);

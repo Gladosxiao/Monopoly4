@@ -19,6 +19,7 @@ import { waitForState, sleep } from '../engine/gameSession.js';
 import { executeAction, getAvailableActions } from '../engine/actionExecutor.js';
 import { validateGameState } from '../engine/validator.js';
 import { Watchdog } from '../engine/watchdog.js';
+import { captureSnapshot, generateHtmlReport, type TurnSnapshot } from '../engine/statsCollector.js';
 import { createHeuristicBrainFactory } from '../agents/heuristicBrain.js';
 import { createOpencodeAgentBrainFactory, OpencodeAgentBrain } from '../agents/opencodeAgentBrain.js';
 import type { BrainFactory } from '../agents/llmPlayer.js';
@@ -159,6 +160,11 @@ export async function runFreePlay(
     }
   }
 
+  // 动作统计与快照收集
+  const actionStats: Record<string, number> = {};
+  const snapshots: TurnSnapshot[] = [];
+  const snapshotInterval = config.snapshotInterval ?? 5; // 每 N 回合采集快照
+
   // 主循环
   while (totalTurns < maxTurns) {
     const state = session.latestState;
@@ -275,6 +281,14 @@ export async function runFreePlay(
 
       totalTurns++;
 
+      // 记录动作统计
+      actionStats[decision.action] = (actionStats[decision.action] ?? 0) + 1;
+
+      // 定期采集快照
+      if (snapshotInterval > 0 && totalTurns % snapshotInterval === 0 && session.latestState) {
+        snapshots.push(captureSnapshot(session.latestState, totalTurns));
+      }
+
       // 定期保存 checkpoint
       if (checkpointPath && totalTurns % checkpointInterval === 0) {
         const currentState = session.latestState;
@@ -313,6 +327,15 @@ export async function runFreePlay(
   }
 
   watchdog.stop();
+
+  // 生成 HTML 统计报告
+  if (snapshots.length > 0 && config.htmlReportPath) {
+    try {
+      generateHtmlReport(snapshots, actionStats, config.htmlReportPath);
+    } catch (err: any) {
+      console.warn(`[FreePlay] HTML 报告生成失败: ${err.message}`);
+    }
+  }
 
   // 对局结束后清除 checkpoint
   if (checkpointPath) {

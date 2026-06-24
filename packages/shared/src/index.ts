@@ -553,7 +553,7 @@ export const SIMPLE_MAP: GameMap = {
     { index: 2, name: '青青草原', type: 'property', size: 'small', group: 0, basePrice: 40, baseRent: 4, level: 0 },
     { index: 3, name: '石板路', type: 'property', size: 'small', group: 0, basePrice: 50, baseRent: 5, level: 0 },
     // 系统格
-    { index: 4, name: '卡片格', type: 'card', basePrice: 0, baseRent: 0, level: 0 },
+    { index: 4, name: '商店', type: 'shop', basePrice: 0, baseRent: 0, level: 0 },
     // 第二组小地产
     { index: 5, name: '小河边', type: 'property', size: 'small', group: 1, basePrice: 60, baseRent: 6, level: 0 },
     { index: 6, name: '风车镇', type: 'property', size: 'small', group: 1, basePrice: 70, baseRent: 7, level: 0 },
@@ -577,7 +577,7 @@ export const SIMPLE_MAP: GameMap = {
     { index: 18, name: '市政厅', type: 'property', size: 'small', group: 4, basePrice: 160, baseRent: 16, level: 0 },
     { index: 19, name: '百货街', type: 'property', size: 'small', group: 4, basePrice: 170, baseRent: 17, level: 0 },
     // 系统格
-    { index: 20, name: '得点券 30', type: 'coupon', couponValue: 30, basePrice: 0, baseRent: 0, level: 0 },
+    { index: 20, name: '得点券 50', type: 'coupon', couponValue: 50, basePrice: 0, baseRent: 0, level: 0 },
     // 第一块大地产（占 2 格，同名同 group）
     { index: 21, name: '钻石广场', type: 'property', size: 'large', span: 2, group: 5, basePrice: 300, baseRent: 30, level: 0 },
     { index: 22, name: '钻石广场', type: 'property', size: 'large', span: 2, group: 5, basePrice: 300, baseRent: 30, level: 0 },
@@ -605,7 +605,7 @@ export const SIMPLE_MAP: GameMap = {
     { index: 35, name: '航空公司', type: 'company', companyId: 'airline', basePrice: 0, baseRent: 0, level: 0 },
     { index: 36, name: '电脑公司', type: 'company', companyId: 'computer', basePrice: 0, baseRent: 0, level: 0 },
     { index: 37, name: '保险公司', type: 'company', companyId: 'insurance', basePrice: 0, baseRent: 0, level: 0 },
-    { index: 38, name: '卡片格', type: 'card', basePrice: 0, baseRent: 0, level: 0 },
+    { index: 38, name: '得点券 50', type: 'coupon', couponValue: 50, basePrice: 0, baseRent: 0, level: 0 },
     { index: 39, name: '命运', type: 'fate', basePrice: 0, baseRent: 0, level: 0 },
   ],
 };

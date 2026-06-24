@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<title>大富翁4 自动化对局统计报告</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+  body { font-family: -apple-system, sans-serif; max-width: 1200px; margin: 0 auto; padding: 20px; background: #f5f7fa; color: #333; }
+  h1 { text-align: center; color: #2c3e50; }
+  .section { background: white; border-radius: 12px; padding: 20px; margin: 20px 0; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+  .chart-wrap { position: relative; height: 400px; margin: 20px 0; }
+  canvas { max-height: 400px; }
+  table { width: 100%; border-collapse: collapse; margin: 10px 0; }
+  th, td { padding: 8px 12px; text-align: right; border-bottom: 1px solid #eee; }
+  th { background: #f0f4f8; font-weight: 600; color: #555; }
+  .bar { display: inline-block; height: 20px; border-radius: 3px; transition: width 0.3s; }
+  .warn { background: #fff3cd; border-left: 4px solid #ffc107; padding: 10px 15px; margin: 10px 0; border-radius: 4px; }
+  .bad { background: #fdecea; border-left: 4px solid #e15759; padding: 10px 15px; margin: 10px 0; border-radius: 4px; }
+  .good { background: #e8f5e9; border-left: 4px solid #4caf50; padding: 10px 15px; margin: 10px 0; border-radius: 4px; }
+  .flex { display: flex; gap: 20px; flex-wrap: wrap; }
+  .flex > * { flex: 1; min-width: 300px; }
+  .kpi { text-align: center; padding: 15px; border-radius: 8px; background: #f0f4f8; }
+  .kpi .num { font-size: 2em; font-weight: bold; color: #2c3e50; }
+  .kpi .label { font-size: 0.85em; color: #888; }
+</style>
+</head>
+<body>
+<h1>🎲 大富翁4 · 自动化对局统计报告</h1>
+
+<div class="flex">
+  <div class="kpi"><div class="num">48</div><div class="label">快照点</div></div>
+  <div class="kpi"><div class="num">240</div><div class="label">总操作数</div></div>
+  <div class="kpi"><div class="num">13</div><div class="label">股票交易</div></div>
+  <div class="kpi"><div class="num">0</div><div class="label">卡片使用/购买</div></div>
+  <div class="kpi"><div class="num">0</div><div class="label">道具使用/购买</div></div>
+</div>
+
+<!-- 激励提示 -->
+<div class="bad">⚠ 警告：全程无人使用或购买卡片！需检查启发式大脑卡片策略或地图商店密度。</div>
+<div class="bad">⚠ 警告：全程无人使用或购买道具！需优化点券收入或商店访问频率。</div>
+
+
+
+
+<div class="section">
+  <h2>📈 资产趋势（净资产 = 现金+存款-贷款+地产+股票）</h2>
+  <div class="chart-wrap"><canvas id="assetChart"></canvas></div>
+</div>
+
+<div class="section">
+  <h2>🏗️ 最终资产结构</h2>
+  <div class="chart-wrap"><canvas id="structureChart"></canvas></div>
+</div>
+
+<div class="section">
+  <h2>📊 最终玩家状态</h2>
+  <table>
+    <tr><th>玩家</th><th>现金</th><th>存款</th><th>贷款</th><th>点券</th><th>地产/价值</th><th>股票/价值</th><th>卡片</th><th>道具</th><th>净资产</th><th>破产</th></tr>
+    
+    <tr>
+      <td><strong>Player1</strong></td>
+      <td>$5,243</td><td>$46</td>
+      <td>$0</td><td>550</td>
+      <td>6块 / $1,207</td>
+      <td>$22,200</td>
+      <td>0</td><td>0</td>
+      <td style="font-weight:bold;color:green">$28,696</td>
+      <td>✅</td>
+    </tr>
+    <tr>
+      <td><strong>Player2</strong></td>
+      <td>$8,285</td><td>$13</td>
+      <td>$0</td><td>550</td>
+      <td>3块 / $2,554</td>
+      <td>$11,100</td>
+      <td>0</td><td>0</td>
+      <td style="font-weight:bold;color:green">$21,952</td>
+      <td>✅</td>
+    </tr>
+    <tr>
+      <td><strong>Player3</strong></td>
+      <td>$28,954</td><td>$33</td>
+      <td>$0</td><td>600</td>
+      <td>5块 / $3,383</td>
+      <td>$11,100</td>
+      <td>0</td><td>0</td>
+      <td style="font-weight:bold;color:green">$43,470</td>
+      <td>✅</td>
+    </tr>
+    <tr>
+      <td><strong>Player4</strong></td>
+      <td>$10,063</td><td>$33</td>
+      <td>$0</td><td>550</td>
+      <td>6块 / $2,768</td>
+      <td>$11,100</td>
+      <td>0</td><td>0</td>
+      <td style="font-weight:bold;color:green">$23,964</td>
+      <td>✅</td>
+    </tr>
+  </table>
+</div>
+
+<div class="section">
+  <h2>🎬 动作分布</h2>
+  <table>
+    <tr><th>动作</th><th>次数</th><th>占比</th><th>分布</th></tr>
+    <tr><td>roll</td><td>185</td><td>77.1%</td>
+        <td><span class="bar" style="width:385.41666666666674px;background:#4e79a7"></span></td></tr><tr><td>buyProperty</td><td>20</td><td>8.3%</td>
+        <td><span class="bar" style="width:41.66666666666666px;background:#4e79a7"></span></td></tr><tr><td>upgradeProperty</td><td>18</td><td>7.5%</td>
+        <td><span class="bar" style="width:37.5px;background:#4e79a7"></span></td></tr><tr><td>tradeStock</td><td>13</td><td>5.4%</td>
+        <td><span class="bar" style="width:27.083333333333336px;background:#f28e2b"></span></td></tr><tr><td>repayLoan</td><td>3</td><td>1.3%</td>
+        <td><span class="bar" style="width:6.25px;background:#4e79a7"></span></td></tr><tr><td>skipTurn</td><td>1</td><td>0.4%</td>
+        <td><span class="bar" style="width:2.0833333333333335px;background:#4e79a7"></span></td></tr>
+  </table>
+  <div class="warn">⚠ roll 占比超过 60%，滚动过多可能意味着策略不够丰富。</div>
+</div>
+
+<script>
+// 资产趋势图
+new Chart(document.getElementById('assetChart'), {
+  type: 'line',
+  data: { labels: ["T5","T10","T15","T20","T25","T30","T35","T40","T45","T50","T55","T60","T65","T70","T75","T80","T85","T90","T95","T100","T105","T110","T115","T120","T125","T130","T135","T140","T145","T150","T155","T160","T165","T170","T175","T180","T185","T190","T195","T200","T205","T210","T215","T220","T225","T230","T235","T240"], datasets: [{"label":"Player1","data":[10000,10004,9995,9995,10017,10017,10017,10017,17,17,-347,9153,9162,9162,9168,9174,9204,9187,9202,9202,9202,9202,10502,11121,9892,8406,9522,19549,18949,18449,19628,18928,17969,18092,14421,14221,24235,24235,24901,24901,24075,25675,27472,28626,28480,28541,28632,28696],"borderColor":"#4e79a7","backgroundColor":"#4e79a733","fill":false,"tension":0.3},{"label":"Player2","data":[10000,10000,9994,9994,9983,9983,9983,9983,9983,9983,10127,10127,10134,10134,20131,20131,9618,8406,9091,8391,8991,9279,10409,11103,9411,18411,13511,13500,13500,14205,15663,15630,14697,14923,13623,13423,11069,11069,21052,21052,20641,20915,22419,22984,22897,22822,22373,21952],"borderColor":"#f28e2b","backgroundColor":"#f28e2b33","fill":false,"tension":0.3},{"label":"Player3","data":[10000,10000,10021,21,21,21,21,37,37,37,583,10628,10748,10748,10748,10748,10731,10710,10710,10710,11310,10810,10110,20897,21926,21231,21315,21299,20699,19494,21147,20447,19647,18124,16924,16924,27247,22247,22199,22142,22368,22694,22958,23234,33158,43204,43113,43470],"borderColor":"#e15759","backgroundColor":"#e1575933","fill":false,"tension":0.3},{"label":"Player4","data":[10000,9996,9990,9990,9979,9979,9979,9963,9963,9963,9637,9592,8956,8956,18953,18947,18947,17797,18497,14797,15397,15109,16409,17109,17601,16282,14382,14382,13782,23782,25504,19837,18437,18811,18082,17883,16800,15800,15500,15557,14568,12868,13203,23838,23712,23680,24129,23964],"borderColor":"#76b7b2","backgroundColor":"#76b7b233","fill":false,"tension":0.3}] },
+  options: {
+    responsive: true, maintainAspectRatio: false,
+    plugins: { tooltip: { callbacks: { label: ctx => ctx.dataset.label + ': $' + ctx.raw.toLocaleString() } } },
+    scales: { y: { title: { display: true, text: '净资产 ($)' }, ticks: { callback: v => '$' + (v/1000).toFixed(0) + 'k' } } }
+  }
+});
+
+// 资产结构图
+new Chart(document.getElementById('structureChart'), {
+  type: 'bar',
+  data: {
+    labels: ["现金","地产","股票","贷款(负)"],
+    datasets: [{"label":"Player1","data":[5289,1207,22200,0],"backgroundColor":"#4e79a7"},{"label":"Player2","data":[8298,2554,11100,0],"backgroundColor":"#f28e2b"},{"label":"Player3","data":[28987,3383,11100,0],"backgroundColor":"#e15759"},{"label":"Player4","data":[10096,2768,11100,0],"backgroundColor":"#76b7b2"}]
+  },
+  options: {
+    responsive: true, maintainAspectRatio: false,
+    plugins: { tooltip: { callbacks: { label: ctx => ctx.dataset.label + ': $' + ctx.raw.toLocaleString() } } },
+    scales: { y: { title: { display: true, text: '金额 ($)' }, ticks: { callback: v => '$' + (v/1000).toFixed(0) + 'k' } } }
+  }
+});
+</script>
+</body></html>
