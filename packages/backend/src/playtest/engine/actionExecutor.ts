@@ -172,6 +172,28 @@ export function getAvailableActions(state: GameState, playerId: string): Availab
   const isCurrentPlayer = state.players[state.currentPlayerIndex]?.id === playerId;
 
   if (state.status === 'rolling' && isCurrentPlayer) {
+    const tile = state.map.tiles[player.position];
+
+    // 商店格：允许在掷骰前购买卡片/道具
+    if (tile.type === 'shop') {
+      const affordableCards = Object.values(CARD_DEFINITIONS).filter((c) => (player.coupons ?? 0) >= c.cost);
+      for (const card of affordableCards) {
+        actions.push({
+          type: 'buyCard',
+          label: `购买 ${card.name} (${card.cost}点)`,
+          params: { cardId: card.id, cost: card.cost, targetType: card.target },
+        });
+      }
+      const affordableItems = Object.values(ITEM_DEFINITIONS).filter((i) => i.cost > 0 && (player.coupons ?? 0) >= i.cost);
+      for (const item of affordableItems) {
+        actions.push({
+          type: 'buyItem',
+          label: `购买 ${item.name} (${item.cost}点)`,
+          params: { itemId: item.id, cost: item.cost, itemType: item.type },
+        });
+      }
+    }
+
     // 掷骰阶段：根据载具列出可选骰子数
     const diceRange = player.vehicle === 'car' ? [1, 2, 3] : player.vehicle === 'bike' ? [1, 2] : [1];
     actions.push({ type: 'roll', label: `掷骰子（可选 ${diceRange.join('/')} 颗）`, params: { diceRange } });
