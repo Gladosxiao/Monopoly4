@@ -5,14 +5,15 @@
  * 支持配置：
  * - PLAYTEST_LLM_API_KEY
  * - PLAYTEST_LLM_BASE_URL
- * - PLAYTEST_LLM_MODEL（默认 xiaomi/mimo-v2.5）
+ * - PLAYTEST_LLM_MODEL（默认 mimo-v2.5）
  */
 
 import type { GameState, Player } from '@monopoly4/shared';
 import type { PlayerBrain, ActionDecision, AvailableAction, ActionType } from '../types.js';
+import { buildPrompt } from './promptBuilder.js';
 
 const MAX_RETRIES = 3;
-const LLM_TIMEOUT = 30000;
+const LLM_TIMEOUT = 120000;
 
 /** LLM 调用配置 */
 interface LLMConfig {
@@ -26,7 +27,7 @@ function getLLMConfig(): LLMConfig {
   return {
     apiKey: process.env.PLAYTEST_LLM_API_KEY ?? '',
     baseUrl: process.env.PLAYTEST_LLM_BASE_URL ?? 'https://api.openai.com/v1',
-    model: process.env.PLAYTEST_LLM_MODEL ?? 'xiaomi/mimo-v2.5',
+    model: process.env.PLAYTEST_LLM_MODEL ?? 'mimo-v2.5',
   };
 }
 
@@ -45,15 +46,15 @@ async function callLLM(prompt: string, config: LLMConfig): Promise<string> {
     },
     body: JSON.stringify({
       model: config.model,
-      messages: [
-        {
-          role: 'system',
-          content: '你是一名大富翁4自动化测试玩家。你需要根据当前游戏状态做出最优决策。只输出 JSON，不要输出其他内容。',
-        },
-        { role: 'user', content: prompt },
-      ],
-      temperature: 0.7,
-      max_tokens: 500,
+        messages: [
+          {
+            role: 'system',
+            content: '你是一名大富翁4自动化测试玩家。你的目标是利用策略赢得游戏：优先购买和升级地产、合理使用卡片和道具干扰对手、必要时进行股票投资和贷款。\n\n必须严格遵循以下输出格式，只输出一个 JSON 对象，不要输出任何推理过程、解释或 markdown：\n{"action": "动作类型", "target": { /* 动作参数 */ }, "reason": "简短决策理由"}\n\n示例：\n{"action": "roll", "target": {"diceCount": 1}, "reason": "步行掷1颗骰子移动"}\n{"action": "buyProperty", "target": {}, "reason": "购买空地产"}\n{"action": "useCard", "target": {"cardId": "priceRise", "cardTarget": {"targetTileIndex": 5}}, "reason": "对对手高级地产涨价"}',
+          },
+          { role: 'user', content: prompt },
+        ],
+        temperature: 0.5,
+        max_completion_tokens: 4096,
     }),
     signal: AbortSignal.timeout(LLM_TIMEOUT),
   });
@@ -65,11 +66,19 @@ async function callLLM(prompt: string, config: LLMConfig): Promise<string> {
 
   const data = (await response.json()) as {
     choices?: Array<{ message?: { content?: string } }>;
+    usage?: { total_tokens?: number; completion_tokens?: number; prompt_tokens?: number };
   };
 
   const content = data.choices?.[0]?.message?.content;
   if (!content) {
     throw new Error('LLM 返回空内容');
+  }
+
+  // 打印 token 消耗用于诊断
+  if (data.usage) {
+    console.log(
+      `[OpencodeAgentBrain] token 消耗: prompt=${data.usage.prompt_tokens ?? '?'}, completion=${data.usage.completion_tokens ?? '?'}, total=${data.usage.total_tokens ?? '?'}`
+    );
   }
 
   return content;
@@ -80,7 +89,12 @@ function validateDecision(raw: unknown): ActionDecision | null {
   if (!raw || typeof raw !== 'object') return null;
   const obj = raw as Record<string, unknown>;
 
-  if (typeof obj.action !== 'string') return null;
+  // 兼容 LLM 可能输出的 decision/action 字段
+  let actionValue = obj.action;
+  if (typeof actionValue !== 'string' && typeof obj.decision === 'string') {
+    actionValue = obj.decision;
+  }
+  if (typeof actionValue !== 'string') return null;
 
   const validActions: ActionType[] = [
     'roll', 'buyProperty', 'upgradeProperty', 'rebuildTile',
@@ -89,10 +103,10 @@ function validateDecision(raw: unknown): ActionDecision | null {
     'placeLotteryBet', 'castMagicSpell', 'skipTurn', 'rescueNpc',
   ];
 
-  if (!validActions.includes(obj.action as ActionType)) return null;
+  if (!validActions.includes(actionValue as ActionType)) return null;
 
   const decision: ActionDecision = {
-    action: obj.action as ActionType,
+    action: actionValue as ActionType,
     reason: typeof obj.reason === 'string' ? obj.reason : undefined,
   };
 
@@ -101,62 +115,6 @@ function validateDecision(raw: unknown): ActionDecision | null {
   }
 
   return decision;
-}
-
-/** 构造 LLM prompt */
-function buildPrompt(state: GameState, me: Player, availableActions: AvailableAction[], recentLogs: string[]): string {
-  const tile = state.map.tiles[me.position];
-
-  const playerSummary = [
-    `用户名: ${me.username}`,
-    `资金: ${me.cash}`,
-    `存款: ${me.deposit}`,
-    `贷款: ${me.loan}`,
-    `点券: ${me.coupons}`,
-    `载具: ${me.vehicle}`,
-    `位置: ${me.position} (${tile.name}, 类型: ${tile.type})`,
-    `地产数: ${me.properties.length}`,
-    `卡片数: ${me.cards.length}`,
-    `道具: ${me.items.map((i) => `${i.itemId}x${i.quantity}`).join(', ') || '无'}`,
-    `神明: ${me.spirit?.spiritId ?? '无'}`,
-  ].join('\n');
-
-  const actionsList = availableActions.map((a) => {
-    const params = a.params ? ` (${JSON.stringify(a.params)})` : '';
-    return `- ${a.type}: ${a.label}${params}`;
-  }).join('\n');
-
-  const logsStr = recentLogs.length > 0 ? recentLogs.join('\n') : '（无）';
-
-  return `你是大富翁4玩家 ${me.username}，当前是第 ${state.day} 天，第 ${state.month} 月。
-
-## 你的状态
-${playerSummary}
-
-## 游戏状态
-- 当前回合玩家: ${state.players[state.currentPlayerIndex]?.username}
-- 阶段: ${state.status}
-- 物价指数: ${state.priceIndex}
-- 地图: ${state.map.name} (${state.map.tiles.length} 格)
-
-## 其他玩家
-${state.players
-  .filter((p) => p.id !== me.id)
-  .map((p) => `- ${p.username}: 资金=${p.cash}, 地产=${p.properties.length}, 破产=${p.isBankrupt}`)
-  .join('\n')}
-
-## 本回合可用操作
-${actionsList}
-
-## 最近事件
-${logsStr}
-
-请输出 JSON:
-{
-  "action": "动作类型",
-  "target": { /* 动作参数，如果需要的话 */ },
-  "reason": "简短决策理由"
-}`;
 }
 
 /** 从 LLM 文本输出中提取 JSON */
@@ -218,6 +176,7 @@ export class OpencodeAgentBrain implements PlayerBrain {
         const decision = validateDecision(parsed);
 
         if (decision) {
+          console.log(`[OpencodeAgentBrain] LLM 调用成功: ${decision.action} - ${decision.reason ?? ''}`);
           return decision;
         }
 

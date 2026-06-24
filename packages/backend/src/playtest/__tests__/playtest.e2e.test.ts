@@ -204,7 +204,7 @@ describe('LLM automated playtest', () => {
         );
       }
 
-      console.log('\n=== LLM 3 轮测试摘要 ===');
+      console.log('\n=== LLM mock 3 轮测试摘要 ===');
       for (const s of summaries) console.log(s);
     } finally {
       process.env.PLAYTEST_LLM_BASE_URL = originalBaseUrl;
@@ -212,4 +212,33 @@ describe('LLM automated playtest', () => {
       await mockServer.close();
     }
   }, 300000);
+
+  it('LLM brain: 3 long strategy games with real MIMO API (120 ops each)', async () => {
+    if (!process.env.PLAYTEST_LLM_API_KEY || process.env.PLAYTEST_LLM_API_KEY === 'mock-key') {
+      console.log('\n未配置真实 LLM API key，跳过真实 LLM 长对局测试');
+      return;
+    }
+
+    const summaries: string[] = [];
+    for (let i = 0; i < 3; i++) {
+      const report = await runPlaytest({
+        scenario: 'freePlay',
+        maxTurns: 120, // 4 玩家 × 30 回合
+        brainType: 'llm',
+        gameConfig: {
+          totalFunds: 10000,
+          mapId: 'economy',
+        },
+      });
+
+      expect(report.criticalIssues).toHaveLength(0);
+      expect(report.totalTurns).toBeGreaterThan(0);
+      summaries.push(
+        `第 ${i + 1} 轮: ${report.result}, ${report.totalTurns} 回合, 问题=${report.issues.length}, 胜者=${report.winnerId ?? '无'}`
+      );
+    }
+
+    console.log('\n=== 真实 LLM 长对局 3 轮测试摘要 ===');
+    for (const s of summaries) console.log(s);
+  }, 900000);
 });

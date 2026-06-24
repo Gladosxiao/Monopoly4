@@ -7,6 +7,7 @@
 
 import type { Socket as ClientSocket } from 'socket.io-client';
 import type { GameState } from '@monopoly4/shared';
+import { CARD_DEFINITIONS, ITEM_DEFINITIONS } from '@monopoly4/shared';
 import type { ActionDecision, AvailableAction } from '../types.js';
 import type { GameSession } from './gameSession.js';
 import { waitForState, sleep } from './gameSession.js';
@@ -171,23 +172,19 @@ export function getAvailableActions(state: GameState, playerId: string): Availab
   const isCurrentPlayer = state.players[state.currentPlayerIndex]?.id === playerId;
 
   if (state.status === 'rolling' && isCurrentPlayer) {
-    // 掷骰阶段
-    actions.push({ type: 'roll', label: '掷骰子' });
+    // 掷骰阶段：根据载具列出可选骰子数
+    const diceRange = player.vehicle === 'car' ? [1, 2, 3] : player.vehicle === 'bike' ? [1, 2] : [1];
+    actions.push({ type: 'roll', label: `掷骰子（可选 ${diceRange.join('/')} 颗）`, params: { diceRange } });
 
     // 如果有遥控骰子道具，可以选择使用
     const remoteDice = player.items.find((i) => i.itemId === 'remoteDice');
     if (remoteDice) {
-      actions.push({ type: 'useItem', label: '使用遥控骰子', params: { itemId: 'remoteDice' } });
+      actions.push({ type: 'useItem', label: '使用遥控骰子', params: { itemId: 'remoteDice', itemType: 'tool', needsTarget: 'diceValue' } });
     }
 
-    // 如果载具是 bike/car，可以选择骰子数
-    if (player.vehicle === 'bike') {
-      actions.push({ type: 'roll', label: '掷 1 颗', params: { diceCount: 1 } });
-      actions.push({ type: 'roll', label: '掷 2 颗', params: { diceCount: 2 } });
-    } else if (player.vehicle === 'car') {
-      actions.push({ type: 'roll', label: '掷 1 颗', params: { diceCount: 1 } });
-      actions.push({ type: 'roll', label: '掷 2 颗', params: { diceCount: 2 } });
-      actions.push({ type: 'roll', label: '掷 3 颗', params: { diceCount: 3 } });
+    // 保留具体骰子数选项，便于启发式大脑直接选择
+    for (const n of diceRange) {
+      actions.push({ type: 'roll', label: `掷 ${n} 颗`, params: { diceCount: n } });
     }
   }
 
@@ -210,10 +207,25 @@ export function getAvailableActions(state: GameState, playerId: string): Availab
       }
     }
 
-    // 商店格 → 可买卡片/道具
+    // 商店格 → 可买卡片/道具（列出具体选项及价格、目标类型）
     if (tile.type === 'shop') {
-      actions.push({ type: 'buyCard', label: '购买卡片' });
-      actions.push({ type: 'buyItem', label: '购买道具' });
+      const affordableCards = Object.values(CARD_DEFINITIONS).filter((c) => player.coupons >= c.cost);
+      for (const card of affordableCards) {
+        actions.push({
+          type: 'buyCard',
+          label: `购买 ${card.name} (${card.cost}点)`,
+          params: { cardId: card.id, cost: card.cost, targetType: card.target },
+        });
+      }
+
+      const affordableItems = Object.values(ITEM_DEFINITIONS).filter((i) => i.cost > 0 && player.coupons >= i.cost);
+      for (const item of affordableItems) {
+        actions.push({
+          type: 'buyItem',
+          label: `购买 ${item.name} (${item.cost}点)`,
+          params: { itemId: item.id, cost: item.cost, itemType: item.type },
+        });
+      }
     }
 
     // 解救 NPC
@@ -226,21 +238,46 @@ export function getAvailableActions(state: GameState, playerId: string): Availab
       }
     }
 
-    // 使用卡片
+    // 使用卡片（附带目标类型说明）
     for (const card of player.cards) {
+      const def = CARD_DEFINITIONS[card.cardId];
       actions.push({
         type: 'useCard',
-        label: `使用卡片 ${card.cardId}`,
-        params: { cardId: card.cardId },
+        label: `使用卡片 ${def?.name ?? card.cardId}${def ? ` (${def.description})` : ''}`,
+        params: {
+          cardId: card.cardId,
+          targetType: def?.target ?? 'self',
+          description: def?.description,
+        },
       });
     }
 
-    // 使用道具
+    // 使用道具（附带目标类型说明）
     for (const item of player.items) {
+      const def = ITEM_DEFINITIONS[item.itemId];
+      const needsTarget =
+        item.itemId === 'remoteDice'
+          ? 'diceValue'
+          : item.itemId === 'robotDoll'
+          ? 'none'
+          : item.itemId === 'missile' || item.itemId === 'nuke'
+          ? 'targetTileIndex'
+          : item.itemId === 'robot' || item.itemId === 'teleporter'
+          ? 'targetTileIndex'
+          : item.itemId === 'timeMachine' || item.itemId === 'engineerTruck'
+          ? 'none'
+          : ['barrier', 'mine', 'timeBomb'].includes(item.itemId)
+          ? 'targetTileIndex'
+          : 'none';
       actions.push({
         type: 'useItem',
-        label: `使用道具 ${item.itemId}`,
-        params: { itemId: item.itemId },
+        label: `使用道具 ${def?.name ?? item.itemId}${def ? ` (${def.description})` : ''}`,
+        params: {
+          itemId: item.itemId,
+          itemType: def?.type ?? 'tool',
+          needsTarget,
+          description: def?.description,
+        },
       });
     }
 
