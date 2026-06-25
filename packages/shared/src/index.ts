@@ -216,6 +216,21 @@ export interface Stock {
   fluctuation: number; // 当日涨跌幅百分比
   bullDays?: number; // 红卡涨停剩余天数
   bearDays?: number; // 黑卡跌停剩余天数
+  /** 前一日价格（用于计算涨跌和 K 线） */
+  prevPrice?: number;
+  /** 最近 20 天 OHLC 历史（用于 K 线图，最新一天在数组末尾） */
+  ohlcHistory?: Array<{ open: number; high: number; low: number; close: number }>;
+}
+
+/** 股票当前走势状态 */
+export interface StockTrend {
+  stockId: string;
+  templateId: number;
+  startDay: number;
+  currentIndex: number;      // 0-19
+  startPrice: number;
+  templateName: string;
+  templateColor: string;
 }
 
 export type CompanyType =
@@ -409,6 +424,8 @@ export interface GameState {
   turnSnapshot?: TurnSnapshot;
   stocks: Stock[];
   companies: Company[];
+  /** 当前活跃的股票走势 */
+  stockTrends: StockTrend[];
   marketStatus: {
     loanFrozenDays: number;
     lastEvent?: string;
@@ -666,3 +683,4 @@ export {
 } from './data/npcs.js';
 
 export * from './data/minigames.js';
+export * from './data/stockTrends.js';
