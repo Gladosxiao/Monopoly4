@@ -99,13 +99,27 @@ cp .playtest.env.example .playtest.env
 # 编辑 .playtest.env，填入你的 KIMI API Key
 ```
 
-`.playtest.env` 示例：
+`.playtest.env` 示例（Moonshot 开放平台）：
 
 ```
-PLAYTEST_LLM_API_KEY=sk-your-kimi-key-here
+PLAYTEST_LLM_API_KEY=sk-your-moonshot-key-here
 PLAYTEST_LLM_BASE_URL=https://api.moonshot.cn/v1
 PLAYTEST_LLM_MODEL=moonshot-v1-8k
 ```
+
+### 也支持 Kimi Code 会员 key
+
+如果你的 key 来自 **Kimi Code**（`sk-kimi-...` 前缀），需要改用 Anthropic-compatible 端点：
+
+```
+PLAYTEST_LLM_API_KEY=sk-kimi-your-kimi-code-key-here
+PLAYTEST_LLM_BASE_URL=https://api.kimi.com/coding
+PLAYTEST_LLM_MODEL=claude-opus-4-20250514
+```
+
+代码会根据 `baseUrl` 自动选择协议：
+- `moonshot.cn` / `openai.com` / `api.openai.com` → OpenAI 协议
+- `kimi.com` / `anthropic` → Anthropic 协议
 
 配置优先级：`.playtest.env` > 环境变量 > KIMI 默认值。旧环境变量方式仍兼容：
 
