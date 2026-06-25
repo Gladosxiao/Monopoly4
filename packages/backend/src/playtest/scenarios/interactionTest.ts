@@ -228,7 +228,12 @@ export async function runInteractionTest(
     duration: endTime.getTime() - startTime.getTime(),
     scenario: '互联操作测试',
     totalTurns,
-    result: finalState?.status === 'ended' ? 'completed' : totalTurns >= maxTurns ? 'timeout' : 'error',
+    result:
+      finalState?.status === 'ended'
+        ? 'completed'
+        : totalTurns >= maxTurns
+        ? 'max-turns-reached'
+        : 'error',
     winnerId: finalState?.winnerId,
     players: session.players.map((p) => p.config),
     issues: [],

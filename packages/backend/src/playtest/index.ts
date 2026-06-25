@@ -235,8 +235,15 @@ if (isMainModule) {
     actionTimeout: brainType === 'llm' ? 30000 : 15000,
   });
 
+  const resultLabel: Record<PlaytestReport['result'], string> = {
+    completed: '正常结束',
+    'max-turns-reached': '达到最大回合数',
+    timeout: '超时/卡死',
+    error: '异常终止',
+  };
+
   console.log('\n=== 测试结果 ===');
-  console.log(`结果: ${report.result}`);
+  console.log(`结果: ${report.result} (${resultLabel[report.result]})`);
   console.log(`回合数: ${report.totalTurns}`);
   console.log(`问题数: ${report.issues.length} (严重: ${report.criticalIssues.length})`);
 

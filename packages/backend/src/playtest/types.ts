@@ -219,7 +219,7 @@ export interface PlaytestReport {
   duration: number;
   scenario: string;
   totalTurns: number;
-  result: 'completed' | 'timeout' | 'error';
+  result: 'completed' | 'max-turns-reached' | 'timeout' | 'error';
   winnerId?: string;
   players: PlayerConfig[];
   issues: Issue[];
