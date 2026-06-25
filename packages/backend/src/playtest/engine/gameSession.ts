@@ -21,7 +21,7 @@ import type {
   Room,
   GameConfig,
 } from '@monopoly4/shared';
-import { CHARACTERS, DEFAULT_GAME_CONFIG } from '@monopoly4/shared';
+import { CHARACTERS, DEFAULT_GAME_CONFIG, CARD_DEFINITIONS, ITEM_DEFINITIONS } from '@monopoly4/shared';
 import { setupSocketIO } from '../../socket/game.js';
 import { rooms, games, socketRoomMap } from '../../store.js';
 import type { PlaytestConfig, PlayerConfig } from '../types.js';
@@ -71,6 +71,50 @@ function makePlayerConfigs(count: number): Array<{ userId: string; username: str
     });
   }
   return configs;
+}
+
+/**
+ * 根据 Playtest 配置覆盖玩家初始状态：
+ * - 覆盖初始点券
+ * - 发放全部卡片/道具（用于专门验证使用逻辑）
+ */
+function applyPlaytestOverrides(state: GameState, config: PlaytestConfig): void {
+  for (const player of state.players) {
+    if (config.startingCoupons !== undefined) {
+      player.coupons = config.startingCoupons;
+    }
+
+    if (config.giveAllCards) {
+      player.cards = [];
+      for (const def of Object.values(CARD_DEFINITIONS)) {
+        if (def.cost <= 0) continue;
+        if (player.cards.length >= 15) break;
+        const instanceId = `${def.id}-playtest-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+        player.cards.push({ instanceId, cardId: def.id });
+      }
+    }
+
+    if (config.giveAllItems) {
+      for (const def of Object.values(ITEM_DEFINITIONS)) {
+        if (def.cost <= 0) continue;
+        const existing = player.items.find((i) => i.itemId === def.id);
+        if (existing) {
+          existing.quantity = def.maxStack;
+        } else {
+          const instanceId = `${def.id}-playtest-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+          player.items.push({ instanceId, itemId: def.id, quantity: def.maxStack });
+        }
+      }
+    }
+  }
+
+  if (config.giveAllCards || config.giveAllItems || config.startingCoupons !== undefined) {
+    state.logs.push({
+      timestamp: Date.now(),
+      type: 'playtest:overrides',
+      message: `[Playtest] 已应用开局覆盖：点券=${config.startingCoupons ?? '默认'}, 全卡片=${config.giveAllCards ?? false}, 全道具=${config.giveAllItems ?? false}`,
+    });
+  }
 }
 
 /**
@@ -238,7 +282,12 @@ export async function createGameSession(config: PlaytestConfig): Promise<GameSes
   const statePromise = waitForState(session, (s) => s.status === 'rolling', actionTimeout);
   players[0].socket.emit('game:start', roomId);
   const initialState = await statePromise;
+
+  // 8. 应用 Playtest 开局覆盖（全卡片/全道具/初始点券）
+  applyPlaytestOverrides(initialState, config);
   session.latestState = initialState;
+  // 覆盖后的状态需要同步给所有客户端
+  io.to(roomId).emit('game:state', initialState);
 
   if (config.verbose) {
     console.log(`[GameSession] 游戏已开始，roomId=${roomId}，${players.length} 名玩家`);

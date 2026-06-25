@@ -214,15 +214,37 @@ const isMainModule = import.meta.url === `file://${process.argv[1]}`;
 if (isMainModule) {
   const maxTurns = parseInt(process.env.MAX_TURNS ?? '', 10) || 20;
   const brainType = process.env.PLAYTEST_BRAIN_TYPE === 'llm' ? 'llm' : 'heuristic';
+  const giveAllCards = process.env.PLAYTEST_GIVE_ALL_CARDS === 'true';
+  const giveAllItems = process.env.PLAYTEST_GIVE_ALL_ITEMS === 'true';
+  const startingCoupons = parseInt(process.env.PLAYTEST_STARTING_COUPONS ?? '', 10) || undefined;
+  const htmlReportPath = process.env.PLAYTEST_HTML_REPORT_PATH;
 
-  console.log(`[Playtest] 启动自动化对局测试 (maxTurns=${maxTurns}, brain=${brainType})`);
+  console.log(
+    `[Playtest] 启动自动化对局测试 (maxTurns=${maxTurns}, brain=${brainType}, allCards=${giveAllCards}, allItems=${giveAllItems})`
+  );
 
-  const report = await runPlaytest({ maxTurns, brainType, verbose: true });
+  const report = await runPlaytest({
+    maxTurns,
+    brainType,
+    verbose: true,
+    giveAllCards,
+    giveAllItems,
+    startingCoupons,
+    htmlReportPath,
+  });
 
   console.log('\n=== 测试结果 ===');
   console.log(`结果: ${report.result}`);
   console.log(`回合数: ${report.totalTurns}`);
   console.log(`问题数: ${report.issues.length} (严重: ${report.criticalIssues.length})`);
+
+  if (report.shopStats) {
+    console.log('\n=== 商店访问统计 ===');
+    console.log(`商店访问: ${report.shopStats.shopVisits} / ${report.shopStats.totalTileLandings}`);
+    console.log(`商店访问率: ${(report.shopStats.shopVisitRate * 100).toFixed(1)}%`);
+    console.log(`商店购买尝试: ${report.shopStats.shopPurchaseAttempts}`);
+    console.log(`踩中商店时平均点券: ${report.shopStats.avgCouponsWhenVisiting}`);
+  }
 
   if (report.criticalIssues.length > 0) {
     console.error('\n发现严重问题:');

@@ -6,7 +6,7 @@
  * 进程中断后可由 runPlaytestWithResume 从最近 checkpoint 恢复继续。
  */
 
-import type { GameState, Player, Room } from '@monopoly4/shared';
+import type { GameState, Player, Room, Tile } from '@monopoly4/shared';
 import type {
   PlaytestConfig,
   PlayerBrain,
@@ -165,6 +165,20 @@ export async function runFreePlay(
   const snapshots: TurnSnapshot[] = [];
   const snapshotInterval = config.snapshotInterval ?? 5; // 每 N 回合采集快照
 
+  // 商店访问统计
+  let shopVisits = 0;
+  let totalTileLandings = 0;
+  let shopPurchaseAttempts = 0;
+  let couponsOnShopVisits = 0;
+  const lastKnownPosition: Record<string, number> = {};
+
+  /** 记录一次商店访问 */
+  function recordShopLanding(player: Player, tile: Tile): void {
+    if (tile.type !== 'shop') return;
+    shopVisits++;
+    couponsOnShopVisits += player.coupons ?? 0;
+  }
+
   // 主循环
   while (totalTurns < maxTurns) {
     const state = session.latestState;
@@ -284,6 +298,26 @@ export async function runFreePlay(
       // 记录动作统计
       actionStats[decision.action] = (actionStats[decision.action] ?? 0) + 1;
 
+      // 记录商店购买尝试
+      if (decision.action === 'buyCard' || decision.action === 'buyItem') {
+        shopPurchaseAttempts++;
+      }
+
+      // 追踪玩家落脚位置，统计进入商店的概率
+      const latestState = session.latestState;
+      if (latestState) {
+        const activePlayer = latestState.players[latestState.currentPlayerIndex];
+        if (activePlayer) {
+          const prevPos = lastKnownPosition[activePlayer.id];
+          const currPos = activePlayer.position;
+          if (prevPos !== undefined && prevPos !== currPos) {
+            totalTileLandings++;
+            recordShopLanding(activePlayer, latestState.map.tiles[currPos]);
+          }
+          lastKnownPosition[activePlayer.id] = currPos;
+        }
+      }
+
       // 定期采集快照
       if (snapshotInterval > 0 && totalTurns % snapshotInterval === 0 && session.latestState) {
         snapshots.push(captureSnapshot(session.latestState, totalTurns));
@@ -331,7 +365,13 @@ export async function runFreePlay(
   // 生成 HTML 统计报告
   if (snapshots.length > 0 && config.htmlReportPath) {
     try {
-      generateHtmlReport(snapshots, actionStats, config.htmlReportPath);
+      generateHtmlReport(snapshots, actionStats, config.htmlReportPath, {
+        shopVisits,
+        totalTileLandings,
+        shopVisitRate: totalTileLandings > 0 ? shopVisits / totalTileLandings : 0,
+        shopPurchaseAttempts,
+        avgCouponsWhenVisiting: shopVisits > 0 ? Math.round(couponsOnShopVisits / shopVisits) : 0,
+      });
     } catch (err: any) {
       console.warn(`[FreePlay] HTML 报告生成失败: ${err.message}`);
     }
@@ -356,6 +396,13 @@ export async function runFreePlay(
     players: session.players.map((p) => p.config),
     issues: [], // 由调用方填充
     criticalIssues: [], // 由调用方填充
+    shopStats: {
+      shopVisits,
+      totalTileLandings,
+      shopVisitRate: totalTileLandings > 0 ? shopVisits / totalTileLandings : 0,
+      shopPurchaseAttempts,
+      avgCouponsWhenVisiting: shopVisits > 0 ? Math.round(couponsOnShopVisits / shopVisits) : 0,
+    },
     finalState: finalState
       ? {
           players: finalState.players.map((p) => ({

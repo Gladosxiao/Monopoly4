@@ -137,6 +137,12 @@ export interface PlaytestConfig {
   snapshotInterval?: number;
   /** HTML 统计报告输出路径 */
   htmlReportPath?: string;
+  /** 开局给每个玩家发放全部卡片 */
+  giveAllCards?: boolean;
+  /** 开局给每个玩家发放全部道具 */
+  giveAllItems?: boolean;
+  /** 覆盖初始点券数量（默认使用游戏配置） */
+  startingCoupons?: number;
 }
 
 // ==================== 数值指标 ====================
@@ -193,6 +199,20 @@ export interface PlayerConfig {
   brainType: string;
 }
 
+/** 商店访问统计 */
+export interface ShopStats {
+  /** 玩家落脚在商店格的次数 */
+  shopVisits: number;
+  /** 玩家移动后落脚总次数 */
+  totalTileLandings: number;
+  /** 商店访问率 = shopVisits / totalTileLandings */
+  shopVisitRate: number;
+  /** 在商店格尝试购买卡片/道具的次数 */
+  shopPurchaseAttempts: number;
+  /** 踩中商店格时的平均点券数 */
+  avgCouponsWhenVisiting: number;
+}
+
 export interface PlaytestReport {
   startTime: string;
   endTime: string;
@@ -208,6 +228,8 @@ export interface PlaytestReport {
   metrics?: TurnMetrics[];
   /** 淘汰事件 */
   eliminations?: EliminationEvent[];
+  /** 商店访问统计 */
+  shopStats?: ShopStats;
   finalState?: {
     players: Array<{
       id: string;
