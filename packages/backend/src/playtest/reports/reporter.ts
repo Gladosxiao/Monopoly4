@@ -64,7 +64,13 @@ export class Reporter {
     lines.push(`- **耗时**：${(report.duration / 1000).toFixed(1)}s`);
     lines.push(`- **场景**：${report.scenario}`);
     lines.push(`- **回合数**：${report.totalTurns}`);
-    lines.push(`- **结果**：${report.result === 'completed' ? '正常结束' : report.result === 'timeout' ? '超时' : '异常终止'}`);
+    const resultLabel: Record<PlaytestReport['result'], string> = {
+      completed: '正常结束',
+      'max-turns-reached': '达到最大回合数',
+      timeout: '超时/卡死',
+      error: '异常终止',
+    };
+    lines.push(`- **结果**：${resultLabel[report.result]}`);
     if (report.winnerId) {
       const winner = report.players.find((p) => p.userId === report.winnerId);
       lines.push(`- **胜者**：${winner?.username ?? report.winnerId}`);

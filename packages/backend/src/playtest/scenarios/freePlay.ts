@@ -163,6 +163,7 @@ export async function runFreePlay(
   // 跟踪回合数（断点续跑时从已完成的操作数继续）
   let totalTurns = resume?.startTurns ?? 0;
   let consecutiveNoAction = 0;
+  let timedOut = false;
   const MAX_NO_ACTION = 50; // 连续无动作次数上限，防止死循环
 
   const verbose = config.verbose ?? false;
@@ -256,6 +257,7 @@ export async function runFreePlay(
           expected: '游戏正常推进',
           actual: `连续 ${MAX_NO_ACTION} 次无动作，状态卡在 ${state.status}`,
         });
+        timedOut = true;
         break;
       }
       continue;
@@ -275,6 +277,7 @@ export async function runFreePlay(
           expected: '自动跳过破产玩家',
           actual: `当前玩家 ${currentPlayer?.username} 已破产但回合未推进`,
         });
+        timedOut = true;
         break;
       }
       continue;
@@ -304,6 +307,7 @@ export async function runFreePlay(
           expected: '玩家有可用动作',
           actual: `${currentPlayer.username} 无可用动作，状态=${state.status}`,
         });
+        timedOut = true;
         break;
       }
       await sleep(200);
@@ -462,7 +466,13 @@ export async function runFreePlay(
     duration: endTime.getTime() - startTime.getTime(),
     scenario: '4 人自由对局',
     totalTurns,
-    result: finalState?.status === 'ended' ? 'completed' : totalTurns >= maxTurns ? 'timeout' : 'error',
+    result: finalState?.status === 'ended'
+      ? 'completed'
+      : timedOut
+      ? 'timeout'
+      : totalTurns >= maxTurns
+      ? 'max-turns-reached'
+      : 'error',
     winnerId: finalState?.winnerId,
     players: session.players.map((p) => p.config),
     issues: [], // 由调用方填充

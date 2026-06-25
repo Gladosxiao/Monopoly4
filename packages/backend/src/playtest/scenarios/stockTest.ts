@@ -200,7 +200,12 @@ export async function runStockTest(
     duration: endTime.getTime() - startTime.getTime(),
     scenario: '股票与公司投资测试',
     totalTurns,
-    result: finalState?.status === 'ended' ? 'completed' : totalTurns >= maxTurns ? 'timeout' : 'error',
+    result:
+      finalState?.status === 'ended'
+        ? 'completed'
+        : totalTurns >= maxTurns
+        ? 'max-turns-reached'
+        : 'error',
     winnerId: finalState?.winnerId,
     players: session.players.map((p) => p.config),
     issues: [],

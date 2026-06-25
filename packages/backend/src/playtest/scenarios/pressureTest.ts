@@ -276,7 +276,12 @@ export async function runPressureTest(
     duration: endTime.getTime() - startTime.getTime(),
     scenario: '数值压力测试（10 圈淘汰）',
     totalTurns,
-    result: finalState?.status === 'ended' ? 'completed' : totalTurns >= maxTurns ? 'timeout' : 'error',
+    result:
+      finalState?.status === 'ended'
+        ? 'completed'
+        : totalTurns >= maxTurns
+        ? 'max-turns-reached'
+        : 'error',
     winnerId: finalState?.winnerId,
     players: session.players.map((p) => p.config),
     issues: [],
