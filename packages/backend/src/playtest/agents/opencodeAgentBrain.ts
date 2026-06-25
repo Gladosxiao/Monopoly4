@@ -58,12 +58,29 @@ function getLLMConfig(): LLMConfig {
 }
 
 /**
- * 调用 OpenAI-compatible LLM API。
- * 返回 LLM 的文本输出。
+ * 调用 LLM API。
+ * 同时支持 OpenAI-compatible 和 Anthropic-compatible（Kimi Code）协议。
  */
 type ChatMessage = { role: 'system' | 'user' | 'assistant'; content: string };
 
+/** 根据 baseUrl 判断使用哪种协议 */
+function detectApiProtocol(baseUrl: string): 'openai' | 'anthropic' {
+  const lower = baseUrl.toLowerCase();
+  if (lower.includes('kimi.com') || lower.includes('anthropic')) return 'anthropic';
+  return 'openai';
+}
+
 async function callLLM(messages: ChatMessage[], config: LLMConfig): Promise<string> {
+  const protocol = detectApiProtocol(config.baseUrl);
+
+  if (protocol === 'anthropic') {
+    return callAnthropicLLM(messages, config);
+  }
+  return callOpenaiLLM(messages, config);
+}
+
+/** OpenAI-compatible 调用 */
+async function callOpenaiLLM(messages: ChatMessage[], config: LLMConfig): Promise<string> {
   const url = `${config.baseUrl.replace(/\/$/, '')}/chat/completions`;
 
   const response = await fetch(url, {
@@ -96,10 +113,64 @@ async function callLLM(messages: ChatMessage[], config: LLMConfig): Promise<stri
     throw new Error('LLM 返回空内容');
   }
 
-  // 打印 token 消耗用于诊断
   if (data.usage) {
     console.log(
       `[OpencodeAgentBrain] token 消耗: prompt=${data.usage.prompt_tokens ?? '?'}, completion=${data.usage.completion_tokens ?? '?'}, total=${data.usage.total_tokens ?? '?'}`
+    );
+  }
+
+  return content;
+}
+
+/** Anthropic-compatible 调用（Kimi Code 等） */
+async function callAnthropicLLM(messages: ChatMessage[], config: LLMConfig): Promise<string> {
+  const url = `${config.baseUrl.replace(/\/$/, '')}/v1/messages`;
+
+  // Anthropic 协议：system 是顶层字段，messages 只含 user/assistant
+  const systemMessage = messages.find((m) => m.role === 'system');
+  const chatMessages = messages
+    .filter((m) => m.role !== 'system')
+    .map((m) => ({ role: m.role, content: m.content }));
+
+  const requestBody: Record<string, unknown> = {
+    model: config.model,
+    max_tokens: 4096,
+    messages: chatMessages,
+  };
+  if (systemMessage) {
+    requestBody.system = systemMessage.content;
+  }
+
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': config.apiKey,
+      'anthropic-version': '2023-06-01',
+    },
+    body: JSON.stringify(requestBody),
+    signal: AbortSignal.timeout(LLM_TIMEOUT),
+  });
+
+  if (!response.ok) {
+    const body = await response.text().catch(() => '');
+    throw new Error(`LLM API 错误 ${response.status}: ${body}`);
+  }
+
+  const data = (await response.json()) as {
+    content?: Array<{ type?: string; text?: string }>;
+    usage?: { input_tokens?: number; output_tokens?: number };
+  };
+
+  const textBlock = data.content?.find((c) => c.type === 'text' || typeof c.text === 'string');
+  const content = textBlock?.text;
+  if (!content) {
+    throw new Error('LLM 返回空内容');
+  }
+
+  if (data.usage) {
+    console.log(
+      `[OpencodeAgentBrain] token 消耗: input=${data.usage.input_tokens ?? '?'}, output=${data.usage.output_tokens ?? '?'}`
     );
   }
 
