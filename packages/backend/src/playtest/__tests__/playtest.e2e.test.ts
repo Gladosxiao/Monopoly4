@@ -22,8 +22,8 @@ describe('LLM automated playtest', () => {
     // 应该有 4 名玩家
     expect(report.players).toHaveLength(4);
 
-    // 报告结果应该是 completed 或 timeout（不应 error）
-    expect(['completed', 'timeout']).toContain(report.result);
+    // 报告结果应该是 completed、max-turns-reached 或 timeout（不应 error）
+    expect(['completed', 'max-turns-reached', 'timeout']).toContain(report.result);
 
     // 如果游戏正常结束，应该有胜者
     if (report.result === 'completed') {

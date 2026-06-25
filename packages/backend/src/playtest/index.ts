@@ -6,6 +6,7 @@
  */
 
 import type { PlaytestConfig, PlaytestReport } from './types.js';
+import type { GameTime, WinCondition } from '@monopoly4/shared';
 import { createGameSession, closeSession, resumeGameSession, type PlaytestCheckpoint } from './engine/gameSession.js';
 import { runFreePlay, loadCheckpoint, clearCheckpoint, type ResumeOptions } from './scenarios/freePlay.js';
 import { runPressureTest } from './scenarios/pressureTest.js';
@@ -219,8 +220,26 @@ if (isMainModule) {
   const startingCoupons = parseInt(process.env.PLAYTEST_STARTING_COUPONS ?? '', 10) || undefined;
   const htmlReportPath = process.env.PLAYTEST_HTML_REPORT_PATH;
 
+  // 允许通过环境变量覆盖胜利条件/游戏时长，避免默认 unlimited/perpetual 永远结束不了
+  const winConditionEnv = process.env.PLAYTEST_WIN_CONDITION;
+  const gameTimeEnv = process.env.PLAYTEST_GAME_TIME;
+  const validWinConditions: WinCondition[] = [3, 5, 10, 50, 100, 'unlimited'];
+  const validGameTimes: GameTime[] = ['1m', '3m', '6m', '1y', '2y', 'perpetual'];
+  const winCondition = validWinConditions.includes(Number(winConditionEnv) as WinCondition)
+    ? (Number(winConditionEnv) as WinCondition)
+    : winConditionEnv === 'unlimited'
+    ? 'unlimited'
+    : undefined;
+  const gameTime = validGameTimes.includes(gameTimeEnv as GameTime)
+    ? (gameTimeEnv as GameTime)
+    : undefined;
+
+  const gameConfig: PlaytestConfig['gameConfig'] = {};
+  if (winCondition !== undefined) gameConfig.winCondition = winCondition as any;
+  if (gameTime !== undefined) gameConfig.gameTime = gameTime as any;
+
   console.log(
-    `[Playtest] 启动自动化对局测试 (maxTurns=${maxTurns}, brain=${brainType}, allCards=${giveAllCards}, allItems=${giveAllItems})`
+    `[Playtest] 启动自动化对局测试 (maxTurns=${maxTurns}, brain=${brainType}, allCards=${giveAllCards}, allItems=${giveAllItems}, winCondition=${winCondition ?? '默认'}, gameTime=${gameTime ?? '默认'})`
   );
 
   const report = await runPlaytest({
@@ -231,6 +250,7 @@ if (isMainModule) {
     giveAllItems,
     startingCoupons,
     htmlReportPath,
+    gameConfig: Object.keys(gameConfig).length > 0 ? gameConfig : undefined,
     // LLM 决策可能较慢，给予更宽松的超时
     actionTimeout: brainType === 'llm' ? 30000 : 15000,
   });

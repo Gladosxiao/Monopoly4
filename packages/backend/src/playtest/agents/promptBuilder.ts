@@ -146,12 +146,21 @@ export function buildActionsGuide(actions: AvailableAction[]): string {
         targetHint = ' target.diceCount 可选 1/2/3（取决于载具）';
         break;
       case 'useCard': {
+        const cardId = action.params?.cardId as string;
         const ct = action.params?.targetType ?? 'self';
-        targetHint = ` target.cardId=${action.params?.cardId} 必填，target.cardTarget 类型=${ct}`;
-        if (ct === 'opponent') targetHint += '（填 {targetPlayerId: 玩家 id，如 "playtest-user-2"}，不是 username）';
-        else if (ct === 'tile') targetHint += '（填 {targetTileIndex: 整数格编号}）';
-        else if (ct === 'road') targetHint += '（填 {roadGroup: 路段分组编号}）';
-        else if (ct === 'global') targetHint += '（可省略）';
+        targetHint = ` target.cardId=${cardId} 必填，target.cardTarget 类型=${ct}`;
+        // 部分卡片实现与声明 target 不一致，需要特殊说明
+        if (cardId === 'swapLand') {
+          targetHint += '（特殊：换地卡需要填 {targetPlayerId: 玩家 id}，与对方随机交换一块同等大小土地）';
+        } else if (ct === 'opponent') {
+          targetHint += '（填 {targetPlayerId: 玩家 id，如 "playtest-user-2"}，不是 username）';
+        } else if (ct === 'tile') {
+          targetHint += '（填 {targetTileIndex: 整数格编号}）';
+        } else if (ct === 'road') {
+          targetHint += '（填 {targetGroup: 路段分组编号}）';
+        } else if (ct === 'global') {
+          targetHint += '（可省略）';
+        }
         break;
       }
       case 'useItem': {
@@ -205,27 +214,28 @@ const STRATEGY_HINTS = `
 - 股票策略：股价≤120时买入100股，股价≥180时卖出持股。持股>10%自动成董事长获分红。
 - 利用物价指数：物价<1.2买入地产/股票，物价>1.8靠收租获利
 
-### 卡片/道具（必须使用！）
-- **本局你已被发放全部卡片和全部道具，必须积极使用，不要只 roll。**
-- **只要手中有卡片/道具，且存在 useCard / useItem 可用动作，每回合必须优先考虑使用，而不是 skipTurn。**
-- **若持有卡片必须考虑useCard**：免租卡防高额过路费，涨价卡攻对手地产，均贫卡拉平差距
+### 卡片/道具（必须使用，优先攻击/干扰！）
+- **本局你已被发放若干卡片和道具，必须积极使用，不要只 roll。**
+- **优先级：攻击卡/陷阱 > 买地/升级 > 遥控骰子/股票 > 跳过。**
+- **只要手中有攻击卡/陷阱/干扰卡，且存在 useCard / useItem 可用动作，每回合必须优先使用它们，而不是 skipTurn 或 roll。**
 - 坏神明附身立即用送神符驱除；前方有陷阱用机器娃娃清除
-- 在自己Lv2+地产前1-3格放路障/地雷/炸弹，增加对手踩中概率
-- 用飞弹/核弹拆对手Lv3+建筑；遥控骰子精确走位到目标格
-- 有遥控骰子时，优先用它精确走到空地产/自己地产/商店/小游戏格
-- **不要跳过回合**：只要存在 useCard / useItem / buyCard / buyItem / tradeStock / upgradeProperty / buyProperty 等可用动作，优先选择其中一个，而不是 skipTurn。
-
-### 干扰对手
-- 对资金最多者使用均贫卡/陷害卡/冬眠卡/梦游卡/乌龟卡
-- 对强敌Lv3+地产用涨价卡或查封卡；用摧毁卡/怪兽卡拆对手高级建筑
-- 用抢夺卡获取对手现金；换地卡/换房卡夺对手地产；转转卡改变对手方向
+- **陷阱策略（高优先级）：手中有地雷/路障/定时炸弹时，必须优先在自己 Lv2+ 地产前方 1-3 格或对手必经之路放置，不要留着不用。**
+- **攻击卡策略（高优先级）：对对手高级地产使用涨价卡/查封卡/恶魔卡/怪兽卡/拆除卡；对资金最多者使用均贫卡/陷害卡/冬眠卡/梦游卡/乌龟卡/转向卡/停留卡。**
+- 用抢夺卡获取对手现金；换地卡/换房卡夺对手地产
 - 落后时（资产排名≥3）必须积极使用干扰卡和道具，不能 passive
 
-### 点券与商店
-- **若有点券(≥300)且站在商店，必须buyItem购买道具**（优先遥控骰子/飞弹/路障/地雷）
-- 点券充足(≥500)时buyCard购买攻击卡（涨价卡/摧毁卡/均贫卡）
-- 若现金充裕(≥3000)也可用现金buyItem/buyCard
+### 遥控骰子（降低优先级，只在必要时用）
+- **不要每回合都用遥控骰子。** 只有以下情况才使用：
+  1. 前方 1-6 格内有空地产且购买资金足够；
+  2. 前方有自己的地产可升级；
+  3. 前方有商店/小游戏且点券/现金充足。
+- 如果没有明确目标，直接 roll 普通骰子，把遥控骰子留给下一轮关键走位。
+
+### 点券与商店（必须购买攻击/陷阱）
+- **若站在商店且点券≥30，必须 buyItem 购买攻击/陷阱道具**（优先级：地雷 > 路障 > 飞弹 > 遥控骰子）。
+- **若站在商店且点券≥50，优先 buyCard 购买攻击/控制卡**（优先级：涨价卡 > 查封卡 > 怪兽卡 > 均贫卡 > 陷害卡/冬眠卡/梦游卡/乌龟卡）。
 - 商店购买的道具/卡片会立即进入背包，下一回合即可使用
+- **不要跳过商店购买阶段**：只要 buyCard/buyItem 列表中有攻击卡或陷阱，优先购买，而不是 skipTurn。
 `;
 
 /** 输出格式说明 */
@@ -241,10 +251,15 @@ const OUTPUT_FORMAT = `
 - 指定骰子数：{"action":"roll","target":{"diceCount":2},"reason":"骑车前进"}
 - 买地：{"action":"buyProperty","target":{},"reason":"占领空地"}
 - 升级：{"action":"upgradeProperty","target":{},"reason":"提升租金"}
-- 使用遥控骰子：{"action":"useItem","target":{"itemId":"remoteDice","itemTarget":{"diceValue":4}},"reason":"精确到商店"}
-- 放置地雷：{"action":"useItem","target":{"itemId":"mine","itemTarget":{"targetTileIndex":12}},"reason":"封锁对手"}
-- 使用涨价卡：{"action":"useCard","target":{"cardId":"priceRise","cardTarget":{"targetTileIndex":12}},"reason":"打击对手高租金地产"}
-- 商店买遥控骰子：{"action":"buyItem","target":{"itemId":"remoteDice","itemQuantity":1},"reason":"补充道具"}
+- 使用遥控骰子：{"action":"useItem","target":{"itemId":"remoteDice","itemTarget":{"diceValue":4}},"reason":"精确到前方空地产"}
+- 放置地雷（高优先级）：{"action":"useItem","target":{"itemId":"mine","itemTarget":{"targetTileIndex":12}},"reason":"在对手必经之路放地雷"}
+- 放置路障（高优先级）：{"action":"useItem","target":{"itemId":"barrier","itemTarget":{"targetTileIndex":12}},"reason":"封锁对手"}
+- 使用涨价卡（高优先级）：{"action":"useCard","target":{"cardId":"priceRise","cardTarget":{"targetGroup":0}},"reason":"打击对手高租金路段"}
+- 使用恶魔卡（高优先级）：{"action":"useCard","target":{"cardId":"devil","cardTarget":{"targetGroup":1}},"reason":"夷平对手路段"}
+- 使用陷害卡（高优先级）：{"action":"useCard","target":{"cardId":"frame","cardTarget":{"targetPlayerId":"playtest-user-2"}},"reason":"让领先玩家入狱"}
+- 使用换地卡：{"action":"useCard","target":{"cardId":"swapLand","cardTarget":{"targetPlayerId":"playtest-user-2"}},"reason":"与对手交换土地"}
+- 商店买地雷（高优先级）：{"action":"buyItem","target":{"itemId":"mine","itemQuantity":1},"reason":"补充陷阱"}
+- 商店买攻击卡（高优先级）：{"action":"buyCard","target":{"cardId":"priceRise"},"reason":"购买攻击卡"}
 - 买股票：{"action":"tradeStock","target":{"stockId":"S1","stockQuantity":100},"reason":"低价建仓"}
 
 规则：
@@ -252,7 +267,7 @@ const OUTPUT_FORMAT = `
 2. useCard 必须提供 target.cardId，且 cardId 要与列表中的某一项完全一致。
 3. useItem 必须提供 target.itemId，且 itemId 要与列表中的某一项完全一致。
 4. buyCard/buyItem/tradeStock 同样必须从列表中精确选择 id/数量。
-5. 如果前方没有明确目标，优先 roll；如果持有卡片/道具且列表中有 useCard/useItem，优先使用它们。
+5. **优先级规则**：如果持有攻击卡/陷阱/干扰卡，优先 useCard/useItem；否则如果站在商店，优先 buyCard/buyItem 补充攻击卡/陷阱；否则再考虑 roll 或升级。
 `;
 
 /**

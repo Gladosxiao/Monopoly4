@@ -35,12 +35,29 @@ const SEVERITY_LABEL: Record<IssueSeverity, string> = {
 /**
  * 报告收集器。
  * 在测试过程中收集问题，最终生成报告。
+ * 支持按 (severity, category, playerId, action, expected, actual) 去重，
+ * 避免 Watchdog / 状态校验在同一问题持续时反复生成相同 issue。
  */
 export class Reporter {
   private issues: Issue[] = [];
+  /** 最近 N 回合内已记录的问题 key -> 最近回合 */
+  private recentIssues = new Map<string, number>();
+  /** 去重窗口（回合数），同一 key 在此窗口内只记录一次 */
+  private dedupeWindow = 5;
 
-  /** 记录一个问题 */
+  /** 生成 issue 去重 key */
+  private makeKey(issue: Issue): string {
+    return `${issue.severity}|${issue.category}|${issue.playerId ?? ''}|${issue.action ?? ''}|${issue.expected}|${issue.actual}`;
+  }
+
+  /** 记录一个问题；若与最近 window 回合内的问题重复则跳过 */
   record(issue: Issue): void {
+    const key = this.makeKey(issue);
+    const lastTurn = this.recentIssues.get(key);
+    if (lastTurn !== undefined && issue.turn - lastTurn < this.dedupeWindow) {
+      return;
+    }
+    this.recentIssues.set(key, issue.turn);
     this.issues.push(issue);
   }
 
@@ -145,6 +162,24 @@ export class Reporter {
       lines.push('## 发现的问题');
       lines.push('');
       lines.push('✅ 未发现任何问题');
+      lines.push('');
+    }
+
+    // 游戏性监控摘要
+    if (report.gameMetrics) {
+      lines.push('## 游戏性监控摘要');
+      lines.push('');
+      lines.push(`- 破产玩家数：${report.gameMetrics.bankruptCount}`);
+      lines.push(`- 攻击性行为总数：${report.gameMetrics.totalAttackActions}`);
+      lines.push(`- 股市总盈亏：$${report.gameMetrics.totalStockProfit.toLocaleString()}`);
+      lines.push('');
+      lines.push('| 玩家 | 地产数 | 攻击行为 | 股票盈亏 |');
+      lines.push('|---|---|---|---|');
+      for (const p of report.gameMetrics.playerSummary) {
+        lines.push(
+          `| ${p.username} | ${p.properties} | ${p.attackActions} | $${p.stockProfit.toLocaleString()} |`
+        );
+      }
       lines.push('');
     }
 

@@ -230,6 +230,19 @@ export interface PlaytestReport {
   eliminations?: EliminationEvent[];
   /** 商店访问统计 */
   shopStats?: ShopStats;
+  /** 游戏性监控摘要（地产/攻击/股市） */
+  gameMetrics?: {
+    bankruptCount: number;
+    totalAttackActions: number;
+    totalStockProfit: number;
+    playerSummary: Array<{
+      playerId: string;
+      username: string;
+      properties: number;
+      attackActions: number;
+      stockProfit: number;
+    }>;
+  };
   finalState?: {
     players: Array<{
       id: string;

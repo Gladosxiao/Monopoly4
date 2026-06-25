@@ -95,14 +95,15 @@ function applyPlaytestOverrides(state: GameState, config: PlaytestConfig): void 
     }
 
     if (config.giveAllItems) {
+      // 为避免经济失真，测试模式下每种道具只给 1 个（而非 maxStack 9 个）
       for (const def of Object.values(ITEM_DEFINITIONS)) {
         if (def.cost <= 0) continue;
         const existing = player.items.find((i) => i.itemId === def.id);
         if (existing) {
-          existing.quantity = def.maxStack;
+          existing.quantity = 1;
         } else {
           const instanceId = `${def.id}-playtest-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-          player.items.push({ instanceId, itemId: def.id, quantity: def.maxStack });
+          player.items.push({ instanceId, itemId: def.id, quantity: 1 });
         }
       }
     }

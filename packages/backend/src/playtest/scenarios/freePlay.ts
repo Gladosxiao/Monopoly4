@@ -20,6 +20,7 @@ import { executeAction, getAvailableActions } from '../engine/actionExecutor.js'
 import { validateGameState } from '../engine/validator.js';
 import { Watchdog } from '../engine/watchdog.js';
 import { captureSnapshot, generateHtmlReport, type TurnSnapshot } from '../engine/statsCollector.js';
+import { GameMetricsCollector } from '../engine/metricsCollector.js';
 import { createHeuristicBrainFactory } from '../agents/heuristicBrain.js';
 import { createOpencodeAgentBrainFactory, OpencodeAgentBrain } from '../agents/opencodeAgentBrain.js';
 import type { BrainFactory } from '../agents/llmPlayer.js';
@@ -171,9 +172,11 @@ export async function runFreePlay(
   const checkpointPath = resume?.checkpointPath;
 
   // 启动 watchdog 监控卡死
+  // LLM 决策可能耗时较长，将 watchdog 阈值设为动作超时的 2 倍，避免慢 LLM 调用被误判为卡死
   const watchdog = new Watchdog(session, recordIssue, {
-    staleTimeoutMs: config.actionTimeout ?? 10000,
-    maxRecoveryAttempts: 3,
+    staleTimeoutMs: (config.actionTimeout ?? 10000) * 2,
+    maxRecoveryAttempts: 5,
+    recoveryWaitMs: 3000,
     exportStuckState: true,
   });
   watchdog.start();
@@ -190,6 +193,9 @@ export async function runFreePlay(
   const actionStats: Record<string, number> = {};
   const snapshots: TurnSnapshot[] = [];
   const snapshotInterval = config.snapshotInterval ?? 5; // 每 N 回合采集快照
+
+  // 整局监控指标（地产/攻击行为/股市获利）
+  const metrics = new GameMetricsCollector();
 
   // 商店访问统计
   let shopVisits = 0;
@@ -373,6 +379,29 @@ export async function runFreePlay(
       // 记录动作统计
       actionStats[decision.action] = (actionStats[decision.action] ?? 0) + 1;
 
+      // 记录攻击性行为与股票交易指标
+      if (decision.action === 'useCard' && decision.target?.cardId && session.latestState) {
+        const ct = decision.target.cardTarget as Record<string, unknown> | undefined;
+        metrics.recordAttackAction(totalTurns, session.latestState, currentPlayer.id, 'card', decision.target.cardId, {
+          targetPlayerId: typeof ct?.targetPlayerId === 'string' ? ct.targetPlayerId : undefined,
+          targetTileIndex: typeof ct?.targetTileIndex === 'number' ? ct.targetTileIndex : undefined,
+          targetGroup: typeof ct?.targetGroup === 'number' ? ct.targetGroup : undefined,
+        });
+      }
+      if (decision.action === 'useItem' && decision.target?.itemId && session.latestState) {
+        const it = decision.target.itemTarget as Record<string, unknown> | undefined;
+        metrics.recordAttackAction(totalTurns, session.latestState, currentPlayer.id, 'item', decision.target.itemId, {
+          targetPlayerId: typeof it?.targetPlayerId === 'string' ? it.targetPlayerId : undefined,
+          targetTileIndex: typeof it?.targetTileIndex === 'number' ? it.targetTileIndex : undefined,
+        });
+      }
+      if (decision.action === 'tradeStock' && decision.target?.stockId && decision.target.stockQuantity !== undefined && session.latestState) {
+        const stock = session.latestState.stocks?.find((s) => s.id === decision.target!.stockId);
+        if (stock) {
+          metrics.recordStockTrade(currentPlayer.id, decision.target.stockId, decision.target.stockQuantity, stock.price);
+        }
+      }
+
       // 记录商店购买尝试
       if (decision.action === 'buyCard' || decision.action === 'buyItem') {
         shopPurchaseAttempts++;
@@ -440,13 +469,20 @@ export async function runFreePlay(
   // 生成 HTML 统计报告
   if (snapshots.length > 0 && config.htmlReportPath) {
     try {
-      generateHtmlReport(snapshots, actionStats, config.htmlReportPath, {
-        shopVisits,
-        totalTileLandings,
-        shopVisitRate: totalTileLandings > 0 ? shopVisits / totalTileLandings : 0,
-        shopPurchaseAttempts,
-        avgCouponsWhenVisiting: shopVisits > 0 ? Math.round(couponsOnShopVisits / shopVisits) : 0,
-      });
+      generateHtmlReport(
+        snapshots,
+        actionStats,
+        config.htmlReportPath,
+        {
+          shopVisits,
+          totalTileLandings,
+          shopVisitRate: totalTileLandings > 0 ? shopVisits / totalTileLandings : 0,
+          shopPurchaseAttempts,
+          avgCouponsWhenVisiting: shopVisits > 0 ? Math.round(couponsOnShopVisits / shopVisits) : 0,
+        },
+        metrics,
+        session.latestState
+      );
     } catch (err: any) {
       console.warn(`[FreePlay] HTML 报告生成失败: ${err.message}`);
     }
@@ -459,6 +495,54 @@ export async function runFreePlay(
 
   const endTime = new Date();
   const finalState = session.latestState;
+
+  // 控制台输出整局监控摘要
+  if (finalState) {
+    const allMetrics = metrics.getAllPlayerMetrics(finalState);
+    const totalAttacks = Object.values(allMetrics).reduce((sum, m) => sum + m.attackActionCount, 0);
+    const totalStockProfit = Object.values(allMetrics).reduce(
+      (sum, m) => sum + m.stock.realizedProfit + m.stock.unrealizedProfit,
+      0
+    );
+    const bankruptCount = finalState.players.filter((p) => p.isBankrupt).length;
+    console.log('\n=== 整局监控摘要 ===');
+    console.log(`破产玩家数: ${bankruptCount}/${finalState.players.length}`);
+    console.log(`攻击性行为总数: ${totalAttacks}`);
+    console.log(`股市总盈亏: $${totalStockProfit.toLocaleString()}`);
+    for (const player of finalState.players) {
+      const m = allMetrics[player.id];
+      const stockTotal = m.stock.realizedProfit + m.stock.unrealizedProfit;
+      console.log(
+        `  ${player.username}: 地产=${player.properties.length} 攻击=${m.attackActionCount} 股票盈亏=$${stockTotal.toLocaleString()}`
+      );
+    }
+  }
+
+  const gameMetrics = finalState
+    ? (() => {
+        const allMetrics = metrics.getAllPlayerMetrics(finalState);
+        const totalAttacks = Object.values(allMetrics).reduce((sum, m) => sum + m.attackActionCount, 0);
+        const totalStockProfit = Object.values(allMetrics).reduce(
+          (sum, m) => sum + m.stock.realizedProfit + m.stock.unrealizedProfit,
+          0
+        );
+        return {
+          bankruptCount: finalState.players.filter((p) => p.isBankrupt).length,
+          totalAttackActions: totalAttacks,
+          totalStockProfit,
+          playerSummary: finalState.players.map((p) => {
+            const m = allMetrics[p.id];
+            return {
+              playerId: p.id,
+              username: p.username,
+              properties: p.properties.length,
+              attackActions: m.attackActionCount,
+              stockProfit: m.stock.realizedProfit + m.stock.unrealizedProfit,
+            };
+          }),
+        };
+      })()
+    : undefined;
 
   return {
     startTime: startTime.toISOString(),
@@ -484,6 +568,7 @@ export async function runFreePlay(
       shopPurchaseAttempts,
       avgCouponsWhenVisiting: shopVisits > 0 ? Math.round(couponsOnShopVisits / shopVisits) : 0,
     },
+    gameMetrics,
     finalState: finalState
       ? {
           players: finalState.players.map((p) => ({

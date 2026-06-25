@@ -64,17 +64,17 @@ export class HeuristicBrain implements PlayerBrain {
   }
 
   private decideRoll(state: GameState, me: Player, availableActions: AvailableAction[]): ActionDecision {
-    // 如果有遥控骰子道具，使用它
+    // 只有存在明确目标时才使用遥控骰子，避免滥用
     const remoteDiceAction = availableActions.find(
       (a) => a.type === 'useItem' && a.params?.itemId === 'remoteDice'
     );
     if (remoteDiceAction && me.items.some((i) => i.itemId === 'remoteDice')) {
-      // 随机决定是否使用遥控骰子（30% 概率）
-      if (Math.random() < 0.3) {
+      const desiredRoll = this.findDesiredRoll(state, me);
+      if (desiredRoll > 0 && desiredRoll <= 6) {
         return {
           action: 'useItem',
-          target: { itemId: 'remoteDice', itemTarget: { diceValue: 6 } },
-          reason: '使用遥控骰子掷出 6',
+          target: { itemId: 'remoteDice', itemTarget: { diceValue: desiredRoll } },
+          reason: `使用遥控骰子掷 ${desiredRoll}，精确前往关键格`,
         };
       }
     }
@@ -205,28 +205,41 @@ export class HeuristicBrain implements PlayerBrain {
       }
     }
 
-    // 3. 对手高级地产路段 → 涨价卡/查封卡
+    // 3. 对手高级地产路段 → 涨价卡/查封卡/恶魔卡（需要 targetGroup 路段编号）
     const priceRiseCard = me.cards.find((c) => c.cardId === 'priceRise');
     if (priceRiseCard) {
-      const targetTile = this.findEnemyHighValueTile(state, me);
-      if (targetTile) {
+      const targetGroup = this.findEnemyHighValueGroup(state, me);
+      if (targetGroup !== undefined) {
         return {
           action: 'useCard',
-          target: { cardId: 'priceRise', cardTarget: { targetTileIndex: targetTile.index } },
-          reason: `对 ${targetTile.name} 路段使用涨价卡`,
+          target: { cardId: 'priceRise', cardTarget: { targetGroup } },
+          reason: `对路段 ${targetGroup} 使用涨价卡`,
         };
       }
     }
 
-    // 4. 自己有关键地产被对手涨价 → 查封卡保护
+    // 4. 自己有关键地产路段 → 查封卡保护（需要 targetGroup 路段编号）
     const sealCard = me.cards.find((c) => c.cardId === 'seal');
     if (sealCard) {
-      const myImportantTile = this.findMyImportantTile(state, me);
-      if (myImportantTile) {
+      const myImportantGroup = this.findMyImportantGroup(state, me);
+      if (myImportantGroup !== undefined) {
         return {
           action: 'useCard',
-          target: { cardId: 'seal', cardTarget: { targetTileIndex: myImportantTile.index } },
-          reason: `查封保护 ${myImportantTile.name}`,
+          target: { cardId: 'seal', cardTarget: { targetGroup: myImportantGroup } },
+          reason: `查封保护路段 ${myImportantGroup}`,
+        };
+      }
+    }
+
+    // 5. 对手高级地产路段 → 恶魔卡夷平（需要 targetGroup）
+    const devilCard = me.cards.find((c) => c.cardId === 'devil');
+    if (devilCard) {
+      const targetGroup = this.findEnemyHighValueGroup(state, me);
+      if (targetGroup !== undefined) {
+        return {
+          action: 'useCard',
+          target: { cardId: 'devil', cardTarget: { targetGroup } },
+          reason: `对路段 ${targetGroup} 使用恶魔卡`,
         };
       }
     }
@@ -280,26 +293,12 @@ export class HeuristicBrain implements PlayerBrain {
       return { action: 'useItem', target: { itemId: 'robot' }, reason: '前方有陷阱，使用机器娃娃' };
     }
 
-    // 遥控骰子：需要精确到达某格时
-    const remoteDiceItem = me.items.find((i) => i.itemId === 'remoteDice');
-    const remoteDiceAction = availableActions.find((a) => a.type === 'useItem' && a.params?.itemId === 'remoteDice');
-    if (remoteDiceItem && remoteDiceAction) {
-      const desiredRoll = this.findDesiredRoll(state, me);
-      if (desiredRoll > 0 && desiredRoll <= 6) {
-        return {
-          action: 'useItem',
-          target: { itemId: 'remoteDice', itemTarget: { diceValue: desiredRoll } },
-          reason: `遥控骰子掷 ${desiredRoll}，目标关键格`,
-        };
-      }
-    }
-
-    // 放置陷阱：在自己高级地产前或对手前方
+    // 放置陷阱：在自己高级地产前或对手前方（优先级高于遥控骰子）
     const trapItems = ['mine', 'timeBomb', 'barrier'] as const;
     for (const trapId of trapItems) {
-      const hasItem = me.items.some((i) => i.itemId === trapId);
+      const item = me.items.find((i) => i.itemId === trapId);
       const placeAction = availableActions.find((a) => a.type === 'useItem' && a.params?.itemId === trapId);
-      if (hasItem && placeAction) {
+      if (item && item.quantity > 0 && placeAction) {
         const targetTile = this.findTrapPlacement(state, me, trapId);
         if (targetTile) {
           return {
@@ -311,15 +310,29 @@ export class HeuristicBrain implements PlayerBrain {
       }
     }
 
-    // 飞弹摧毁对手高级建筑
-    const missileItem = me.items.find((i) => i.itemId === 'missile' || i.itemId === 'nukeMissile');
-    if (missileItem) {
+    // 飞弹摧毁对手高级建筑（优先级高于遥控骰子）
+    const missileItem = me.items.find((i) => i.itemId === 'missile' || i.itemId === 'nuke');
+    if (missileItem && missileItem.quantity > 0) {
       const targetTile = this.findEnemyHighLevelTile(state, me);
       if (targetTile) {
         return {
           action: 'useItem',
           target: { itemId: missileItem.itemId, itemTarget: { targetTileIndex: targetTile.index } },
           reason: `飞弹摧毁 ${targetTile.name}`,
+        };
+      }
+    }
+
+    // 遥控骰子：只在需要精确到达关键格时使用
+    const remoteDiceItem = me.items.find((i) => i.itemId === 'remoteDice');
+    const remoteDiceAction = availableActions.find((a) => a.type === 'useItem' && a.params?.itemId === 'remoteDice');
+    if (remoteDiceItem && remoteDiceItem.quantity > 0 && remoteDiceAction) {
+      const desiredRoll = this.findDesiredRoll(state, me);
+      if (desiredRoll > 0 && desiredRoll <= 6) {
+        return {
+          action: 'useItem',
+          target: { itemId: 'remoteDice', itemTarget: { diceValue: desiredRoll } },
+          reason: `遥控骰子掷 ${desiredRoll}，目标关键格`,
         };
       }
     }
@@ -333,37 +346,39 @@ export class HeuristicBrain implements PlayerBrain {
     const availableBuyItems = availableActions.filter((a) => a.type === 'buyItem');
     if (availableBuyCards.length === 0 && availableBuyItems.length === 0) return null;
 
-    // 优先补充关键防御道具
-    const hasFreePass = me.cards.some((c) => c.cardId === 'freePass');
-    if (!hasFreePass && availableBuyCards.some((a) => a.params?.cardId === 'freePass')) {
-      return { action: 'buyCard', target: { cardId: 'freePass' }, reason: '购买免租卡防御' };
-    }
-
-    // 购买遥控骰子（最重要道具）
-    const hasRemoteDice = me.items.some((i) => i.itemId === 'remoteDice');
-    if (!hasRemoteDice && availableBuyItems.some((a) => a.params?.itemId === 'remoteDice')) {
-      return { action: 'buyItem', target: { itemId: 'remoteDice', itemQuantity: 1 }, reason: '购买遥控骰子' };
-    }
-
-    // 购买路障/地雷用于陷阱
-    const trapItems = ['barrier', 'mine'];
+    // 1. 优先购买陷阱道具（地雷 > 路障 > 飞弹）
+    const trapItems = ['mine', 'barrier'];
     for (const trapId of trapItems) {
-      if (!me.items.some((i) => i.itemId === trapId) && availableBuyItems.some((a) => a.params?.itemId === trapId)) {
-        return { action: 'buyItem', target: { itemId: trapId, itemQuantity: 1 }, reason: `购买${trapId}放置陷阱` };
+      const existing = me.items.find((i) => i.itemId === trapId);
+      const qty = existing ? existing.quantity : 0;
+      if (qty < 3 && availableBuyItems.some((a) => a.params?.itemId === trapId)) {
+        return { action: 'buyItem', target: { itemId: trapId, itemQuantity: 1 }, reason: `补充${trapId}陷阱` };
       }
     }
 
-    // 补充攻击卡片
-    const attackCards = ['priceRise', 'monster', 'demolish', 'seal'];
+    // 2. 购买攻击卡片（涨价卡 > 查封卡 > 怪兽卡/拆除卡 > 干扰卡）
+    const attackCards = ['priceRise', 'seal', 'monster', 'demolish', 'equalPoverty', 'frame', 'hibernation', 'turtle'];
     for (const cardId of attackCards) {
-      if (me.cards.length < 8 && availableBuyCards.some((a) => a.params?.cardId === cardId)) {
+      if (me.cards.length < 12 && availableBuyCards.some((a) => a.params?.cardId === cardId)) {
         return { action: 'buyCard', target: { cardId }, reason: `购买攻击卡 ${cardId}` };
       }
     }
 
-    // 购买飞弹
+    // 3. 购买飞弹
     if (!me.items.some((i) => i.itemId === 'missile') && availableBuyItems.some((a) => a.params?.itemId === 'missile')) {
       return { action: 'buyItem', target: { itemId: 'missile', itemQuantity: 1 }, reason: '购买飞弹攻击对手' };
+    }
+
+    // 4. 补充遥控骰子（优先级降低，只在关键走位需要时才买）
+    const hasRemoteDice = me.items.some((i) => i.itemId === 'remoteDice');
+    if (!hasRemoteDice && availableBuyItems.some((a) => a.params?.itemId === 'remoteDice')) {
+      return { action: 'buyItem', target: { itemId: 'remoteDice', itemQuantity: 1 }, reason: '补充遥控骰子' };
+    }
+
+    // 5. 防御卡
+    const hasFreePass = me.cards.some((c) => c.cardId === 'freePass');
+    if (!hasFreePass && availableBuyCards.some((a) => a.params?.cardId === 'freePass')) {
+      return { action: 'buyCard', target: { cardId: 'freePass' }, reason: '购买免租卡防御' };
     }
 
     return null;
@@ -382,6 +397,38 @@ export class HeuristicBrain implements PlayerBrain {
       }
     }
     return false;
+  }
+
+  /** 寻找对手高价值地产所在路段（用于涨价卡/恶魔卡） */
+  private findEnemyHighValueGroup(state: GameState, me: Player): number | undefined {
+    let bestGroup: number | undefined;
+    let bestValue = 0;
+    for (const tile of state.map.tiles) {
+      if (tile.type === 'property' && tile.ownerId && tile.ownerId !== me.id && tile.group !== undefined) {
+        const value = (tile.basePrice ?? 0) * (1 + (tile.level ?? 0) * 0.5);
+        if (value > bestValue) {
+          bestValue = value;
+          bestGroup = tile.group;
+        }
+      }
+    }
+    return bestGroup;
+  }
+
+  /** 寻找自己的重要地产所在路段（用于查封卡） */
+  private findMyImportantGroup(state: GameState, me: Player): number | undefined {
+    let bestGroup: number | undefined;
+    let bestValue = 0;
+    for (const tile of state.map.tiles) {
+      if (tile.type === 'property' && tile.ownerId === me.id && tile.group !== undefined && (tile.level ?? 0) >= 2) {
+        const value = (tile.basePrice ?? 0) * (1 + (tile.level ?? 0) * 0.5);
+        if (value > bestValue) {
+          bestValue = value;
+          bestGroup = tile.group;
+        }
+      }
+    }
+    return bestGroup;
   }
 
   /** 寻找对手高价值地产（用于涨价卡） */
