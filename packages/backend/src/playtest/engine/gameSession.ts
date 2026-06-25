@@ -114,6 +114,9 @@ function applyPlaytestOverrides(state: GameState, config: PlaytestConfig): void 
       type: 'playtest:overrides',
       message: `[Playtest] 已应用开局覆盖：点券=${config.startingCoupons ?? '默认'}, 全卡片=${config.giveAllCards ?? false}, 全道具=${config.giveAllItems ?? false}`,
     });
+    for (const p of state.players) {
+      console.log(`[PlaytestOverrides] ${p.username}: cards=${p.cards.length}, items=${p.items.map((i) => `${i.itemId}x${i.quantity}`).join(',')}, coupons=${p.coupons}`);
+    }
   }
 }
 
@@ -281,13 +284,19 @@ export async function createGameSession(config: PlaytestConfig): Promise<GameSes
   // 7. 房主开始游戏（需要等待 game:state）
   const statePromise = waitForState(session, (s) => s.status === 'rolling', actionTimeout);
   players[0].socket.emit('game:start', roomId);
-  const initialState = await statePromise;
+  await statePromise;
 
   // 8. 应用 Playtest 开局覆盖（全卡片/全道具/初始点券）
-  applyPlaytestOverrides(initialState, config);
-  session.latestState = initialState;
+  // 注意：waitForState 返回的是 socket 客户端收到的反序列化副本，
+  // 必须直接修改服务器内存中的 games.get(roomId) 才能使后续动作生效。
+  const serverState = games.get(roomId);
+  if (!serverState) {
+    throw new Error('游戏已开始但服务器找不到对应状态');
+  }
+  applyPlaytestOverrides(serverState, config);
+  session.latestState = serverState;
   // 覆盖后的状态需要同步给所有客户端
-  io.to(roomId).emit('game:state', initialState);
+  io.to(roomId).emit('game:state', serverState);
 
   if (config.verbose) {
     console.log(`[GameSession] 游戏已开始，roomId=${roomId}，${players.length} 名玩家`);

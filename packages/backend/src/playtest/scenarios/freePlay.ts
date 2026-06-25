@@ -114,6 +114,31 @@ function importBrainsState(brains: Map<string, PlayerBrain>, state: Record<strin
  * @param resume 可选的断点续跑选项
  * @returns 测试报告
  */
+/**
+ * 等待 session.latestState 与 before 不是同一个引用。
+ * 用于确保 executeAction 触发的那次 game:state 事件已经被 session 监听器处理。
+ */
+function waitForLatestStateChange(
+  session: GameSession,
+  before: GameState | null,
+  timeoutMs = 5000
+): Promise<void> {
+  return new Promise((resolve) => {
+    if (session.latestState !== before) {
+      resolve();
+      return;
+    }
+    const timer = setTimeout(resolve, timeoutMs);
+    const check = setInterval(() => {
+      if (session.latestState !== before) {
+        clearTimeout(timer);
+        clearInterval(check);
+        resolve();
+      }
+    }, 30);
+  });
+}
+
 export async function runFreePlay(
   session: GameSession,
   config: PlaytestConfig,
@@ -172,11 +197,34 @@ export async function runFreePlay(
   let couponsOnShopVisits = 0;
   const lastKnownPosition: Record<string, number> = {};
 
+  // 同一玩家连续执行失败计数，超过阈值则强制跳过，避免卡死
+  const consecutiveFailures: Record<string, number> = {};
+  const MAX_CONSECUTIVE_FAILURES = 3;
+
   /** 记录一次商店访问 */
   function recordShopLanding(player: Player, tile: Tile): void {
     if (tile.type !== 'shop') return;
     shopVisits++;
     couponsOnShopVisits += player.coupons ?? 0;
+  }
+
+  /** 强制推进当前玩家回合：rolling 阶段掷 1 颗骰子，acting 阶段跳过。 */
+  async function forceSkipTurn(): Promise<void> {
+    const state = session.latestState;
+    if (!state || state.status === 'ended') return;
+    const current = state.players[state.currentPlayerIndex];
+    if (!current) return;
+    const conn = session.players.find((p) => p.userId === current.id);
+    if (!conn) return;
+
+    const stateBefore = session.latestState;
+    if (state.status === 'rolling') {
+      conn.socket.emit('game:roll', session.roomId, 1);
+    } else if (state.status === 'acting') {
+      conn.socket.emit('game:skip', session.roomId);
+    }
+    // 等待状态变化，避免下一轮仍卡在同一状态
+    await waitForLatestStateChange(session, stateBefore, 5000);
   }
 
   // 主循环
@@ -275,13 +323,36 @@ export async function runFreePlay(
       }
 
       // 执行动作
+      const stateBeforeAction = session.latestState;
       const result = await executeAction(session, playerConn.socket, decision, currentPlayer.id);
+
+      // 无论成功/失败，都等待 session.latestState 被更新为服务器最新状态，
+      // 避免下一轮基于过期的 state 做决策。
+      await waitForLatestStateChange(session, stateBeforeAction, 3000);
 
       if (!result.success) {
         // 执行失败不算严重问题，但记录下来
+        consecutiveFailures[currentPlayer.id] = (consecutiveFailures[currentPlayer.id] ?? 0) + 1;
         if (verbose) {
-          console.log(`  ⚠ 执行失败: ${result.error}`);
+          console.log(
+            `  ⚠ 执行失败 (${consecutiveFailures[currentPlayer.id]}/${MAX_CONSECUTIVE_FAILURES}): ${result.error}`
+          );
         }
+        if (consecutiveFailures[currentPlayer.id] >= MAX_CONSECUTIVE_FAILURES) {
+          recordIssue({
+            severity: 'medium',
+            category: '动作执行失败',
+            turn: totalTurns,
+            playerId: currentPlayer.id,
+            action: decision.action,
+            expected: '动作成功执行或状态推进',
+            actual: `连续 ${MAX_CONSECUTIVE_FAILURES} 次执行失败，强制跳过回合`,
+          });
+          await forceSkipTurn();
+          consecutiveFailures[currentPlayer.id] = 0;
+        }
+      } else {
+        consecutiveFailures[currentPlayer.id] = 0;
       }
 
       // 校验状态

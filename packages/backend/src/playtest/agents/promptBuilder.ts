@@ -74,7 +74,7 @@ function buildOpponents(state: GameState, me: Player): string {
     const posDesc = tile ? `#${p.position}${tile.name}` : `#${p.position}`;
     const owner = tile?.ownerId ? (state.players.find((pp) => pp.id === tile.ownerId)?.username ?? '?') : '';
     const spirit = p.spirit?.spiritId ?? '-';
-    return `${p.username}@${posDesc} 现金${p.cash} 存${p.deposit} 贷${p.loan} 地${p.properties.length} 卡${p.cards.length} 道${p.items.length} 神${spirit}`;
+    return `${p.username}(id=${p.id})@${posDesc} 现金${p.cash} 存${p.deposit} 贷${p.loan} 地${p.properties.length} 卡${p.cards.length} 道${p.items.length} 神${spirit}`;
   });
   return `对手: ${lines.join('; ')}`;
 }
@@ -136,7 +136,7 @@ function buildPlayerSummary(me: Player, state: GameState): string {
 }
 
 /** 构建可用操作说明，每个操作附带所需 target 参数 */
-function buildActionsGuide(actions: AvailableAction[]): string {
+export function buildActionsGuide(actions: AvailableAction[]): string {
   const lines = ['## 本回合可用操作'];
   for (const action of actions) {
     const params = action.params ? ` 参数=${JSON.stringify(action.params)}` : '';
@@ -145,12 +145,22 @@ function buildActionsGuide(actions: AvailableAction[]): string {
       case 'roll':
         targetHint = ' target.diceCount 可选 1/2/3（取决于载具）';
         break;
-      case 'useCard':
-        targetHint = ' target.cardId 必填，target.cardTarget 根据卡片类型填写（targetPlayerId/targetTileIndex/roadGroup 等）';
+      case 'useCard': {
+        const ct = action.params?.targetType ?? 'self';
+        targetHint = ` target.cardId=${action.params?.cardId} 必填，target.cardTarget 类型=${ct}`;
+        if (ct === 'opponent') targetHint += '（填 {targetPlayerId: 玩家 id，如 "playtest-user-2"}，不是 username）';
+        else if (ct === 'tile') targetHint += '（填 {targetTileIndex: 整数格编号}）';
+        else if (ct === 'road') targetHint += '（填 {roadGroup: 路段分组编号}）';
+        else if (ct === 'global') targetHint += '（可省略）';
         break;
-      case 'useItem':
-        targetHint = ' target.itemId 必填，target.itemTarget 根据道具类型填写（diceValue/targetTileIndex 等）';
+      }
+      case 'useItem': {
+        const nt = action.params?.needsTarget ?? 'none';
+        targetHint = ` target.itemId=${action.params?.itemId} 必填`;
+        if (nt === 'diceValue') targetHint += '，target.itemTarget={diceValue:1~6}';
+        else if (nt === 'targetTileIndex') targetHint += '，target.itemTarget={targetTileIndex:整数}';
         break;
+      }
       case 'buyItem':
         targetHint = ' target.itemId + target.itemQuantity';
         break;
@@ -190,37 +200,59 @@ const STRATEGY_HINTS = `
 
 ### 资产增长
 - 优先买同组空地产并升级（每升1级租金+50%，同组2块+20% 3块+50%）
-- **股价≤120大量买入**（tradeStock quantity=100-500），股价≥180分批卖出
-- 持股>10%自动成董事长获分红；优先买航空公司(低价80-160)或电脑公司(100-150)股票
+- 现金管理：永远保留至少 20% 现金应对过路费，不要把全部现金买股票或升级
+- 股票交易：tradeStock 的 stockQuantity 是**股数**，买入成本 = 股价 × 股数。只有现金 ≥ 股价×100 时才能买入 100 股。
+- 股票策略：股价≤120时买入100股，股价≥180时卖出持股。持股>10%自动成董事长获分红。
 - 利用物价指数：物价<1.2买入地产/股票，物价>1.8靠收租获利
 
 ### 卡片/道具（必须使用！）
 - **本局你已被发放全部卡片和全部道具，必须积极使用，不要只 roll。**
+- **只要手中有卡片/道具，且存在 useCard / useItem 可用动作，每回合必须优先考虑使用，而不是 skipTurn。**
 - **若持有卡片必须考虑useCard**：免租卡防高额过路费，涨价卡攻对手地产，均贫卡拉平差距
 - 坏神明附身立即用送神符驱除；前方有陷阱用机器娃娃清除
 - 在自己Lv2+地产前1-3格放路障/地雷/炸弹，增加对手踩中概率
 - 用飞弹/核弹拆对手Lv3+建筑；遥控骰子精确走位到目标格
+- 有遥控骰子时，优先用它精确走到空地产/自己地产/商店/小游戏格
 - **不要跳过回合**：只要存在 useCard / useItem / buyCard / buyItem / tradeStock / upgradeProperty / buyProperty 等可用动作，优先选择其中一个，而不是 skipTurn。
 
 ### 干扰对手
 - 对资金最多者使用均贫卡/陷害卡/冬眠卡/梦游卡/乌龟卡
 - 对强敌Lv3+地产用涨价卡或查封卡；用摧毁卡/怪兽卡拆对手高级建筑
 - 用抢夺卡获取对手现金；换地卡/换房卡夺对手地产；转转卡改变对手方向
+- 落后时（资产排名≥3）必须积极使用干扰卡和道具，不能 passive
 
-### 点券使用
-- **若有点券(≥300)且经过商店，必须buyItem购买道具**（优先遥控骰子/飞弹/路障）
+### 点券与商店
+- **若有点券(≥300)且站在商店，必须buyItem购买道具**（优先遥控骰子/飞弹/路障/地雷）
 - 点券充足(≥500)时buyCard购买攻击卡（涨价卡/摧毁卡/均贫卡）
 - 若现金充裕(≥3000)也可用现金buyItem/buyCard
+- 商店购买的道具/卡片会立即进入背包，下一回合即可使用
 `;
 
 /** 输出格式说明 */
 const OUTPUT_FORMAT = `
 ## 输出格式
-只输出JSON：{"action":"...","target":{...},"reason":"..."}
-常见target: roll{diceCount}, buyProperty{}, upgradeProperty{}, tradeStock{stockId,stockQuantity(正买负卖)},
-useCard{cardId,cardTarget}, useItem{itemId,itemTarget}, buyCard{cardId}, buyItem{itemId,itemQuantity}
-takeLoan/repayLoan{amount}, castMagicSpell{targetPlayerId,spell}, rebuildTile{tileIndex,buildingType}
-务必使用可用操作列表中的action，useCard/useItem必须提供完整target。
+只输出一个 JSON 对象，不要解释、不要 markdown 代码块：
+{"action":"...","target":{...},"reason":"..."}
+
+合法 action 必须从"本回合可用操作"列表中选取，target 字段必须与该列表中对应项的参数一致。
+
+示例（假设可用）：
+- 普通掷骰：{"action":"roll","target":{},"reason":"步行前进"}
+- 指定骰子数：{"action":"roll","target":{"diceCount":2},"reason":"骑车前进"}
+- 买地：{"action":"buyProperty","target":{},"reason":"占领空地"}
+- 升级：{"action":"upgradeProperty","target":{},"reason":"提升租金"}
+- 使用遥控骰子：{"action":"useItem","target":{"itemId":"remoteDice","itemTarget":{"diceValue":4}},"reason":"精确到商店"}
+- 放置地雷：{"action":"useItem","target":{"itemId":"mine","itemTarget":{"targetTileIndex":12}},"reason":"封锁对手"}
+- 使用涨价卡：{"action":"useCard","target":{"cardId":"priceRise","cardTarget":{"targetTileIndex":12}},"reason":"打击对手高租金地产"}
+- 商店买遥控骰子：{"action":"buyItem","target":{"itemId":"remoteDice","itemQuantity":1},"reason":"补充道具"}
+- 买股票：{"action":"tradeStock","target":{"stockId":"S1","stockQuantity":100},"reason":"低价建仓"}
+
+规则：
+1. action 必须是可用操作列表里的 type。
+2. useCard 必须提供 target.cardId，且 cardId 要与列表中的某一项完全一致。
+3. useItem 必须提供 target.itemId，且 itemId 要与列表中的某一项完全一致。
+4. buyCard/buyItem/tradeStock 同样必须从列表中精确选择 id/数量。
+5. 如果前方没有明确目标，优先 roll；如果持有卡片/道具且列表中有 useCard/useItem，优先使用它们。
 `;
 
 /**

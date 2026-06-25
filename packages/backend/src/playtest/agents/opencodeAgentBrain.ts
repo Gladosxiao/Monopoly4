@@ -14,13 +14,13 @@ import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { GameState, Player } from '@monopoly4/shared';
 import type { PlayerBrain, ActionDecision, AvailableAction, ActionType } from '../types.js';
-import { buildSystemPrompt, buildUserPrompt } from './promptBuilder.js';
+import { buildSystemPrompt, buildUserPrompt, buildActionsGuide } from './promptBuilder.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PLAYTEST_ENV_PATH = resolve(__dirname, '../../../.playtest.env');
 
 const MAX_RETRIES = 3;
-const LLM_TIMEOUT = 120000;
+const LLM_TIMEOUT = 180000;
 
 /** LLM 调用配置 */
 interface LLMConfig {
@@ -210,6 +210,74 @@ function validateDecision(raw: unknown): ActionDecision | null {
   return decision;
 }
 
+/**
+ * 校验 decision 是否匹配当前可用动作列表中的某一项。
+ * 防止 LLM  hallucinate 出不可用的 action 或错误的 target。
+ */
+function matchesAvailableAction(
+  decision: ActionDecision,
+  availableActions: AvailableAction[]
+): boolean {
+  const candidates = availableActions.filter((a) => a.type === decision.action);
+  if (candidates.length === 0) return false;
+
+  const target = decision.target ?? {};
+
+  switch (decision.action) {
+    case 'roll':
+      // 只要存在 roll 动作即可；如指定了 diceCount，必须存在于可用选项中
+      if (target.diceCount !== undefined) {
+        return candidates.some(
+          (a) =>
+            a.params?.diceCount === target.diceCount ||
+            (a.params?.diceRange as number[] | undefined)?.includes(target.diceCount as number)
+        );
+      }
+      return true;
+
+    case 'buyProperty':
+    case 'upgradeProperty':
+    case 'skipTurn':
+    case 'placeLotteryBet':
+    case 'castMagicSpell':
+      return true;
+
+    case 'useCard':
+    case 'buyCard':
+      return candidates.some((a) => a.params?.cardId === target.cardId);
+
+    case 'useItem':
+    case 'buyItem':
+      return candidates.some((a) => a.params?.itemId === target.itemId);
+
+    case 'tradeStock':
+      return candidates.some(
+        (a) =>
+          a.params?.stockId === target.stockId &&
+          (target.stockQuantity === undefined || a.params?.stockQuantity === target.stockQuantity)
+      );
+
+    case 'takeLoan':
+    case 'repayLoan':
+      return candidates.some(
+        (a) => target.amount === undefined || a.params?.amount === target.amount
+      );
+
+    case 'rebuildTile':
+      return candidates.some(
+        (a) =>
+          a.params?.tileIndex === target.tileIndex &&
+          (target.buildingType === undefined || a.params?.buildingType === target.buildingType)
+      );
+
+    case 'rescueNpc':
+      return candidates.some((a) => a.params?.npcId === target.npcId);
+
+    default:
+      return false;
+  }
+}
+
 /** 从 LLM 文本输出中提取 JSON */
 function extractJSON(text: string): unknown {
   // 尝试直接解析
@@ -283,35 +351,17 @@ export class OpencodeAgentBrain implements PlayerBrain {
       return this.fallback.decide(state, me, availableActions);
     }
 
-    // LLM 专注战略决策，卡片/道具等战术操作交由启发式大脑（策略更完善）
-    const strategicActions = new Set<ActionType>([
-      'buyProperty',
-      'upgradeProperty',
-      'rebuildTile',
-      'tradeStock',
-      'castMagicSpell',
-    ]);
-    const hasStrategicAction = availableActions.some((a) => strategicActions.has(a.type));
-    if (!hasStrategicAction) {
+    // 当存在任何可用动作时，都交由 LLM 统一决策（包括买地、股票、卡片/道具、商店购买）。
+    // 启发式大脑仅作为 LLM 输出解析失败或 API 异常时的后备。
+    if (availableActions.length === 0) {
       return this.fallback.decide(state, me, availableActions);
     }
 
     const recentLogs = state.logs.slice(-10).map((l) => l.message);
 
-    // 商店购买优先交由启发式大脑（策略完善）
-    const shopActions = availableActions.filter(
-      (a) => a.type === 'buyCard' || a.type === 'buyItem'
-    );
-    if (shopActions.length > 0) {
-      return this.fallback.decide(state, me, availableActions);
-    }
-
-    // 初始化 system prompt（仅一次）
-    if (this.messages.length === 0) {
-      this.messages.push({ role: 'system', content: buildSystemPrompt() });
-    }
-
-    // 追加当前决策请求
+    // 每回合独立决策：避免上一轮 LLM 的回复在下一轮被简单重复。
+    // 只保留 system prompt + 当前请求（以及本回合内的重试反馈）。
+    this.messages = [{ role: 'system', content: buildSystemPrompt() }];
     this.messages.push({ role: 'user', content: buildUserPrompt(state, me, availableActions, recentLogs) });
 
     for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
@@ -320,21 +370,29 @@ export class OpencodeAgentBrain implements PlayerBrain {
         const parsed = extractJSON(rawOutput);
         const decision = validateDecision(parsed);
 
-        if (decision) {
-          this.messages.push({ role: 'assistant', content: rawOutput });
-          this.trimHistory();
-          console.log(`[OpencodeAgentBrain] LLM 调用成功: ${decision.action} - ${decision.reason ?? ''}`);
+        if (decision && matchesAvailableAction(decision, availableActions)) {
+          console.log(
+            `[OpencodeAgentBrain] LLM 调用成功: ${decision.action} target=${JSON.stringify(decision.target)} - ${decision.reason ?? ''}`
+          );
           return decision;
         }
 
-        console.warn(`[OpencodeAgentBrain] LLM 输出校验失败 (attempt ${attempt + 1}): ${rawOutput.slice(0, 200)}`);
+        const reason = decision
+          ? `action=${decision.action} target=${JSON.stringify(decision.target)} 不在可用动作列表中`
+          : '无法解析为合法 JSON 决策';
+        console.warn(`[OpencodeAgentBrain] LLM 输出校验失败 (attempt ${attempt + 1}): ${reason}`);
+
+        // 给 LLM 反馈，要求它从可用动作列表中选择
+        this.messages.push({ role: 'assistant', content: rawOutput });
+        this.messages.push({
+          role: 'user',
+          content: `上一条决策无效：${reason}。请严格从本回合可用动作列表中选择，并输出合法 JSON。\n\n${buildActionsGuide(availableActions)}`,
+        });
       } catch (err: any) {
         console.warn(`[OpencodeAgentBrain] LLM 调用失败 (attempt ${attempt + 1}): ${err.message}`);
       }
     }
 
-    // 所有重试都失败：移除失败的 user prompt，使用 fallback，避免污染对话
-    this.messages.pop();
     console.warn(`[OpencodeAgentBrain] LLM 重试 ${MAX_RETRIES} 次后回退到启发式大脑`);
     return this.fallback.decide(state, me, availableActions);
   }
