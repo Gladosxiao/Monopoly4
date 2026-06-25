@@ -105,7 +105,7 @@ function loadState(): { selectedStockId: string | null; width: number; trendKey:
       const parsed = JSON.parse(raw);
       return {
         selectedStockId: parsed.selectedStockId ?? STOCK_DEFS[0]!.id,
-        width: Number(parsed.width) || 360,
+        width: Number(parsed.width) || 500,
         trendKey: parsed.trendKey ?? 'auto',
       };
     }
@@ -114,7 +114,7 @@ function loadState(): { selectedStockId: string | null; width: number; trendKey:
   }
   return {
     selectedStockId: STOCK_DEFS[0]!.id,
-    width: 360,
+    width: 500,
     trendKey: 'auto',
   };
 }
@@ -147,16 +147,18 @@ let { stocks, trends } = buildSimStocks(trendKey === 'auto' ? null : trendKey);
 const stockChart = new StockChart({ minHeight: 240 });
 const stockRowsEl = document.getElementById('test-stock-rows')!;
 const mountEl = document.getElementById('stock-chart-mount')!;
-const widthInput = document.getElementById('width-input') as HTMLInputElement;
+const widthInput = document.getElementById('width-input') as HTMLInputElement | null;
 const trendSelect = document.getElementById('trend-select') as HTMLSelectElement;
 const dayInput = document.getElementById('day-input') as HTMLInputElement;
 const hoverBtn = document.getElementById('btn-hover') as HTMLButtonElement;
 
-widthInput.value = String(width);
+if (widthInput) widthInput.value = String(width);
 trendSelect.value = trendKey;
 
 function applyWidth(): void {
-  mountEl.style.width = `${width}px`;
+  // K 线图占满父容器(test-chart-card,模拟游戏页面 side-panel 实际宽度)
+  mountEl.style.width = '';
+  mountEl.style.maxWidth = '';
   stockChart.redraw();
 }
 
@@ -190,7 +192,7 @@ function renderStockList(): void {
 renderStockList();
 stockChart.setData(stocks, trends, selectedStockId);
 
-widthInput.addEventListener('change', () => {
+widthInput?.addEventListener?.('change', () => {
   const v = Number(widthInput.value);
   if (v >= 280 && v <= 800) {
     width = v;

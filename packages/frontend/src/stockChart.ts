@@ -22,6 +22,26 @@ const DEFAULT_TREND_EMOJI: Record<string, string> = {
   收敛三角突破: '🔺',
 };
 
+/** 走势模板中文名 -> 进度条方向分类 */
+const TREND_DIRECTION: Record<string, 'bull' | 'bear' | 'neutral'> = {
+  稳健上涨: 'bull',
+  急速拉升: 'bull',
+  'V 形反弹': 'bull',
+  圆弧底突破: 'bull',
+  收敛三角突破: 'bull',
+  持续下跌: 'bear',
+  恐慌暴跌: 'bear',
+  '倒 V 反转': 'bear',
+  横盘整理: 'neutral',
+};
+
+/** 不同方向的进度条颜色 */
+const DIRECTION_BAR_COLOR: Record<'bull' | 'bear' | 'neutral', string> = {
+  bull: '#22c55e',     // 上涨：绿
+  bear: '#ef4444',     // 下跌：红
+  neutral: '#94a3b8',  // 横盘：灰
+};
+
 /** K 线图配色（与 design tokens 保持一致的语义色） */
 const COLOR_UP = '#22c55e';        // 阳线：绿
 const COLOR_DOWN = '#ef4444';      // 阴线：红
@@ -200,8 +220,11 @@ export class StockChart {
       const total = 20;
       const filled = Math.min(8, Math.max(0, Math.round((progress / total) * 8)));
       const bar = '█'.repeat(filled) + '░'.repeat(8 - filled);
+      // 进度条颜色按走势方向(bull/bear/neutral)区分,不沿用模板色
+      const direction = TREND_DIRECTION[trend.templateName] ?? 'neutral';
+      const barColor = DIRECTION_BAR_COLOR[direction];
       trendHtml =
-        `<span class="stock-chart-trend" style="--trend-color:${escapeHtml(trend.templateColor)}">` +
+        `<span class="stock-chart-trend" style="--trend-color:${escapeHtml(trend.templateColor)};--bar-color:${barColor}">` +
         `${emoji} ${escapeHtml(trend.templateName)} <span class="stock-chart-trend-bar">${bar}</span> ${progress}/${total}` +
         `</span>`;
     }
@@ -328,9 +351,9 @@ export class StockChart {
       paddingLeft: 38,
       paddingRight: 8,
       paddingTop: 10,
-      paddingBottom: 18,
+      paddingBottom: 30,
       chartWidth: cssWidth - 38 - 8,
-      chartHeight: cssHeight - 10 - 18,
+      chartHeight: cssHeight - 10 - 30,
     };
   }
 
