@@ -1,4 +1,5 @@
 import type { GameState, Player, Stock } from '@monopoly4/shared';
+import { randomTrendTemplate, getTrendTemplate, type OHLC } from '@monopoly4/shared';
 
 export interface TradeResult {
   success: boolean;
@@ -151,8 +152,88 @@ export function sellAllStocks(state: GameState, playerId: string): number {
 }
 
 /**
- * 每日收盘后随机波动股价，并递减停牌天数。
- * 涨跌幅限制在 ±10% 以内。
+ * OHLC 历史更新辅助：将走势模板的 OHLC 点转换为实际价格并追加到股票历史。
+ */
+function updateOHLCHistory(stock: Stock, basePrice: number, ohlc: OHLC): void {
+  if (!stock.ohlcHistory) stock.ohlcHistory = [];
+  stock.ohlcHistory.push({
+    open: Math.round(basePrice * (1 + ohlc.open)),
+    high: Math.round(basePrice * (1 + ohlc.high)),
+    low: Math.round(basePrice * (1 + ohlc.low)),
+    close: Math.round(basePrice * (1 + ohlc.close)),
+  });
+  // 只保留最近 20 条
+  if (stock.ohlcHistory.length > 20) stock.ohlcHistory.shift();
+  stock.prevPrice = stock.price;
+}
+
+/**
+ * 为单只股票更新价格，优先遵循走势模板，否则回退到随机波动。
+ */
+function updateStockPriceWithTrend(state: GameState, stock: Stock): void {
+  // 1. 检查是否已在走势中
+  const existingTrend = state.stockTrends.find(t => t.stockId === stock.id);
+  if (existingTrend) {
+    const template = getTrendTemplate(existingTrend.templateId);
+    if (!template || existingTrend.currentIndex >= 20) {
+      // 走势结束，移除
+      state.stockTrends = state.stockTrends.filter(t => t.stockId !== stock.id);
+    } else {
+      // 按模板计算价格
+      const ohlc = template.ohlc[existingTrend.currentIndex];
+      stock.price = Math.round(existingTrend.startPrice * (1 + ohlc.close));
+      stock.fluctuation = Math.round(ohlc.close * 1000) / 10;
+      existingTrend.currentIndex++;
+      updateOHLCHistory(stock, existingTrend.startPrice, ohlc);
+      return; // 走势模式下跳过随机波动
+    }
+  }
+
+  // 2. 20% 概率触发新走势（最多 2 只同时进行）
+  if (Math.random() < 0.2 && state.stockTrends.length < 2) {
+    const template = randomTrendTemplate();
+    state.stockTrends.push({
+      stockId: stock.id,
+      templateId: template.id,
+      startDay: state.day,
+      currentIndex: 1, // 第一天已用
+      startPrice: stock.price,
+      templateName: template.name,
+      templateColor: template.color,
+    });
+    // 第一天价格
+    const firstOhlc = template.ohlc[0];
+    stock.price = Math.round(stock.price * (1 + firstOhlc.close));
+    stock.fluctuation = Math.round(firstOhlc.close * 1000) / 10;
+    updateOHLCHistory(stock, stock.price / (1 + firstOhlc.close), firstOhlc);
+    return;
+  }
+
+  // 3. 80% 概率：随机波动（±10%）
+  const change = (Math.random() - 0.5) * 0.2; // -10% ~ +10%
+  const prevPrice = stock.price;
+  stock.price = Math.max(1, Math.floor(stock.price * (1 + change)));
+  stock.fluctuation = Math.round(change * 1000) / 10;
+  // 随机波动也记录 OHLC
+  if (!stock.ohlcHistory) stock.ohlcHistory = [];
+  const open = prevPrice;
+  const close = stock.price;
+  const bodyTop = Math.max(open, close);
+  const bodyBot = Math.min(open, close);
+  const wickUp = bodyTop + Math.floor(Math.random() * prevPrice * 0.03);
+  const wickDown = Math.max(1, bodyBot - Math.floor(Math.random() * prevPrice * 0.03));
+  stock.ohlcHistory.push({
+    open,
+    high: Math.max(bodyTop, wickUp),
+    low: Math.min(bodyBot, wickDown),
+    close,
+  });
+  if (stock.ohlcHistory.length > 20) stock.ohlcHistory.shift();
+  stock.prevPrice = prevPrice;
+}
+
+/**
+ * 每日收盘后更新股价：走势模板优先，随机波动兜底，并递减停牌天数。
  */
 export function updateStockPrices(state: GameState): void {
   for (const stock of state.stocks) {
@@ -164,21 +245,31 @@ export function updateStockPrices(state: GameState): void {
 
     // 红卡/黑卡强制涨停/跌停
     if (stock.bullDays && stock.bullDays > 0) {
+      const prevPrice = stock.price;
       stock.price = Math.max(1, Math.floor(stock.price * 1.1));
       stock.fluctuation = 10;
       stock.bullDays -= 1;
+      // 涨停也记录 OHLC
+      if (!stock.ohlcHistory) stock.ohlcHistory = [];
+      stock.ohlcHistory.push({ open: prevPrice, high: stock.price, low: prevPrice, close: stock.price });
+      if (stock.ohlcHistory.length > 20) stock.ohlcHistory.shift();
+      stock.prevPrice = prevPrice;
       continue;
     }
     if (stock.bearDays && stock.bearDays > 0) {
+      const prevPrice = stock.price;
       stock.price = Math.max(1, Math.floor(stock.price * 0.9));
       stock.fluctuation = -10;
       stock.bearDays -= 1;
+      // 跌停也记录 OHLC
+      if (!stock.ohlcHistory) stock.ohlcHistory = [];
+      stock.ohlcHistory.push({ open: prevPrice, high: prevPrice, low: stock.price, close: stock.price });
+      if (stock.ohlcHistory.length > 20) stock.ohlcHistory.shift();
+      stock.prevPrice = prevPrice;
       continue;
     }
 
-    const change = (Math.random() - 0.5) * 0.2; // -10% ~ +10%
-    stock.price = Math.max(1, Math.floor(stock.price * (1 + change)));
-    stock.fluctuation = Math.round(change * 1000) / 10;
+    updateStockPriceWithTrend(state, stock);
   }
 }
 

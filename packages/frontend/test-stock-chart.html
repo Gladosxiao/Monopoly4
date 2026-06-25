@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>股票 K 线图测试</title>
+  <link rel="stylesheet" href="/src/style.css" />
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      min-height: 100vh;
+      background: #0f172a;
+      font-family: system-ui, -apple-system, sans-serif;
+      color: #e2e8f0;
+    }
+    .test-layout {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      grid-template-rows: auto auto 1fr;
+      gap: 16px;
+      padding: 24px;
+      max-width: 1280px;
+      margin: 0 auto;
+      min-height: 100vh;
+      box-sizing: border-box;
+    }
+
+    /* 模拟游戏页面 side-panel 实际场景：限制 K 线图卡片宽度 */
+    .test-chart-card {
+      max-width: 416px;
+    }
+    .test-header {
+      grid-column: 1 / -1;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 12px 20px;
+      background: #1a2236;
+      border-radius: 10px;
+      border: 1px solid #2d3852;
+    }
+    .test-header h1 {
+      margin: 0;
+      font-size: 18px;
+      font-weight: 600;
+    }
+    .test-controls {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+    .test-controls label {
+      color: #94a3b8;
+      font-size: 12px;
+    }
+    .test-controls select,
+    .test-controls input {
+      background: #232c45;
+      color: #e2e8f0;
+      border: 1px solid #2d3852;
+      border-radius: 6px;
+      padding: 6px 10px;
+      font-size: 13px;
+    }
+    .test-stock-list {
+      background: #1a2236;
+      border-radius: 10px;
+      border: 1px solid #2d3852;
+      padding: 16px;
+    }
+    .test-stock-list h2 {
+      margin: 0 0 12px;
+      font-size: 14px;
+      color: #94a3b8;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+    }
+    .test-stock-row {
+      padding: 10px 12px;
+      border-radius: 6px;
+      background: #232c45;
+      margin-bottom: 6px;
+      cursor: pointer;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      transition: background 0.12s ease;
+    }
+    .test-stock-row:hover {
+      background: #2d3852;
+    }
+    .test-stock-row.selected {
+      background: rgba(91, 141, 239, 0.18);
+      box-shadow: inset 3px 0 0 #5b8def;
+    }
+    .test-stock-row .name {
+      font-weight: 600;
+    }
+    .test-stock-row .meta {
+      font-size: 11px;
+      color: #94a3b8;
+    }
+    .test-stock-row .price {
+      font-variant-numeric: tabular-nums;
+      font-weight: 700;
+    }
+    .test-chart-card {
+      background: #1a2236;
+      border-radius: 10px;
+      border: 1px solid #2d3852;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      min-height: 480px;
+      height: 100%;
+    }
+    .test-chart-card h2 {
+      margin: 0 0 12px;
+      font-size: 14px;
+      color: #94a3b8;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+    }
+    .test-info-panel {
+      background: #1a2236;
+      border-radius: 10px;
+      border: 1px solid #2d3852;
+      padding: 16px;
+      grid-column: 1;
+      font-size: 12px;
+      line-height: 1.6;
+      color: #94a3b8;
+    }
+    .test-info-panel code {
+      background: #0b1220;
+      padding: 1px 5px;
+      border-radius: 4px;
+      color: #cbd5e1;
+    }
+  </style>
+</head>
+<body>
+  <div class="test-layout">
+    <div class="test-header">
+      <h1>📈 股票 K 线图组件测试</h1>
+      <div class="test-controls">
+        <label for="trend-select">强制走势:</label>
+        <select id="trend-select">
+          <option value="auto">自动(随机)</option>
+          <option value="bull_normal">稳健上涨</option>
+          <option value="bull_volatile">急速拉升</option>
+          <option value="bear_normal">持续下跌</option>
+          <option value="bear_volatile">恐慌暴跌</option>
+          <option value="sideways_quiet">横盘整理</option>
+          <option value="v_bottom">V 形反弹</option>
+          <option value="v_top">倒 V 反转</option>
+          <option value="cup_handle">圆弧底突破</option>
+          <option value="triangle">收敛三角突破</option>
+        </select>
+        <label for="day-input">悬停日:</label>
+        <input id="day-input" type="number" value="8" min="0" max="19" style="width:50px" />
+        <button id="btn-hover">显示悬停</button>
+      </div>
+    </div>
+
+    <div class="test-info-panel">
+      <strong style="color:#e2e8f0">测试说明</strong><br />
+      · 模拟游戏页面 side-panel 实际宽度(380-420px)<br />
+      · <code>devicePixelRatio</code> 已用于适配高分屏<br />
+      · 走势中的股票在 K 线背景上有彩色高亮区间<br />
+      · 鼠标悬停 K 线显示 OHLC tooltip<br />
+      · 调整"强制走势"可替换当前选中股票的走势模板
+    </div>
+
+    <div class="test-stock-list">
+      <h2>股票列表</h2>
+      <div id="test-stock-rows"></div>
+    </div>
+
+    <div class="test-chart-card">
+      <h2>K 线图</h2>
+      <div id="stock-chart-mount" style="flex:1; min-height: 0; display: flex; flex-direction: column;"></div>
+    </div>
+  </div>
+
+  <script type="module" src="/src/test-stock-chart.ts"></script>
+</body>
+</html>

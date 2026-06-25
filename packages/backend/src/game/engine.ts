@@ -204,6 +204,7 @@ export function createGame(roomId: string, config: GameConfig, roomPlayers: Room
     npcs: [],
     stocks: JSON.parse(JSON.stringify(DEFAULT_STOCKS)),
     companies: JSON.parse(JSON.stringify(DEFAULT_COMPANIES)),
+    stockTrends: [],
     marketStatus: { loanFrozenDays: 0 },
     lotteryJackpot: 0,
     lotteryBets: {},
@@ -218,6 +219,16 @@ export function createGame(roomId: string, config: GameConfig, roomPlayers: Room
 
   spawnNpcs(state);
   spawnSpirits(state);
+
+  // 初始化每只股票的 OHLC 历史（第一天 open=high=low=close=初始价）
+  for (const stock of state.stocks) {
+    stock.ohlcHistory = [{
+      open: stock.price,
+      high: stock.price,
+      low: stock.price,
+      close: stock.price,
+    }];
+  }
 
   // 将地图上的公司格与公司列表按顺序绑定；公司格数量多于公司时循环复用
   const companyTiles = state.map.tiles.filter((tile) => tile.type === 'company');
