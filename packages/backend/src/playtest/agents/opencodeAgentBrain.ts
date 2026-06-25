@@ -2,15 +2,22 @@
  * LLM 驱动的玩家大脑
  *
  * 通过 OpenAI-compatible API 调用 LLM 进行决策。
- * 支持配置：
- * - PLAYTEST_LLM_API_KEY
- * - PLAYTEST_LLM_BASE_URL
- * - PLAYTEST_LLM_MODEL（默认 mimo-v2.5）
+ * 支持配置（优先级从高到低）：
+ * 1. 构造函数传入的 config 参数
+ * 2. packages/backend/.playtest.env 文件
+ * 3. 环境变量 PLAYTEST_LLM_API_KEY / PLAYTEST_LLM_BASE_URL / PLAYTEST_LLM_MODEL
+ * 默认使用 KIMI (Moonshot) API。
  */
 
+import { existsSync, readFileSync } from 'node:fs';
+import { resolve, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import type { GameState, Player } from '@monopoly4/shared';
 import type { PlayerBrain, ActionDecision, AvailableAction, ActionType } from '../types.js';
 import { buildSystemPrompt, buildUserPrompt } from './promptBuilder.js';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const PLAYTEST_ENV_PATH = resolve(__dirname, '../../../.playtest.env');
 
 const MAX_RETRIES = 3;
 const LLM_TIMEOUT = 120000;
@@ -22,12 +29,31 @@ interface LLMConfig {
   model: string;
 }
 
-/** 从环境变量读取 LLM 配置 */
+/** 解析简单的 KEY=VALUE 环境变量文件（忽略空行与注释） */
+function parseEnvFile(path: string): Record<string, string> {
+  const result: Record<string, string> = {};
+  if (!existsSync(path)) return result;
+  const text = readFileSync(path, 'utf-8');
+  for (const line of text.split('\n')) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('#')) continue;
+    const idx = trimmed.indexOf('=');
+    if (idx === -1) continue;
+    const key = trimmed.slice(0, idx).trim();
+    const value = trimmed.slice(idx + 1).trim();
+    if (key) result[key] = value;
+  }
+  return result;
+}
+
+/** 读取 LLM 配置：.playtest.env > 环境变量 > KIMI 默认值 */
 function getLLMConfig(): LLMConfig {
+  const fileEnv = parseEnvFile(PLAYTEST_ENV_PATH);
   return {
-    apiKey: process.env.PLAYTEST_LLM_API_KEY ?? '',
-    baseUrl: process.env.PLAYTEST_LLM_BASE_URL ?? 'https://api.openai.com/v1',
-    model: process.env.PLAYTEST_LLM_MODEL ?? 'mimo-v2.5',
+    apiKey: fileEnv.PLAYTEST_LLM_API_KEY ?? process.env.PLAYTEST_LLM_API_KEY ?? '',
+    baseUrl:
+      fileEnv.PLAYTEST_LLM_BASE_URL ?? process.env.PLAYTEST_LLM_BASE_URL ?? 'https://api.moonshot.cn/v1',
+    model: fileEnv.PLAYTEST_LLM_MODEL ?? process.env.PLAYTEST_LLM_MODEL ?? 'moonshot-v1-8k',
   };
 }
 

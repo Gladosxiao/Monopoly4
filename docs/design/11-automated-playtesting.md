@@ -21,16 +21,23 @@ packages/backend/src/playtest/
 │   ├── gameSession.ts    # 房间创建、Socket 连接、状态监听
 │   ├── actionExecutor.ts # 将大脑决策转换为 socket 事件
 │   ├── validator.ts      # 游戏规则不变量校验
+│   ├── statsCollector.ts # 数值快照与 HTML 报告
 │   └── watchdog.ts       # 对局卡死监控与自动恢复
 ├── agents/
 │   ├── llmPlayer.ts      # PlayerBrain 抽象接口
 │   ├── heuristicBrain.ts # 启发式默认大脑（策略化卡片/道具）
-│   └── opencodeAgentBrain.ts  # LLM 大脑（解析失败回退启发式）
+│   ├── opencodeAgentBrain.ts  # LLM 大脑（解析失败回退启发式）
+│   └── promptBuilder.ts  # LLM prompt 构建
 ├── scenarios/
 │   ├── freePlay.ts       # 4 人自由对局场景
-│   └── pressureTest.ts   # 数值压力测试（10 圈淘汰）
-└── reports/
-    └── reporter.ts       # 问题记录与 Markdown 报告生成
+│   ├── pressureTest.ts   # 数值压力测试（10 圈淘汰）
+│   ├── interactionTest.ts# 交互场景
+│   └── stockTest.ts      # 股票场景
+├── reports/
+│   └── reporter.ts       # 问题记录与 Markdown 报告生成
+└── minigames/
+    ├── minigameTester.ts # 小游戏专项测试引擎
+    └── runMiniGameTest.ts# 小游戏独立入口
 
 packages/backend/src/playtest/__tests__/
 └── playtest.e2e.test.ts  # Vitest 集成测试入口
@@ -78,21 +85,35 @@ packages/backend/src/playtest/__tests__/
 
 ### LLM 配置
 
-使用 `xiaomi/mimo-v2.5` 作为 playtester agent 的模型，通过 OMO slim 自定义 agent 配置：
+Playtest 默认使用 **KIMI (Moonshot)** 的 OpenAI-compatible API：
 
-```jsonc
-// ~/.config/opencode/oh-my-opencode-slim.json
-{
-  "agents": {
-    "playtester": {
-      "model": "xiaomi/mimo-v2.5",
-      "prompt": "你是一名大富翁4自动化测试玩家...",
-      "orchestratorPrompt": "仅在自动化对局测试任务中调用 @playtester，用于为指定玩家决策下一步操作。",
-      "skills": [],
-      "mcps": []
-    }
-  }
-}
+- Base URL：`https://api.moonshot.cn/v1`
+- 推荐模型：`moonshot-v1-8k`（长对局可选 `moonshot-v1-32k`）
+- 密钥配置文件：`packages/backend/.playtest.env`（**已被 git 忽略，切勿提交**）
+
+配置步骤：
+
+```bash
+cd packages/backend
+cp .playtest.env.example .playtest.env
+# 编辑 .playtest.env，填入你的 KIMI API Key
+```
+
+`.playtest.env` 示例：
+
+```
+PLAYTEST_LLM_API_KEY=sk-your-kimi-key-here
+PLAYTEST_LLM_BASE_URL=https://api.moonshot.cn/v1
+PLAYTEST_LLM_MODEL=moonshot-v1-8k
+```
+
+配置优先级：`.playtest.env` > 环境变量 > KIMI 默认值。旧环境变量方式仍兼容：
+
+```bash
+export PLAYTEST_LLM_API_KEY="sk-..."
+export PLAYTEST_LLM_BASE_URL="https://api.moonshot.cn/v1"
+export PLAYTEST_LLM_MODEL="moonshot-v1-8k"
+npm run playtest:llm
 ```
 
 ## 测试主循环
@@ -164,14 +185,23 @@ while (turn < MAX_TURNS && !gameEnded) {
 ## 执行方式
 
 ```bash
-# 开发环境运行单次测试
+# 开发环境运行单次测试（启发式大脑）
 npm run playtest
+
+# 使用 KIMI LLM 运行测试（读取 .playtest.env）
+npm run playtest:llm:kimi
+
+# 小游戏专项测试
+npm run test:minigames
 
 # 作为 Vitest 用例运行
 npm run test -w packages/backend -- src/playtest/__tests__/playtest.e2e.test.ts
 
 # 指定回合数
 MAX_TURNS=100 npm run playtest
+
+# 全卡片/全道具对局（用于验证卡片/道具使用逻辑）
+PLAYTEST_GIVE_ALL_CARDS=true PLAYTEST_GIVE_ALL_ITEMS=true PLAYTEST_STARTING_COUPONS=5000 npm run playtest
 ```
 
 ## 集成到 CI
@@ -228,8 +258,8 @@ GitHub Actions 中每晚运行：
 - 输出格式强制要求 `{ action, target, reason }` 的 JSON
 
 `agents/opencodeAgentBrain.ts` 通过 OpenAI-compatible API 调用 LLM：
-- 默认模型 `mimo-v2.5`
-- 支持环境变量 `PLAYTEST_LLM_API_KEY` / `PLAYTEST_LLM_BASE_URL` / `PLAYTEST_LLM_MODEL`
+- 默认使用 KIMI (Moonshot)：base URL `https://api.moonshot.cn/v1`，模型 `moonshot-v1-8k`
+- 优先读取 `packages/backend/.playtest.env`，其次环境变量 `PLAYTEST_LLM_API_KEY` / `PLAYTEST_LLM_BASE_URL` / `PLAYTEST_LLM_MODEL`
 - JSON 输出校验失败或 API 异常时自动重试 3 次，最终回退到启发式大脑
 - 打印每次调用的 token 消耗，便于诊断额度
 - **设计原则**：LLM 专注战略决策（买地/升级/改建/股票/魔法屋），卡片/道具等战术操作交由启发式大脑处理（启发式大脑有更完善的卡片使用策略）

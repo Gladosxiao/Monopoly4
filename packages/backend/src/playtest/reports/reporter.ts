@@ -95,6 +95,20 @@ export class Reporter {
     lines.push(`- 总计: ${allIssues.length}`);
     lines.push('');
 
+    // 商店访问统计
+    if (report.shopStats) {
+      lines.push('## 商店访问统计');
+      lines.push('');
+      lines.push(`- 商店格访问次数：${report.shopStats.shopVisits}`);
+      lines.push(`- 总落脚次数：${report.shopStats.totalTileLandings}`);
+      lines.push(
+        `- 商店访问率：${(report.shopStats.shopVisitRate * 100).toFixed(1)}%`
+      );
+      lines.push(`- 商店购买尝试：${report.shopStats.shopPurchaseAttempts}`);
+      lines.push(`- 踩中商店时平均点券：${report.shopStats.avgCouponsWhenVisiting}`);
+      lines.push('');
+    }
+
     // 问题详情
     if (allIssues.length > 0) {
       lines.push('## 发现的问题');
