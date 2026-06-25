@@ -10,15 +10,54 @@ import type { GameState } from '@monopoly4/shared';
 import { CARD_DEFINITIONS, ITEM_DEFINITIONS } from '@monopoly4/shared';
 import type { ActionDecision, AvailableAction } from '../types.js';
 import type { GameSession } from './gameSession.js';
-import { waitForState, sleep } from './gameSession.js';
+
 
 /** 执行动作超时时间（毫秒） */
 const ACTION_TIMEOUT = 10000;
+/** 等待服务器返回错误 or 状态更新的最大时间 */
+const ACTION_RESULT_TIMEOUT = 5000;
+
+/**
+ * 监听一次 socket 错误/状态更新，判断动作是否被服务器接受。
+ * 注意：监听器在 emit 之前注册，避免错过快速返回的状态更新。
+ */
+function waitActionOutcome(
+  socket: ClientSocket,
+  timeoutMs: number
+): Promise<{ success: boolean; error?: string }> {
+  return new Promise((resolve) => {
+    let resolved = false;
+    const timer = setTimeout(() => {
+      cleanup();
+      resolve({ success: true });
+    }, timeoutMs);
+
+    const errorHandler = (msg: string) => {
+      cleanup();
+      resolve({ success: false, error: msg });
+    };
+    const stateHandler = () => {
+      cleanup();
+      resolve({ success: true });
+    };
+
+    const cleanup = () => {
+      if (resolved) return;
+      resolved = true;
+      clearTimeout(timer);
+      socket.off('error', errorHandler);
+      socket.off('game:state', stateHandler);
+    };
+
+    socket.once('error', errorHandler);
+    socket.once('game:state', stateHandler);
+  });
+}
 
 /**
  * 执行一个动作决策。
  * 根据 decision.action 类型调用对应的 socket.emit，
- * 然后等待 game:state 更新。
+ * 并等待 error / game:state 事件确认服务器是否接受。
  */
 export async function executeAction(
   session: GameSession,
@@ -33,21 +72,16 @@ export async function executeAction(
       case 'roll': {
         const diceCount = target?.diceCount;
         socket.emit('game:roll', session.roomId, diceCount);
-        // 掷骰后可能自动结束回合（非 property 地块）或进入 acting 状态
-        // 等待状态变化
-        await sleep(300);
         break;
       }
 
       case 'buyProperty': {
         socket.emit('game:buy', session.roomId);
-        await sleep(300);
         break;
       }
 
       case 'upgradeProperty': {
         socket.emit('game:upgrade', session.roomId, target?.buildingType);
-        await sleep(300);
         break;
       }
 
@@ -56,7 +90,6 @@ export async function executeAction(
           return { success: false, error: 'rebuildTile 需要 tileIndex 和 buildingType' };
         }
         socket.emit('game:rebuild', session.roomId, target.tileIndex, target.buildingType);
-        await sleep(300);
         break;
       }
 
@@ -65,7 +98,6 @@ export async function executeAction(
           return { success: false, error: 'useCard 需要 cardId' };
         }
         socket.emit('game:useCard', session.roomId, target.cardId, target.cardTarget);
-        await sleep(300);
         break;
       }
 
@@ -74,7 +106,6 @@ export async function executeAction(
           return { success: false, error: 'buyCard 需要 cardId' };
         }
         socket.emit('game:buyCard', session.roomId, target.cardId);
-        await sleep(300);
         break;
       }
 
@@ -83,7 +114,6 @@ export async function executeAction(
           return { success: false, error: 'useItem 需要 itemId' };
         }
         socket.emit('game:useItem', session.roomId, target.itemId, target.itemTarget);
-        await sleep(300);
         break;
       }
 
@@ -92,7 +122,6 @@ export async function executeAction(
           return { success: false, error: 'buyItem 需要 itemId' };
         }
         socket.emit('game:buyItem', session.roomId, target.itemId, target.itemQuantity ?? 1);
-        await sleep(300);
         break;
       }
 
@@ -101,28 +130,24 @@ export async function executeAction(
           return { success: false, error: 'tradeStock 需要 stockId 和 stockQuantity' };
         }
         socket.emit('game:stockTrade', session.roomId, target.stockId, target.stockQuantity);
-        await sleep(300);
         break;
       }
 
       case 'takeLoan': {
         const amount = target?.amount ?? 5000;
         socket.emit('game:loan', session.roomId, amount);
-        await sleep(300);
         break;
       }
 
       case 'repayLoan': {
         const repayAmount = target?.amount ?? 5000;
         socket.emit('game:repay', session.roomId, repayAmount);
-        await sleep(300);
         break;
       }
 
       case 'placeLotteryBet': {
         const number = target?.number ?? Math.floor(Math.random() * 10);
         socket.emit('game:lotteryBet', session.roomId, number);
-        await sleep(300);
         break;
       }
 
@@ -131,13 +156,11 @@ export async function executeAction(
           return { success: false, error: 'castMagicSpell 需要 targetPlayerId 和 spell' };
         }
         socket.emit('game:magicSpell', session.roomId, target.targetPlayerId, target.spell);
-        await sleep(300);
         break;
       }
 
       case 'skipTurn': {
         socket.emit('game:skip', session.roomId);
-        await sleep(300);
         break;
       }
 
@@ -146,7 +169,6 @@ export async function executeAction(
           return { success: false, error: 'rescueNpc 需要 npcId' };
         }
         socket.emit('game:rescueNpc', session.roomId, target.npcId);
-        await sleep(300);
         break;
       }
 
@@ -154,7 +176,7 @@ export async function executeAction(
         return { success: false, error: `未知动作类型: ${action}` };
     }
 
-    return { success: true };
+    return await waitActionOutcome(socket, ACTION_RESULT_TIMEOUT);
   } catch (err: any) {
     return { success: false, error: err.message || String(err) };
   }
@@ -172,27 +194,7 @@ export function getAvailableActions(state: GameState, playerId: string): Availab
   const isCurrentPlayer = state.players[state.currentPlayerIndex]?.id === playerId;
 
   if (state.status === 'rolling' && isCurrentPlayer) {
-    const tile = state.map.tiles[player.position];
-
-    // 商店格：允许在掷骰前购买卡片/道具
-    if (tile.type === 'shop') {
-      const affordableCards = Object.values(CARD_DEFINITIONS).filter((c) => (player.coupons ?? 0) >= c.cost);
-      for (const card of affordableCards) {
-        actions.push({
-          type: 'buyCard',
-          label: `购买 ${card.name} (${card.cost}点)`,
-          params: { cardId: card.id, cost: card.cost, targetType: card.target },
-        });
-      }
-      const affordableItems = Object.values(ITEM_DEFINITIONS).filter((i) => i.cost > 0 && (player.coupons ?? 0) >= i.cost);
-      for (const item of affordableItems) {
-        actions.push({
-          type: 'buyItem',
-          label: `购买 ${item.name} (${item.cost}点)`,
-          params: { itemId: item.id, cost: item.cost, itemType: item.type },
-        });
-      }
-    }
+    // 商店购买只能在 acting 阶段（落地后）进行，rolling 阶段不能购买。
 
     // 掷骰阶段：根据载具列出可选骰子数
     const diceRange = player.vehicle === 'car' ? [1, 2, 3] : player.vehicle === 'bike' ? [1, 2] : [1];
@@ -310,10 +312,11 @@ export function getAvailableActions(state: GameState, playerId: string): Availab
   // 股票交易（任何时候都可以）
   if (state.stocks && state.stocks.length > 0) {
     for (const stock of state.stocks) {
-      if (stock.availableShares > 0 && player.cash >= stock.price) {
+      // 至少买 100 股，检查资金和可用股份是否足够
+      if (stock.availableShares >= 100 && player.cash >= stock.price * 100) {
         actions.push({
           type: 'tradeStock',
-          label: `买入 ${stock.name}`,
+          label: `买入 ${stock.name} 100股`,
           params: { stockId: stock.id, stockQuantity: 100 },
         });
       }

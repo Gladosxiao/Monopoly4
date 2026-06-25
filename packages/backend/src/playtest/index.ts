@@ -231,6 +231,8 @@ if (isMainModule) {
     giveAllItems,
     startingCoupons,
     htmlReportPath,
+    // LLM 决策可能较慢，给予更宽松的超时
+    actionTimeout: brainType === 'llm' ? 30000 : 15000,
   });
 
   console.log('\n=== 测试结果 ===');
