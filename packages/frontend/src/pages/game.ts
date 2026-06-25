@@ -31,6 +31,7 @@ import { createTestPanel, isTestMode } from '../testMode/index.js';
 import { registerCleanup, navigateToLogin, navigateToLobby } from '../router.js';
 import { showToast, showPrompt, escapeHtml, showBanner } from '../ui/common.js';
 import { launchMiniGame } from '../minigames/index.js';
+import { StockChart } from '../stockChart.js';
 import {
   rollDice,
   buyProperty,
@@ -56,12 +57,18 @@ import {
 const app = document.getElementById('app')!;
 
 let isStockCollapsed = false;
+let isStockChartCollapsed = false;
 let isBackpackCollapsed = false;
 let boardZoom = Math.max(0.5, Math.min(2.5, Number(localStorage.getItem('monopoly4-board-zoom') || '1')));
 let gameCanvas: HTMLCanvasElement | null = null;
 let currentHoverIndex = -1;
 let currentHoverPixel: { x: number; y: number } | undefined;
 let lastBannerLogTimestamp = 0;
+
+/** 当前 K 线图选中的股票 ID（点击股票行时设置） */
+let selectedStockId: string | null = null;
+/** K 线图组件实例 */
+let stockChartInstance: StockChart | null = null;
 
 /** 需要 Banner 强提醒的日志类型 */
 const BANNER_LOG_TYPES = new Set([
@@ -236,6 +243,13 @@ export async function renderGamePage(roomId: string): Promise<void> {
             </div>
           </div>
           <div class="side-panel">
+            <div class="info-card stock-chart-card" id="stock-chart-card">
+              <div class="stock-chart-card-header">
+                <h2>📈 股市行情</h2>
+                <button id="btn-toggle-stock-chart" class="btn-icon" title="展开/折叠">−</button>
+              </div>
+              <div id="stock-chart-mount"></div>
+            </div>
             <div class="info-card player-info-card">
               <h2>玩家信息</h2>
               <div id="players-info"></div>
@@ -336,6 +350,25 @@ export async function renderGamePage(roomId: string): Promise<void> {
     if (state) renderStockMarket(container, state);
   });
 
+  // K 线图面板折叠切换 + 初始化组件
+  const stockChartCard = container.querySelector<HTMLDivElement>('#stock-chart-card')!;
+  const toggleStockChartBtn = container.querySelector<HTMLButtonElement>('#btn-toggle-stock-chart')!;
+  stockChartCard.classList.toggle('collapsed', isStockChartCollapsed);
+  toggleStockChartBtn.textContent = isStockChartCollapsed ? '+' : '−';
+  toggleStockChartBtn.addEventListener('click', () => {
+    isStockChartCollapsed = !isStockChartCollapsed;
+    stockChartCard.classList.toggle('collapsed', isStockChartCollapsed);
+    toggleStockChartBtn.textContent = isStockChartCollapsed ? '+' : '−';
+    // 折叠/展开后让图表根据新尺寸重绘
+    if (!isStockChartCollapsed && stockChartInstance) {
+      // 延迟一帧让 CSS 过渡完成再重绘
+      requestAnimationFrame(() => stockChartInstance?.redraw());
+    }
+  });
+  const stockChartMount = container.querySelector<HTMLDivElement>('#stock-chart-mount')!;
+  stockChartInstance = new StockChart({ minHeight: 240 });
+  stockChartInstance.mount(stockChartMount);
+
   // 卡片/道具面板折叠切换
   const backpackPanel = container.querySelector('.backpack-wide-panel')!;
   const toggleBackpackBtn = container.querySelector<HTMLButtonElement>('#btn-toggle-backpack')!;
@@ -399,6 +432,14 @@ export async function renderGamePage(roomId: string): Promise<void> {
     renderActions(container, state);
     renderStockMarket(container, state);
     renderLogs(container, state);
+    // 把当前股票数据喂给 K 线图组件
+    if (stockChartInstance) {
+      // 若选中的股票已被移除，重置选择
+      if (selectedStockId && !state.stocks.some((s) => s.id === selectedStockId)) {
+        selectedStockId = null;
+      }
+      stockChartInstance.setData(state.stocks, state.stockTrends, selectedStockId);
+    }
     maybeShowEventBanners(state.logs);
 
     previousState = cloneForAnimation(state);
@@ -459,6 +500,15 @@ export async function renderGamePage(roomId: string): Promise<void> {
       showToast(msg, 'error');
     })
   );
+
+  // 页面卸载时清理 K 线图组件
+  registerCleanup(() => {
+    if (stockChartInstance) {
+      stockChartInstance.unmount();
+      stockChartInstance = null;
+    }
+    selectedStockId = null;
+  });
 
   // 棋子图片加载完成后重绘棋盘
   const onTokenLoaded = () => {
@@ -993,7 +1043,28 @@ export function renderStockMarket(container: HTMLElement, state: GameState): voi
     const chairman = company?.chairmanPlayerId
       ? state.players.find((p) => p.id === company.chairmanPlayerId)?.username || '无'
       : '无';
+    const trend = state.stockTrends.find((t) => t.stockId === stock.id);
     const tr = document.createElement('tr');
+    // 选中态:点击行即可在 K 线图查看该股票
+    if (stock.id === selectedStockId) {
+      tr.classList.add('stock-row-selected');
+    }
+    tr.classList.add('stock-row-clickable');
+    tr.title = '点击查看 K 线图';
+    tr.addEventListener('click', (e) => {
+      // 避免点击买入/卖出按钮时同时触发行选中
+      const target = e.target as HTMLElement;
+      if (target.closest('button')) return;
+      if (selectedStockId === stock.id) {
+        selectedStockId = null;
+      } else {
+        selectedStockId = stock.id;
+      }
+      if (stockChartInstance) {
+        stockChartInstance.setSelectedStock(selectedStockId);
+      }
+      renderStockMarket(container, state);
+    });
     const fluctuationClass = stock.fluctuation >= 0 ? 'stock-up' : 'stock-down';
     const fluctuationSign = stock.fluctuation >= 0 ? '+' : '';
     const unrealized = holding > 0 ? (stock.price - costBasis) * holding : 0;
@@ -1003,9 +1074,15 @@ export function renderStockMarket(container: HTMLElement, state: GameState): voi
     const ratioText = `${shareRatio.toFixed(2)}%`;
     const isChairman = company?.chairmanPlayerId === currentPlayer?.id;
     const ratioClass = isChairman ? 'stock-chairman' : '';
+    const trendBadge = trend
+      ? `<span class="stock-trend-badge" style="--trend-color:${escapeHtml(trend.templateColor)}" title="${escapeHtml(trend.templateName)} · 进度 ${trend.currentIndex}/20">🔥 ${escapeHtml(trend.templateName)}</span>`
+      : '';
     tr.innerHTML = `
       <td>
-        <span class="stock-name">${escapeHtml(stock.name)}</span>
+        <div class="stock-name-line">
+          <span class="stock-name">${escapeHtml(stock.name)}</span>
+          ${trendBadge}
+        </div>
         <span class="stock-meta">董事长：${escapeHtml(chairman)}</span>
       </td>
       <td><span class="stock-price">$${stock.price.toLocaleString()}</span></td>
