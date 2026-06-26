@@ -116,6 +116,7 @@ const state: GameState = {
   npcs: [],
   stocks,
   companies,
+  stockTrends: [],
   marketStatus: { loanFrozenDays: 0 },
   lotteryJackpot: 0,
   lotteryBets: {},
