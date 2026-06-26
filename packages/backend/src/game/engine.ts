@@ -636,6 +636,9 @@ export function calculateRent(
     }
   }
 
+  // 全局过路费倍率
+  rent *= state.config.rentMultiplier ?? 1;
+
   // 神明影响
   if (state.config.enableSpirits !== false) {
     rent *= getSpiritRentMultiplier(visitor);
@@ -691,7 +694,7 @@ export function movePlayer(state: GameState, steps: number): GameState {
       (direction === 1 && currentPathIdx < previousPathIdx) ||
       (direction === -1 && currentPathIdx > previousPathIdx)
     ) {
-      const salary = 10000;
+      const salary = state.config.salary ?? 10000;
       player.cash += salary;
       state.logs.push({
         timestamp: Date.now(),

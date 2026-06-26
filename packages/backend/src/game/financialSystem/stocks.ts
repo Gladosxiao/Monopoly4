@@ -176,7 +176,8 @@ export function updateStockPrices(state: GameState): void {
       continue;
     }
 
-    const change = (Math.random() - 0.5) * 0.2; // -10% ~ +10%
+    const volatility = state.config.stockVolatility ?? 0.2;
+    const change = (Math.random() - 0.5) * volatility; // ±(volatility/2)
     stock.price = Math.max(1, Math.floor(stock.price * (1 + change)));
     stock.fluctuation = Math.round(change * 1000) / 10;
   }

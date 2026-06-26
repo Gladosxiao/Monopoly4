@@ -85,6 +85,8 @@ export const LAND_LEASE_DAYS: Record<LandLease, number | null> = {
 
 export interface GameConfig {
   totalFunds: number;
+  /** 经过起点领取的工资金额（默认 10000） */
+  salary?: number;
   moveMode: 'walk' | 'bike' | 'car';
   landLease: LandLease;
   gameTime: GameTime;
@@ -98,12 +100,17 @@ export interface GameConfig {
   enableSpirits?: boolean;
   /** 是否启用股票与公司投资系统（默认启用） */
   enableStock?: boolean;
+  /** 过路费倍率（默认 1） */
+  rentMultiplier?: number;
+  /** 股价日波动幅度（默认 0.2，即 ±10%） */
+  stockVolatility?: number;
   /** 是否启用 AI 补位（默认启用） */
   enableAI?: boolean;
 }
 
 export const DEFAULT_GAME_CONFIG: GameConfig = {
   totalFunds: 10000,
+  salary: 10000,
   moveMode: 'walk',
   landLease: 'perpetual',
   gameTime: 'perpetual',
@@ -114,6 +121,8 @@ export const DEFAULT_GAME_CONFIG: GameConfig = {
   enableSpirits: true,
   enableStock: true,
   enableAI: true,
+  rentMultiplier: 1,
+  stockVolatility: 0.2,
 };
 
 // ==================== 地图 ====================
@@ -559,13 +568,13 @@ export const SIMPLE_MAP: GameMap = {
     { index: 6, name: '风车镇', type: 'property', size: 'small', group: 1, basePrice: 70, baseRent: 7, level: 0 },
     { index: 7, name: '苹果园', type: 'property', size: 'small', group: 1, basePrice: 80, baseRent: 8, level: 0 },
     // 系统格
-    { index: 8, name: '税务', type: 'tax', basePrice: 0, baseRent: 0, level: 0 },
+    { index: 8, name: '商店', type: 'shop', basePrice: 0, baseRent: 0, level: 0 },
     // 第三组小地产
     { index: 9, name: '橡树林', type: 'property', size: 'small', group: 2, basePrice: 90, baseRent: 9, level: 0 },
     { index: 10, name: '枫叶林', type: 'property', size: 'small', group: 2, basePrice: 100, baseRent: 10, level: 0 },
     { index: 11, name: '港口', type: 'property', size: 'small', group: 2, basePrice: 110, baseRent: 11, level: 0 },
     // 系统格
-    { index: 12, name: '命运', type: 'fate', basePrice: 0, baseRent: 0, level: 0 },
+    { index: 12, name: '商店', type: 'shop', basePrice: 0, baseRent: 0, level: 0 },
     // 第四组小地产
     { index: 13, name: '渔人码头', type: 'property', size: 'small', group: 3, basePrice: 120, baseRent: 12, level: 0 },
     { index: 14, name: '建设路', type: 'property', size: 'small', group: 3, basePrice: 130, baseRent: 13, level: 0 },
@@ -582,7 +591,7 @@ export const SIMPLE_MAP: GameMap = {
     { index: 21, name: '钻石广场', type: 'property', size: 'large', span: 2, group: 5, basePrice: 300, baseRent: 30, level: 0 },
     { index: 22, name: '钻石广场', type: 'property', size: 'large', span: 2, group: 5, basePrice: 300, baseRent: 30, level: 0 },
     // 系统格
-    { index: 23, name: '新闻点', type: 'news', basePrice: 0, baseRent: 0, level: 0 },
+    { index: 23, name: '商店', type: 'shop', basePrice: 0, baseRent: 0, level: 0 },
     // 第二块大地产
     { index: 24, name: '黄金海岸', type: 'property', size: 'large', span: 2, group: 6, basePrice: 320, baseRent: 32, level: 0 },
     { index: 25, name: '黄金海岸', type: 'property', size: 'large', span: 2, group: 6, basePrice: 320, baseRent: 32, level: 0 },
@@ -592,12 +601,12 @@ export const SIMPLE_MAP: GameMap = {
     { index: 27, name: '云顶宫', type: 'property', size: 'large', span: 2, group: 7, basePrice: 340, baseRent: 34, level: 0 },
     { index: 28, name: '云顶宫', type: 'property', size: 'large', span: 2, group: 7, basePrice: 340, baseRent: 34, level: 0 },
     // 系统格
-    { index: 29, name: '机会', type: 'chance', basePrice: 0, baseRent: 0, level: 0 },
+    { index: 29, name: '商店', type: 'shop', basePrice: 0, baseRent: 0, level: 0 },
     // 第四块大地产
     { index: 30, name: '水晶湖', type: 'property', size: 'large', span: 2, group: 8, basePrice: 360, baseRent: 36, level: 0 },
     { index: 31, name: '水晶湖', type: 'property', size: 'large', span: 2, group: 8, basePrice: 360, baseRent: 36, level: 0 },
     // 系统格
-    { index: 32, name: '税务', type: 'tax', basePrice: 0, baseRent: 0, level: 0 },
+    { index: 32, name: '商店', type: 'shop', basePrice: 0, baseRent: 0, level: 0 },
     // 第五块大地产
     { index: 33, name: '石油大道', type: 'property', size: 'large', span: 2, group: 9, basePrice: 380, baseRent: 38, level: 0 },
     { index: 34, name: '石油大道', type: 'property', size: 'large', span: 2, group: 9, basePrice: 380, baseRent: 38, level: 0 },
@@ -605,8 +614,8 @@ export const SIMPLE_MAP: GameMap = {
     { index: 35, name: '航空公司', type: 'company', companyId: 'airline', basePrice: 0, baseRent: 0, level: 0 },
     { index: 36, name: '电脑公司', type: 'company', companyId: 'computer', basePrice: 0, baseRent: 0, level: 0 },
     { index: 37, name: '保险公司', type: 'company', companyId: 'insurance', basePrice: 0, baseRent: 0, level: 0 },
-    { index: 38, name: '得点券 50', type: 'coupon', couponValue: 50, basePrice: 0, baseRent: 0, level: 0 },
-    { index: 39, name: '命运', type: 'fate', basePrice: 0, baseRent: 0, level: 0 },
+    { index: 38, name: '得点券 100', type: 'coupon', couponValue: 100, basePrice: 0, baseRent: 0, level: 0 },
+    { index: 39, name: '商店', type: 'shop', basePrice: 0, baseRent: 0, level: 0 },
   ],
 };
 

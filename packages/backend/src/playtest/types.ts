@@ -125,6 +125,9 @@ export interface PlaytestConfig {
   /** 游戏配置覆盖 */
   gameConfig?: Partial<{
     totalFunds: number;
+    salary: number;
+    rentMultiplier: number;
+    stockVolatility: number;
     mapId: string;
     winCondition: string;
     landLease: string;

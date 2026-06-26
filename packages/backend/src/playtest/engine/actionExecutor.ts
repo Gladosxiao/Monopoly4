@@ -244,6 +244,8 @@ export function getAvailableActions(state: GameState, playerId: string): Availab
 
       const affordableItems = Object.values(ITEM_DEFINITIONS).filter((i) => i.cost > 0 && player.coupons >= i.cost);
       for (const item of affordableItems) {
+        const currentQty = player.items.find((i) => i.itemId === item.id)?.quantity ?? 0;
+        if (currentQty >= item.maxStack) continue; // 已达堆叠上限，不再显示购买
         actions.push({
           type: 'buyItem',
           label: `购买 ${item.name} (${item.cost}点)`,
@@ -312,12 +314,21 @@ export function getAvailableActions(state: GameState, playerId: string): Availab
   // 股票交易（任何时候都可以）
   if (state.stocks && state.stocks.length > 0) {
     for (const stock of state.stocks) {
+      const holding = player.stockHoldings?.[stock.id] ?? 0;
       // 至少买 100 股，检查资金和可用股份是否足够
       if (stock.availableShares >= 100 && player.cash >= stock.price * 100) {
         actions.push({
           type: 'tradeStock',
           label: `买入 ${stock.name} 100股`,
           params: { stockId: stock.id, stockQuantity: 100 },
+        });
+      }
+      // 持有该股票时提供卖出选项
+      if (holding >= 100) {
+        actions.push({
+          type: 'tradeStock',
+          label: `卖出 ${stock.name} 100股`,
+          params: { stockId: stock.id, stockQuantity: -100 },
         });
       }
     }

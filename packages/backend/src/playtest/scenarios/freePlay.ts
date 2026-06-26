@@ -498,6 +498,7 @@ export async function runFreePlay(
 
   // 控制台输出整局监控摘要
   if (finalState) {
+    metrics.finalize(finalState);
     const allMetrics = metrics.getAllPlayerMetrics(finalState);
     const totalAttacks = Object.values(allMetrics).reduce((sum, m) => sum + m.attackActionCount, 0);
     const totalStockProfit = Object.values(allMetrics).reduce(
@@ -520,6 +521,7 @@ export async function runFreePlay(
 
   const gameMetrics = finalState
     ? (() => {
+        metrics.finalize(finalState);
         const allMetrics = metrics.getAllPlayerMetrics(finalState);
         const totalAttacks = Object.values(allMetrics).reduce((sum, m) => sum + m.attackActionCount, 0);
         const totalStockProfit = Object.values(allMetrics).reduce(

@@ -220,26 +220,40 @@ if (isMainModule) {
   const startingCoupons = parseInt(process.env.PLAYTEST_STARTING_COUPONS ?? '', 10) || undefined;
   const htmlReportPath = process.env.PLAYTEST_HTML_REPORT_PATH;
 
-  // 允许通过环境变量覆盖胜利条件/游戏时长，避免默认 unlimited/perpetual 永远结束不了
+  // 允许通过环境变量覆盖经济压力参数，默认提高压力以更快出现破产/商店交互
+  const totalFundsEnv = parseInt(process.env.PLAYTEST_TOTAL_FUNDS ?? '', 10);
   const winConditionEnv = process.env.PLAYTEST_WIN_CONDITION;
   const gameTimeEnv = process.env.PLAYTEST_GAME_TIME;
   const validWinConditions: WinCondition[] = [3, 5, 10, 50, 100, 'unlimited'];
   const validGameTimes: GameTime[] = ['1m', '3m', '6m', '1y', '2y', 'perpetual'];
+  const totalFunds = Number.isFinite(totalFundsEnv) && totalFundsEnv > 0 ? totalFundsEnv : 3000;
+  const salaryEnv = parseInt(process.env.PLAYTEST_SALARY ?? '', 10);
+  const salary = Number.isFinite(salaryEnv) && salaryEnv >= 0 ? salaryEnv : 0;
+  const rentMultiplierEnv = parseFloat(process.env.PLAYTEST_RENT_MULTIPLIER ?? '');
+  const rentMultiplier = Number.isFinite(rentMultiplierEnv) && rentMultiplierEnv > 0 ? rentMultiplierEnv : 15;
+  const stockVolatilityEnv = parseFloat(process.env.PLAYTEST_STOCK_VOLATILITY ?? '');
+  const stockVolatility = Number.isFinite(stockVolatilityEnv) && stockVolatilityEnv > 0 ? stockVolatilityEnv : 0.6;
   const winCondition = validWinConditions.includes(Number(winConditionEnv) as WinCondition)
     ? (Number(winConditionEnv) as WinCondition)
     : winConditionEnv === 'unlimited'
     ? 'unlimited'
     : undefined;
+  // 默认 1 年游戏时长，既保证能跑满 200 行动，又会在超时前自然结束
   const gameTime = validGameTimes.includes(gameTimeEnv as GameTime)
     ? (gameTimeEnv as GameTime)
-    : undefined;
+    : '1y';
 
-  const gameConfig: PlaytestConfig['gameConfig'] = {};
-  if (winCondition !== undefined) gameConfig.winCondition = winCondition as any;
-  if (gameTime !== undefined) gameConfig.gameTime = gameTime as any;
+  const gameConfig: PlaytestConfig['gameConfig'] = {
+    totalFunds,
+    salary,
+    rentMultiplier,
+    stockVolatility,
+    winCondition: winCondition as any,
+    gameTime,
+  };
 
   console.log(
-    `[Playtest] 启动自动化对局测试 (maxTurns=${maxTurns}, brain=${brainType}, allCards=${giveAllCards}, allItems=${giveAllItems}, winCondition=${winCondition ?? '默认'}, gameTime=${gameTime ?? '默认'})`
+    `[Playtest] 启动自动化对局测试 (maxTurns=${maxTurns}, brain=${brainType}, allCards=${giveAllCards}, allItems=${giveAllItems}, totalFunds=${totalFunds}, salary=${salary}, winCondition=${winCondition ?? '默认'}, gameTime=${gameTime})`
   );
 
   const report = await runPlaytest({
@@ -250,7 +264,7 @@ if (isMainModule) {
     giveAllItems,
     startingCoupons,
     htmlReportPath,
-    gameConfig: Object.keys(gameConfig).length > 0 ? gameConfig : undefined,
+    gameConfig,
     // LLM 决策可能较慢，给予更宽松的超时
     actionTimeout: brainType === 'llm' ? 30000 : 15000,
   });

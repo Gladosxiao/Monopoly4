@@ -7,6 +7,8 @@ import type {
   Room,
   GameState,
   RoomPlayer,
+  Player,
+  Tile,
 } from '@monopoly4/shared';
 import { CHARACTERS, DEFAULT_GAME_CONFIG } from '@monopoly4/shared';
 import { rooms, games, socketRoomMap } from '../store.js';
@@ -123,6 +125,29 @@ export function setupSocketIO(httpServer: HttpServer): SocketIOServer<ClientToSe
         }
       });
     };
+
+    /**
+     * 判断玩家落地后是否需要进入 acting 阶段等待玩家决策。
+     * 现在所有地块都进入 acting 阶段，允许玩家随时使用卡片/道具/交易股票，
+     * 避免这些操作被购买/商店逻辑完全压制。
+     */
+    function shouldWaitForPlayerDecision(player: Player, tile: Tile): boolean {
+      if (tile.type === 'property') {
+        // 空地、可升级的自己地产：等待购买/升级
+        if (!tile.ownerId) return true;
+        if (
+          tile.ownerId === player.id &&
+          (tile.level ?? 0) < 5 &&
+          tile.buildingType !== 'chainStore' &&
+          tile.buildingType !== 'park' &&
+          tile.buildingType !== 'gasStation'
+        ) {
+          return true;
+        }
+      }
+      // 商店、系统格等都进入 acting，给玩家使用卡片/道具/股票交易的机会
+      return true;
+    }
 
     // AI 自动行动：检查当前玩家是否为 AI，若是则延迟自动执行回合
     const aiTimers = new Map<string, ReturnType<typeof setTimeout>>();
@@ -305,10 +330,7 @@ export function setupSocketIO(httpServer: HttpServer): SocketIOServer<ClientToSe
       // 根据落地地块类型决定是否自动结束回合
       const player = state.players[state.currentPlayerIndex];
       const tile = state.map.tiles[player.position];
-      const shouldWait = tile.type === 'property' && (
-        !tile.ownerId || // 空地，等玩家决定是否购买
-        (tile.ownerId === player.id && tile.level < 5 && tile.buildingType !== 'chainStore' && tile.buildingType !== 'park' && tile.buildingType !== 'gasStation') // 自己的土地且可升级
-      );
+      const shouldWait = shouldWaitForPlayerDecision(player, tile);
 
       if (!shouldWait) {
         // 对手土地（过路费将在 endTurn -> handleTileEffect 中处理）、系统格、已满级土地：自动结束回合
@@ -316,7 +338,7 @@ export function setupSocketIO(httpServer: HttpServer): SocketIOServer<ClientToSe
         emitState(roomId, state);
         scheduleAITurn(roomId);
       } else {
-        // 等待玩家选择购买/升级/跳过
+        // 等待玩家选择购买/升级/购买卡片道具/跳过
         emitState(roomId, state);
       }
     });
@@ -456,10 +478,7 @@ export function setupSocketIO(httpServer: HttpServer): SocketIOServer<ClientToSe
         }
         const player = state.players[state.currentPlayerIndex];
         const tile = state.map.tiles[player.position];
-        const shouldWait = tile.type === 'property' && (
-          !tile.ownerId ||
-          (tile.ownerId === player.id && tile.level < 5 && tile.buildingType !== 'chainStore' && tile.buildingType !== 'park' && tile.buildingType !== 'gasStation')
-        );
+        const shouldWait = shouldWaitForPlayerDecision(player, tile);
         if (!shouldWait) {
           endTurn(state);
           emitState(roomId, state);

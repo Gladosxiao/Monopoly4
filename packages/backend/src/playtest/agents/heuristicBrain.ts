@@ -29,6 +29,8 @@ export class HeuristicBrain implements PlayerBrain {
   private upgradeAggressiveness: number;
   private allowLoan: boolean;
   private useCards: boolean;
+  /** 记录上一动作，用于避免商店无限购买循环 */
+  private lastAction: { action: string; target?: any; position: number } | null = null;
 
   constructor(
     name: string,
@@ -49,21 +51,28 @@ export class HeuristicBrain implements PlayerBrain {
   }
 
   async decide(state: GameState, me: Player, availableActions: AvailableAction[]): Promise<ActionDecision> {
+    let result: ActionDecision;
+
     // 掷骰阶段
     if (state.status === 'rolling') {
-      return this.decideRoll(state, me, availableActions);
+      result = this.decideRoll(state, me, availableActions);
+    } else if (state.status === 'acting') {
+      // 行动阶段
+      result = this.decideAction(state, me, availableActions);
+    } else {
+      // 其他阶段（小游戏等），直接跳过
+      result = { action: 'skipTurn', reason: '非 rolling/acting 阶段，跳过' };
     }
 
-    // 行动阶段
-    if (state.status === 'acting') {
-      return this.decideAction(state, me, availableActions);
-    }
-
-    // 其他阶段（小游戏等），直接跳过
-    return { action: 'skipTurn', reason: '非 rolling/acting 阶段，跳过' };
+    this.lastAction = { action: result.action, target: result.target, position: me.position };
+    return result;
   }
 
   private decideRoll(state: GameState, me: Player, availableActions: AvailableAction[]): ActionDecision {
+    // 掷骰前也可进行股票交易（买入/卖出）
+    const stockDecision = this.decideTradeStock(state, me, availableActions);
+    if (stockDecision) return stockDecision;
+
     // 只有存在明确目标时才使用遥控骰子，避免滥用
     const remoteDiceAction = availableActions.find(
       (a) => a.type === 'useItem' && a.params?.itemId === 'remoteDice'
@@ -113,7 +122,7 @@ export class HeuristicBrain implements PlayerBrain {
       }
     }
 
-    // 3. 使用卡片/道具（有策略）
+    // 3. 使用卡片/道具（有策略，优先消耗已有卡片道具）
     if (this.useCards) {
       const cardDecision = this.decideUseCard(state, me, availableActions);
       if (cardDecision) return cardDecision;
@@ -122,13 +131,17 @@ export class HeuristicBrain implements PlayerBrain {
       if (itemDecision) return itemDecision;
     }
 
-    // 4. 商店格 → 购买卡片/道具（按需购买）
+    // 4. 股票交易（资金充裕且股票价格低时买入，或止盈卖出）
+    const stockDecision = this.decideTradeStock(state, me, availableActions);
+    if (stockDecision) return stockDecision;
+
+    // 5. 商店格 → 购买卡片/道具（按需购买）
     if (tile.type === 'shop' && this.useCards) {
       const shopDecision = this.decideShopPurchase(state, me, availableActions);
       if (shopDecision) return shopDecision;
     }
 
-    // 5. 解救 NPC
+    // 6. 解救 NPC
     const rescueAction = availableActions.find((a) => a.type === 'rescueNpc');
     if (rescueAction) {
       return {
@@ -137,10 +150,6 @@ export class HeuristicBrain implements PlayerBrain {
         reason: '解救 NPC',
       };
     }
-
-    // 6. 股票交易（资金充裕且股票价格低时买入）
-    const stockDecision = this.decideTradeStock(state, me, availableActions);
-    if (stockDecision) return stockDecision;
 
     // 7. 有贷款且资金够 → 还款
     if (me.loan > 0 && me.cash > me.loan * 1.2) {
@@ -165,10 +174,43 @@ export class HeuristicBrain implements PlayerBrain {
 
     const totalWealth = me.cash + me.deposit - me.loan;
 
-    // 只买入低价股，保留至少 30% 资金
-    const affordableStock = tradeActions.find((a) => {
+    // 1. 优先卖出高价股（止盈）或现金紧张时割肉
+    const sellAction = tradeActions.find((a) => {
+      const qty = a.params?.stockQuantity as number;
+      if (qty >= 0) return false;
       const stock = state.stocks!.find((s) => s.id === a.params?.stockId);
-      return stock && me.cash > stock.price * 100 + totalWealth * 0.3;
+      return stock && stock.price >= 28;
+    });
+    if (sellAction) {
+      const stockId = sellAction.params?.stockId as string;
+      const stock = state.stocks!.find((s) => s.id === stockId);
+      return {
+        action: 'tradeStock',
+        target: { stockId, stockQuantity: -100 },
+        reason: `股价 ${stock?.price} 较高，卖出 ${stock?.name ?? stockId} 100 股止盈`,
+      };
+    }
+
+    // 现金紧张（低于总资产 10%）时卖出任意持股
+    if (me.cash < totalWealth * 0.1) {
+      const anySell = tradeActions.find((a) => (a.params?.stockQuantity as number) < 0);
+      if (anySell) {
+        const stockId = anySell.params?.stockId as string;
+        const stock = state.stocks!.find((s) => s.id === stockId);
+        return {
+          action: 'tradeStock',
+          target: { stockId, stockQuantity: -100 },
+          reason: '现金紧张，卖出股票补充资金',
+        };
+      }
+    }
+
+    // 2. 买入低价股，保留至少 10% 资金（提高股票参与度）
+    const affordableStock = tradeActions.find((a) => {
+      const qty = a.params?.stockQuantity as number;
+      if (qty < 0) return false;
+      const stock = state.stocks!.find((s) => s.id === a.params?.stockId);
+      return stock && stock.price <= 24 && me.cash >= stock.price * 100;
     });
 
     if (affordableStock) {
@@ -342,6 +384,15 @@ export class HeuristicBrain implements PlayerBrain {
 
   /** 商店购买决策 */
   private decideShopPurchase(state: GameState, me: Player, availableActions: AvailableAction[]): ActionDecision | null {
+    // 如果上一动作已经在本商店购买/使用卡片道具，则不再继续购买，避免无限循环
+    if (
+      this.lastAction &&
+      ['buyCard', 'buyItem', 'useCard', 'useItem'].includes(this.lastAction.action) &&
+      this.lastAction.position === me.position
+    ) {
+      return null;
+    }
+
     const availableBuyCards = availableActions.filter((a) => a.type === 'buyCard');
     const availableBuyItems = availableActions.filter((a) => a.type === 'buyItem');
     if (availableBuyCards.length === 0 && availableBuyItems.length === 0) return null;

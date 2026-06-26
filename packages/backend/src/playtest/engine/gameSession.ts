@@ -76,15 +76,26 @@ function makePlayerConfigs(count: number): Array<{ userId: string; username: str
 /**
  * 根据 Playtest 配置覆盖玩家初始状态：
  * - 覆盖初始点券
- * - 发放全部卡片/道具（用于专门验证使用逻辑）
+ * - 发放起始卡片/道具包（每种 1 个），留出背包空间以便玩家在商店购买补充
  */
 function applyPlaytestOverrides(state: GameState, config: PlaytestConfig): void {
+  // 起始卡片包：以攻击/控制/干扰为主，保留空间给商店购买
+  const STARTER_CARDS = new Set([
+    'priceRise', 'monster', 'demolish', 'frame', 'turtle',
+    'turnAround', 'stay', 'equalPoverty', 'taxAudit', 'snatch',
+  ]);
+  // 起始道具包：陷阱/遥控骰子/清除/飞弹各 1 个
+  const STARTER_ITEMS = new Set([
+    'remoteDice', 'mine', 'barrier', 'missile', 'robotDoll',
+  ]);
+
   for (const player of state.players) {
     if (config.startingCoupons !== undefined) {
       player.coupons = config.startingCoupons;
     }
 
     if (config.giveAllCards) {
+      // 给全部卡片（保留上限）
       player.cards = [];
       for (const def of Object.values(CARD_DEFINITIONS)) {
         if (def.cost <= 0) continue;
@@ -92,32 +103,52 @@ function applyPlaytestOverrides(state: GameState, config: PlaytestConfig): void 
         const instanceId = `${def.id}-playtest-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
         player.cards.push({ instanceId, cardId: def.id });
       }
+    } else if (player.cards.length === 0) {
+      // 默认发放 starter kit，确保玩家有卡片可用
+      for (const def of Object.values(CARD_DEFINITIONS)) {
+        if (!STARTER_CARDS.has(def.id)) continue;
+        if (player.cards.length >= 15) break;
+        const instanceId = `${def.id}-playtest-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+        player.cards.push({ instanceId, cardId: def.id });
+      }
     }
 
     if (config.giveAllItems) {
-      // 为避免经济失真，测试模式下每种道具只给 1 个（而非 maxStack 9 个）
+      // 给全部道具到堆叠上限
+      player.items = [];
       for (const def of Object.values(ITEM_DEFINITIONS)) {
         if (def.cost <= 0) continue;
         const existing = player.items.find((i) => i.itemId === def.id);
         if (existing) {
-          existing.quantity = 1;
+          existing.quantity = def.maxStack;
         } else {
           const instanceId = `${def.id}-playtest-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-          player.items.push({ instanceId, itemId: def.id, quantity: 1 });
+          player.items.push({ instanceId, itemId: def.id, quantity: def.maxStack });
+        }
+      }
+    } else {
+      // 默认发放 starter kit，确保玩家有道具可用
+      for (const itemId of STARTER_ITEMS) {
+        const def = ITEM_DEFINITIONS[itemId];
+        if (!def) continue;
+        const existing = player.items.find((i) => i.itemId === itemId);
+        if (existing) {
+          existing.quantity = 1;
+        } else {
+          const instanceId = `${itemId}-playtest-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+          player.items.push({ instanceId, itemId, quantity: 1 });
         }
       }
     }
   }
 
-  if (config.giveAllCards || config.giveAllItems || config.startingCoupons !== undefined) {
-    state.logs.push({
-      timestamp: Date.now(),
-      type: 'playtest:overrides',
-      message: `[Playtest] 已应用开局覆盖：点券=${config.startingCoupons ?? '默认'}, 全卡片=${config.giveAllCards ?? false}, 全道具=${config.giveAllItems ?? false}`,
-    });
-    for (const p of state.players) {
-      console.log(`[PlaytestOverrides] ${p.username}: cards=${p.cards.length}, items=${p.items.map((i) => `${i.itemId}x${i.quantity}`).join(',')}, coupons=${p.coupons}`);
-    }
+  state.logs.push({
+    timestamp: Date.now(),
+    type: 'playtest:overrides',
+    message: `[Playtest] 已应用开局覆盖：点券=${config.startingCoupons ?? '默认'}, 全卡片=${config.giveAllCards ?? false}, 全道具=${config.giveAllItems ?? false}`,
+  });
+  for (const p of state.players) {
+    console.log(`[PlaytestOverrides] ${p.username}: cards=${p.cards.length}, items=${p.items.map((i) => `${i.itemId}x${i.quantity}`).join(',')}, coupons=${p.coupons}`);
   }
 }
 

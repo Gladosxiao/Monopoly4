@@ -70,6 +70,7 @@ export class GameMetricsCollector {
   private attackEvents: AttackActionEvent[] = [];
   private stockBooks = new Map<string, Record<string, StockHolding>>();
   private realizedProfits = new Map<string, number>();
+  private unrealizedProfits = new Map<string, number>();
   private totalTrades = new Map<string, number>();
 
   /** 记录一次攻击/控制行为 */
@@ -163,8 +164,7 @@ export class GameMetricsCollector {
           unrealized += (stock.price - holding.avgCost) * holding.shares;
         }
       }
-      const existing = this.getPlayerMetrics(player.id);
-      existing.stock.unrealizedProfit = unrealized;
+      this.unrealizedProfits.set(player.id, unrealized);
     }
   }
 
@@ -177,7 +177,7 @@ export class GameMetricsCollector {
       stock: {
         book: this.stockBooks.get(playerId) ?? {},
         realizedProfit: this.realizedProfits.get(playerId) ?? 0,
-        unrealizedProfit: 0,
+        unrealizedProfit: this.unrealizedProfits.get(playerId) ?? 0,
         totalTrades: this.totalTrades.get(playerId) ?? 0,
       },
     };

@@ -20,6 +20,7 @@ export interface PlayerSnapshot {
   properties: number;
   propertyValue: number;
   stockValue: number;
+  stockProfit: number;
   cards: number;
   items: number;
   netAsset: number;
@@ -55,6 +56,20 @@ function calcStockValue(state: GameState, player: Player): number {
   return total;
 }
 
+/** 计算玩家股票未实现盈亏 */
+function calcStockProfit(state: GameState, player: Player): number {
+  if (!player.stockHoldings || !state.stocks || !player.stockCostBasis) return 0;
+  let total = 0;
+  for (const [stockId, shares] of Object.entries(player.stockHoldings)) {
+    const stock = state.stocks.find((s) => s.id === stockId);
+    const costBasis = player.stockCostBasis[stockId] ?? 0;
+    if (stock && shares > 0) {
+      total += Math.floor((stock.price - costBasis) * shares);
+    }
+  }
+  return total;
+}
+
 /** 采集一回合快照 */
 export function captureSnapshot(state: GameState, turn: number): TurnSnapshot {
   const players: PlayerSnapshot[] = state.players.map((p) => {
@@ -69,6 +84,7 @@ export function captureSnapshot(state: GameState, turn: number): TurnSnapshot {
       properties: p.properties.length,
       propertyValue: pv,
       stockValue: sv,
+      stockProfit: calcStockProfit(state, p),
       cards: p.cards.length,
       items: p.items.length,
       netAsset: p.cash + (p.deposit ?? 0) - (p.loan ?? 0) + pv + sv,
@@ -269,7 +285,7 @@ ${(actionStats['useItem'] ?? 0) > 0 ? '<div class="good">✅ 有道具使用行�
 <div class="section">
   <h2>📊 最终玩家状态</h2>
   <table>
-    <tr><th>玩家</th><th>现金</th><th>存款</th><th>贷款</th><th>点券</th><th>地产/价值</th><th>股票/价值</th><th>卡片</th><th>道具</th><th>净资产</th><th>破产</th></tr>
+    <tr><th>玩家</th><th>现金</th><th>存款</th><th>贷款</th><th>点券</th><th>地产/价值</th><th>股票/价值</th><th>股票盈亏</th><th>卡片</th><th>道具</th><th>净资产</th><th>破产</th></tr>
     ${finalSnap?.players.map((p) => `
     <tr>
       <td><strong>${p.username}</strong></td>
@@ -277,6 +293,7 @@ ${(actionStats['useItem'] ?? 0) > 0 ? '<div class="good">✅ 有道具使用行�
       <td>$${p.loan.toLocaleString()}</td><td>${p.coupons}</td>
       <td>${p.properties}块 / $${p.propertyValue.toLocaleString()}</td>
       <td>$${p.stockValue.toLocaleString()}</td>
+      <td style=\"color:${p.stockProfit >= 0 ? 'green' : 'red'}\">$${p.stockProfit.toLocaleString()}</td>
       <td>${p.cards}</td><td>${p.items}</td>
       <td style="font-weight:bold;color:${p.netAsset < 0 ? 'red' : 'green'}">$${p.netAsset.toLocaleString()}</td>
       <td>${p.isBankrupt ? '❌' : '✅'}</td>
