@@ -69,9 +69,8 @@ export class HeuristicBrain implements PlayerBrain {
   }
 
   private decideRoll(state: GameState, me: Player, availableActions: AvailableAction[]): ActionDecision {
-    // 掷骰前也可进行股票交易（买入/卖出）
-    const stockDecision = this.decideTradeStock(state, me, availableActions);
-    if (stockDecision) return stockDecision;
+    // rolling 阶段必须掷骰子前进（唯一例外：使用遥控骰子）。
+    // 股票交易、卡片使用等必须在 acting 阶段进行，避免无限消耗回合。
 
     // 只有存在明确目标时才使用遥控骰子，避免滥用
     const remoteDiceAction = availableActions.find(
@@ -102,12 +101,12 @@ export class HeuristicBrain implements PlayerBrain {
     const tile = state.map.tiles[me.position];
     const totalWealth = me.cash + me.deposit;
 
-    // 1. 空地产且资金够 → 购买
+    // 1. 空地产且资金够 → 购买（优先买地，保留最低 300 现金或 10% 总资产）
     const buyAction = availableActions.find((a) => a.type === 'buyProperty');
     if (buyAction) {
-      const price = (tile.basePrice ?? 0) * state.priceIndex;
-      const reserveRatio = 1 - this.buyAggressiveness;
-      if (me.cash >= price && me.cash > totalWealth * reserveRatio) {
+      const price = (tile.basePrice ?? 0) * state.priceIndex * (state.config.propertyPriceMultiplier ?? 1);
+      const reserve = Math.max(300, totalWealth * 0.1);
+      if (me.cash >= price + reserve) {
         return { action: 'buyProperty', reason: `购买 ${tile.name}（价格 ${price}）` };
       }
     }
@@ -115,7 +114,7 @@ export class HeuristicBrain implements PlayerBrain {
     // 2. 自己地产可升级 → 升级
     const upgradeAction = availableActions.find((a) => a.type === 'upgradeProperty');
     if (upgradeAction) {
-      const upgradeCost = (tile.basePrice ?? 0) * state.priceIndex * ((tile.level ?? 0) + 1);
+      const upgradeCost = (tile.basePrice ?? 0) * state.priceIndex * ((tile.level ?? 0) + 1) * (state.config.propertyPriceMultiplier ?? 1);
       const reserveRatio = 1 - this.upgradeAggressiveness;
       if (me.cash >= upgradeCost && me.cash > totalWealth * reserveRatio) {
         return { action: 'upgradeProperty', reason: `升级 ${tile.name} 到等级 ${(tile.level ?? 0) + 1}` };
@@ -205,12 +204,13 @@ export class HeuristicBrain implements PlayerBrain {
       }
     }
 
-    // 2. 买入低价股，保留至少 10% 资金（提高股票参与度）
+    // 2. heuristic 大脑默认把资金留给地产；只有地产充足且现金充裕时才配置股票
+    const propertyCount = me.properties.length;
     const affordableStock = tradeActions.find((a) => {
       const qty = a.params?.stockQuantity as number;
       if (qty < 0) return false;
       const stock = state.stocks!.find((s) => s.id === a.params?.stockId);
-      return stock && stock.price <= 24 && me.cash >= stock.price * 100;
+      return stock && stock.price <= 24 && propertyCount >= 4 && me.cash >= stock.price * 100 + 3000;
     });
 
     if (affordableStock) {
@@ -219,7 +219,7 @@ export class HeuristicBrain implements PlayerBrain {
       return {
         action: 'tradeStock',
         target: { stockId, stockQuantity: 100 },
-        reason: `买入低价股票 ${stock?.name ?? stockId} 100 股`,
+        reason: `资金充裕且地产充足，买入低价股票 ${stock?.name ?? stockId} 100 股`,
       };
     }
 

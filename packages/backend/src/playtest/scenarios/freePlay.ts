@@ -140,6 +140,13 @@ function waitForLatestStateChange(
   });
 }
 
+function calcLandOwnershipRate(state: GameState): number {
+  const properties = state.map.tiles.filter((t) => t.type === 'property');
+  if (properties.length === 0) return 0;
+  const owned = properties.filter((t) => t.ownerId).length;
+  return Math.round((owned / properties.length) * 100);
+}
+
 export async function runFreePlay(
   session: GameSession,
   config: PlaytestConfig,
@@ -506,10 +513,12 @@ export async function runFreePlay(
       0
     );
     const bankruptCount = finalState.players.filter((p) => p.isBankrupt).length;
+    const landRate = calcLandOwnershipRate(finalState);
     console.log('\n=== 整局监控摘要 ===');
     console.log(`破产玩家数: ${bankruptCount}/${finalState.players.length}`);
     console.log(`攻击性行为总数: ${totalAttacks}`);
     console.log(`股市总盈亏: $${totalStockProfit.toLocaleString()}`);
+    console.log(`地产购买率: ${landRate}% (${finalState.map.tiles.filter((t) => t.type === 'property' && t.ownerId).length}/${finalState.map.tiles.filter((t) => t.type === 'property').length})`);
     for (const player of finalState.players) {
       const m = allMetrics[player.id];
       const stockTotal = m.stock.realizedProfit + m.stock.unrealizedProfit;
@@ -532,6 +541,7 @@ export async function runFreePlay(
           bankruptCount: finalState.players.filter((p) => p.isBankrupt).length,
           totalAttackActions: totalAttacks,
           totalStockProfit,
+          landOwnershipRate: calcLandOwnershipRate(finalState),
           playerSummary: finalState.players.map((p) => {
             const m = allMetrics[p.id];
             return {

@@ -1682,7 +1682,7 @@ export function buyProperty(state: GameState): { success: boolean; message?: str
     });
     return { success: false, message: '该地块已有主人' };
   }
-  const price = Math.floor(tile.basePrice * state.priceIndex);
+  const price = Math.floor(tile.basePrice * state.priceIndex * (state.config.propertyPriceMultiplier ?? 1));
   const fortune = applyFortuneCost(state, player, price, 'buy');
   if (fortune.failed) {
     return { success: false, message: '衰神作祟，购买失败' };
@@ -1771,7 +1771,7 @@ export function upgradeProperty(
     });
     return { success: false, message: '已达到最高等级' };
   }
-  const price = Math.floor(tile.basePrice * (tile.level + 1) * 0.5 * state.priceIndex);
+  const price = Math.floor(tile.basePrice * (tile.level + 1) * 0.5 * state.priceIndex * (state.config.propertyPriceMultiplier ?? 1));
   const fortune = applyFortuneCost(state, player, price, 'upgrade');
   if (fortune.failed) {
     return { success: false, message: '衰神作祟，升级失败' };

@@ -78,16 +78,25 @@ function makePlayerConfigs(count: number): Array<{ userId: string; username: str
  * - 覆盖初始点券
  * - 发放起始卡片/道具包（每种 1 个），留出背包空间以便玩家在商店购买补充
  */
+function shuffleArray<T>(array: T[]): T[] {
+  const arr = [...array];
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
+
 function applyPlaytestOverrides(state: GameState, config: PlaytestConfig): void {
-  // 起始卡片包：以攻击/控制/干扰为主，保留空间给商店购买
-  const STARTER_CARDS = new Set([
+  // 起始卡片池：以攻击/控制/干扰为主，随机发放约 1/3，避免开局即全卡全道具
+  const ALL_STARTER_CARDS = [
     'priceRise', 'monster', 'demolish', 'frame', 'turtle',
     'turnAround', 'stay', 'equalPoverty', 'taxAudit', 'snatch',
-  ]);
-  // 起始道具包：陷阱/遥控骰子/清除/飞弹各 1 个
-  const STARTER_ITEMS = new Set([
+  ];
+  const ALL_STARTER_ITEMS = [
     'remoteDice', 'mine', 'barrier', 'missile', 'robotDoll',
-  ]);
+  ];
+  const pickThird = <T>(arr: T[]): T[] => shuffleArray(arr).slice(0, Math.max(1, Math.ceil(arr.length / 3)));
 
   for (const player of state.players) {
     if (config.startingCoupons !== undefined) {
@@ -104,9 +113,10 @@ function applyPlaytestOverrides(state: GameState, config: PlaytestConfig): void 
         player.cards.push({ instanceId, cardId: def.id });
       }
     } else if (player.cards.length === 0) {
-      // 默认发放 starter kit，确保玩家有卡片可用
+      // 默认随机发放约 1/3 starter 卡片
+      const starterCards = pickThird(ALL_STARTER_CARDS);
       for (const def of Object.values(CARD_DEFINITIONS)) {
-        if (!STARTER_CARDS.has(def.id)) continue;
+        if (!starterCards.includes(def.id)) continue;
         if (player.cards.length >= 15) break;
         const instanceId = `${def.id}-playtest-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
         player.cards.push({ instanceId, cardId: def.id });
@@ -127,8 +137,9 @@ function applyPlaytestOverrides(state: GameState, config: PlaytestConfig): void 
         }
       }
     } else {
-      // 默认发放 starter kit，确保玩家有道具可用
-      for (const itemId of STARTER_ITEMS) {
+      // 默认随机发放约 1/3 starter 道具
+      const starterItems = pickThird(ALL_STARTER_ITEMS);
+      for (const itemId of starterItems) {
         const def = ITEM_DEFINITIONS[itemId];
         if (!def) continue;
         const existing = player.items.find((i) => i.itemId === itemId);

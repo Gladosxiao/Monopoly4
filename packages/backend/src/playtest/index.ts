@@ -233,6 +233,9 @@ if (isMainModule) {
   const rentMultiplier = Number.isFinite(rentMultiplierEnv) && rentMultiplierEnv > 0 ? rentMultiplierEnv : 15;
   const stockVolatilityEnv = parseFloat(process.env.PLAYTEST_STOCK_VOLATILITY ?? '');
   const stockVolatility = Number.isFinite(stockVolatilityEnv) && stockVolatilityEnv > 0 ? stockVolatilityEnv : 0.6;
+  const propertyPriceMultiplierEnv = parseFloat(process.env.PLAYTEST_PROPERTY_PRICE_MULTIPLIER ?? '');
+  const propertyPriceMultiplier = Number.isFinite(propertyPriceMultiplierEnv) && propertyPriceMultiplierEnv > 0 ? propertyPriceMultiplierEnv : 1;
+  const forcePropertyPurchase = process.env.PLAYTEST_FORCE_PROPERTY_PURCHASE === 'true';
   const winCondition = validWinConditions.includes(Number(winConditionEnv) as WinCondition)
     ? (Number(winConditionEnv) as WinCondition)
     : winConditionEnv === 'unlimited'
@@ -248,6 +251,8 @@ if (isMainModule) {
     salary,
     rentMultiplier,
     stockVolatility,
+    propertyPriceMultiplier,
+    forcePropertyPurchase,
     winCondition: winCondition as any,
     gameTime,
   };

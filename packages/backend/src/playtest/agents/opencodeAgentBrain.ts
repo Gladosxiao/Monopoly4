@@ -14,7 +14,7 @@ import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { GameState, Player } from '@monopoly4/shared';
 import type { PlayerBrain, ActionDecision, AvailableAction, ActionType } from '../types.js';
-import { buildSystemPrompt, buildUserPrompt, buildActionsGuide } from './promptBuilder.js';
+import { buildSystemPrompt, buildUserPrompt, buildActionsGuide, type PlayerPersonality } from './promptBuilder.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PLAYTEST_ENV_PATH = resolve(__dirname, '../../../.playtest.env');
@@ -318,13 +318,15 @@ export class OpencodeAgentBrain implements PlayerBrain {
   readonly name: string;
   private config: LLMConfig;
   private fallback: PlayerBrain;
+  private personality: PlayerPersonality;
   /** 多轮对话上下文：system prompt 只发一次，后续追加 user/assistant 消息 */
   private messages: ChatMessage[] = [];
 
-  constructor(name: string, fallback: PlayerBrain, config?: Partial<LLMConfig>) {
+  constructor(name: string, fallback: PlayerBrain, personality: PlayerPersonality, config?: Partial<LLMConfig>) {
     this.name = name;
     this.config = { ...getLLMConfig(), ...config };
     this.fallback = fallback;
+    this.personality = personality;
   }
 
   /** 导出对话状态，用于断点续跑 */
@@ -361,7 +363,7 @@ export class OpencodeAgentBrain implements PlayerBrain {
 
     // 每回合独立决策：避免上一轮 LLM 的回复在下一轮被简单重复。
     // 只保留 system prompt + 当前请求（以及本回合内的重试反馈）。
-    this.messages = [{ role: 'system', content: buildSystemPrompt() }];
+    this.messages = [{ role: 'system', content: buildSystemPrompt(this.personality) }];
     this.messages.push({ role: 'user', content: buildUserPrompt(state, me, availableActions, recentLogs) });
 
     for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
@@ -398,10 +400,22 @@ export class OpencodeAgentBrain implements PlayerBrain {
   }
 }
 
+const PERSONALITY_ORDER: PlayerPersonality[] = [
+  'risk-loving',
+  'risk-averse',
+  'property-focus',
+  'stock-focus',
+];
+
 /** 创建 LLM 大脑工厂 */
 export function createOpencodeAgentBrainFactory(
   fallbackFactory: (name: string) => PlayerBrain,
   config?: Partial<LLMConfig>
 ): (name: string) => OpencodeAgentBrain {
-  return (name: string) => new OpencodeAgentBrain(name, fallbackFactory(name), config);
+  let index = 0;
+  return (name: string) => {
+    const personality = PERSONALITY_ORDER[index % PERSONALITY_ORDER.length];
+    index++;
+    return new OpencodeAgentBrain(name, fallbackFactory(name), personality, config);
+  };
 }

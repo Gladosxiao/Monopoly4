@@ -217,7 +217,7 @@ export function getAvailableActions(state: GameState, playerId: string): Availab
 
     // 空地产且资金够 → 可购买
     if (tile.type === 'property' && !tile.ownerId) {
-      const price = (tile.basePrice ?? 0) * state.priceIndex;
+      const price = (tile.basePrice ?? 0) * state.priceIndex * (state.config.propertyPriceMultiplier ?? 1);
       if (player.cash >= price) {
         actions.push({ type: 'buyProperty', label: `购买 ${tile.name}` });
       }
@@ -225,7 +225,7 @@ export function getAvailableActions(state: GameState, playerId: string): Availab
 
     // 自己的地产且可升级
     if (tile.type === 'property' && tile.ownerId === playerId && (tile.level ?? 0) < 5) {
-      const upgradeCost = (tile.basePrice ?? 0) * state.priceIndex * ((tile.level ?? 0) + 1);
+      const upgradeCost = (tile.basePrice ?? 0) * state.priceIndex * ((tile.level ?? 0) + 1) * (state.config.propertyPriceMultiplier ?? 1);
       if (player.cash >= upgradeCost) {
         actions.push({ type: 'upgradeProperty', label: `升级 ${tile.name}` });
       }
@@ -307,31 +307,29 @@ export function getAvailableActions(state: GameState, playerId: string): Availab
       });
     }
 
-    // 跳过
-    actions.push({ type: 'skipTurn', label: '跳过' });
-  }
-
-  // 股票交易（任何时候都可以）
-  if (state.stocks && state.stocks.length > 0) {
-    for (const stock of state.stocks) {
-      const holding = player.stockHoldings?.[stock.id] ?? 0;
-      // 至少买 100 股，检查资金和可用股份是否足够
-      if (stock.availableShares >= 100 && player.cash >= stock.price * 100) {
-        actions.push({
-          type: 'tradeStock',
-          label: `买入 ${stock.name} 100股`,
-          params: { stockId: stock.id, stockQuantity: 100 },
-        });
-      }
-      // 持有该股票时提供卖出选项
-      if (holding >= 100) {
-        actions.push({
-          type: 'tradeStock',
-          label: `卖出 ${stock.name} 100股`,
-          params: { stockId: stock.id, stockQuantity: -100 },
-        });
+    // 股票交易（仅在 acting 阶段，避免替代掷骰子）
+    if (state.stocks && state.stocks.length > 0) {
+      for (const stock of state.stocks) {
+        const holding = player.stockHoldings?.[stock.id] ?? 0;
+        if (stock.availableShares >= 100 && player.cash >= stock.price * 100) {
+          actions.push({
+            type: 'tradeStock',
+            label: `买入 ${stock.name} 100股`,
+            params: { stockId: stock.id, stockQuantity: 100 },
+          });
+        }
+        if (holding >= 100) {
+          actions.push({
+            type: 'tradeStock',
+            label: `卖出 ${stock.name} 100股`,
+            params: { stockId: stock.id, stockQuantity: -100 },
+          });
+        }
       }
     }
+
+    // 跳过
+    actions.push({ type: 'skipTurn', label: '跳过' });
   }
 
   // 贷款（在起点格附近）
@@ -342,6 +340,11 @@ export function getAvailableActions(state: GameState, playerId: string): Availab
   // 还款
   if (player.loan > 0 && player.cash > player.loan) {
     actions.push({ type: 'repayLoan', label: '还款', params: { amount: player.loan } });
+  }
+
+  // 强制买地模式：如果 buyProperty 可用，只保留 buyProperty，避免 LLM/启发式用卡炒股跳过买地
+  if (state.config.forcePropertyPurchase && actions.some((a) => a.type === 'buyProperty')) {
+    return actions.filter((a) => a.type === 'buyProperty');
   }
 
   return actions;

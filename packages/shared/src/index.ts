@@ -104,6 +104,10 @@ export interface GameConfig {
   rentMultiplier?: number;
   /** 股价日波动幅度（默认 0.2，即 ±10%） */
   stockVolatility?: number;
+  /** 地产购买/升级价格倍率（默认 1） */
+  propertyPriceMultiplier?: number;
+  /** 是否强制购买可负担的空地产（默认 false） */
+  forcePropertyPurchase?: boolean;
   /** 是否启用 AI 补位（默认启用） */
   enableAI?: boolean;
 }
@@ -123,6 +127,8 @@ export const DEFAULT_GAME_CONFIG: GameConfig = {
   enableAI: true,
   rentMultiplier: 1,
   stockVolatility: 0.2,
+  propertyPriceMultiplier: 1,
+  forcePropertyPurchase: false,
 };
 
 // ==================== 地图 ====================

@@ -128,6 +128,8 @@ export interface PlaytestConfig {
     salary: number;
     rentMultiplier: number;
     stockVolatility: number;
+    propertyPriceMultiplier: number;
+    forcePropertyPurchase: boolean;
     mapId: string;
     winCondition: string;
     landLease: string;
@@ -238,6 +240,7 @@ export interface PlaytestReport {
     bankruptCount: number;
     totalAttackActions: number;
     totalStockProfit: number;
+    landOwnershipRate: number;
     playerSummary: Array<{
       playerId: string;
       username: string;
