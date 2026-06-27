@@ -287,16 +287,17 @@ export class HeuristicBrain implements PlayerBrain {
       }
     }
 
-    // 5. 落后时使用干扰卡
-    const myRank = this.getWealthRank(state, me);
-    if (myRank >= 3) {
-      const disruptCard = me.cards.find((c) => ['turnAround', 'stay', 'turtle', 'equalPoverty'].includes(c.cardId));
-      if (disruptCard) {
-        const targetPlayer = this.findRichestEnemy(state, me);
+    // 5. 优先攻击最富有对手（无论排名）
+    const richestEnemy = this.findRichestEnemy(state, me);
+    if (richestEnemy) {
+      // 直接针对玩家的卡片：陷害、冬眠、梦游、乌龟、转向、停留、均贫、抢夺
+      const personTargetCards = ['frame', 'hibernate', 'sleepwalk', 'turtle', 'turnAround', 'stay', 'equalPoverty', 'snatch'];
+      const attackPersonCard = me.cards.find((c) => personTargetCards.includes(c.cardId));
+      if (attackPersonCard) {
         return {
           action: 'useCard',
-          target: { cardId: disruptCard.cardId, cardTarget: targetPlayer ? { targetPlayerId: targetPlayer.id } : undefined },
-          reason: `落后时使用 ${disruptCard.cardId} 干扰领先玩家`,
+          target: { cardId: attackPersonCard.cardId, cardTarget: { targetPlayerId: richestEnemy.id } },
+          reason: `攻击最富有对手 ${richestEnemy.username} 使用 ${attackPersonCard.cardId}`,
         };
       }
     }
@@ -528,11 +529,30 @@ export class HeuristicBrain implements PlayerBrain {
     return best;
   }
 
+  /** 计算玩家总资产（现金+存款-贷款+地产+股票） */
+  private calcTotalWealth(state: GameState, player: Player): number {
+    let propertyValue = 0;
+    for (const idx of player.properties) {
+      const tile = state.map.tiles[idx];
+      if (tile && tile.type === 'property') {
+        propertyValue += Math.floor((tile.basePrice ?? 0) * (1 + (tile.level ?? 0) * 0.5) * state.priceIndex);
+      }
+    }
+    let stockValue = 0;
+    if (player.stockHoldings && state.stocks) {
+      for (const [stockId, shares] of Object.entries(player.stockHoldings)) {
+      const stock = state.stocks.find((s) => s.id === stockId);
+        if (stock) stockValue += Math.floor(stock.price * shares);
+      }
+    }
+    return player.cash + (player.deposit ?? 0) - (player.loan ?? 0) + propertyValue + stockValue;
+  }
+
   /** 获取自己的资产排名（1=最富） */
   private getWealthRank(state: GameState, me: Player): number {
     const wealths = state.players
       .filter((p) => !p.isBankrupt)
-      .map((p) => ({ id: p.id, wealth: p.cash + p.deposit - p.loan }));
+      .map((p) => ({ id: p.id, wealth: this.calcTotalWealth(state, p) }));
     wealths.sort((a, b) => b.wealth - a.wealth);
     const rank = wealths.findIndex((w) => w.id === me.id);
     return rank >= 0 ? rank + 1 : state.players.length;
@@ -544,7 +564,7 @@ export class HeuristicBrain implements PlayerBrain {
     let maxWealth = -Infinity;
     for (const p of state.players) {
       if (p.id !== me.id && !p.isBankrupt) {
-        const wealth = p.cash + p.deposit - p.loan;
+        const wealth = this.calcTotalWealth(state, p);
         if (wealth > maxWealth) {
           maxWealth = wealth;
           richest = p;

@@ -93,6 +93,34 @@ function exportBrainsState(brains: Map<string, PlayerBrain>): Record<string, unk
 }
 
 /** 计算玩家净资产（现金+存款-贷款+地产市值+股票市值） */
+function findRichestEnemy(state: GameState, selfId: string): Player | null {
+  let richest: Player | null = null;
+  let maxWealth = -Infinity;
+  for (const p of state.players) {
+    if (p.id === selfId || p.isBankrupt) continue;
+    let propertyValue = 0;
+    for (const idx of p.properties) {
+      const tile = state.map.tiles[idx];
+      if (tile && tile.type === 'property') {
+        propertyValue += Math.floor((tile.basePrice ?? 0) * (1 + (tile.level ?? 0) * 0.5) * state.priceIndex);
+      }
+    }
+    let stockValue = 0;
+    if (p.stockHoldings && state.stocks) {
+      for (const [stockId, shares] of Object.entries(p.stockHoldings)) {
+        const stock = state.stocks.find((s) => s.id === stockId);
+        if (stock) stockValue += Math.floor(stock.price * shares);
+      }
+    }
+    const wealth = p.cash + (p.deposit ?? 0) - (p.loan ?? 0) + propertyValue + stockValue;
+    if (wealth > maxWealth) {
+      maxWealth = wealth;
+      richest = p;
+    }
+  }
+  return richest;
+}
+
 function calcNetAsset(state: GameState, player: Player): number {
   let propertyValue = 0;
   for (const idx of player.properties) {
@@ -215,6 +243,8 @@ export async function runFreePlay(
   let consecutiveNoAction = 0;
   const assetChangeEvents: AssetChangeEvent[] = [];
   const stockTrades: StockTradeEvent[] = [];
+  let attackRichestCount = 0;
+  let totalTargetedAttacks = 0;
   let timedOut = false;
   const MAX_NO_ACTION = 50; // 连续无动作次数上限，防止死循环
 
@@ -440,6 +470,16 @@ export async function runFreePlay(
       // 记录动作统计
       actionStats[decision.action] = (actionStats[decision.action] ?? 0) + 1;
 
+      // 记录攻击指向性
+      if (decision.action === 'useCard' && decision.target?.cardTarget?.targetPlayerId && stateBeforeAction) {
+        totalTargetedAttacks++;
+        const targetId = decision.target.cardTarget.targetPlayerId as string;
+        const richestEnemy = findRichestEnemy(stateBeforeAction, currentPlayer.id);
+        if (richestEnemy && richestEnemy.id === targetId) {
+          attackRichestCount++;
+        }
+      }
+
       // 记录资产大幅变动与股票交易
       if (session.latestState && stateBeforeAction) {
         const afterState = session.latestState;
@@ -616,6 +656,7 @@ export async function runFreePlay(
     console.log('\n=== 整局监控摘要 ===');
     console.log(`破产玩家数: ${bankruptCount}/${finalState.players.length}`);
     console.log(`攻击性行为总数: ${totalAttacks}`);
+    console.log(`攻击指向最富玩家: ${attackRichestCount}/${totalTargetedAttacks} (${totalTargetedAttacks > 0 ? Math.round((attackRichestCount / totalTargetedAttacks) * 100) : 0}%)`);
     console.log(`股市总盈亏: $${totalStockProfit.toLocaleString()}`);
     console.log(`地产购买率: ${landRate}% (${finalState.map.tiles.filter((t) => t.type === 'property' && t.ownerId).length}/${finalState.map.tiles.filter((t) => t.type === 'property').length})`);
     const monopolies = calcMonopolyGroups(finalState);
