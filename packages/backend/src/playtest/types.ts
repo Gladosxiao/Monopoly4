@@ -106,6 +106,8 @@ export interface PlaytestConfig {
   maxTurns?: number;
   /** 大脑类型 */
   brainType?: BrainType;
+  /** 单回合最大动作数，防止 LLM 无限操作（默认 10） */
+  maxActionsPerTurn?: number;
   /** 场景类型 */
   scenario?: ScenarioType;
   /** 单次动作超时（毫秒） */

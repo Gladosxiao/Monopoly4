@@ -195,6 +195,39 @@ export const MAP80_TEMPLATE: MapTemplate = {
   priceCurve: 'sigmoid',
 };
 
+/**
+ * 超大扩展模板：120 格，约为 EXPANDED_TEMPLATE 的 2 倍。
+ * 12 个占两步大地产 + 16 组连续 4 个小地产，共 88 块地产，适合 6 玩家长局。
+ */
+export const MEGA_TEMPLATE: MapTemplate = {
+  id: 'map_mega',
+  name: '超大版图',
+  totalTiles: 120,
+  largePropertyCount: 12,
+  largePropertySpan: 2, // 12 个大地产各占 2 格，共 24 格
+  smallPropertyGroups: [4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4], // 64 个小块，分 16 组连续 4 个
+  specialTiles: {
+    fate: 4,
+    chance: 4,
+    prison: 1,
+    hospital: 1,
+    shop: 6,
+    card: 2,
+    tax: 2,
+    coupon10: 2,
+    coupon30: 2,
+    coupon50: 2,
+    park: 0,
+    lottery: 0,
+    magic: 0,
+    news: 0,
+    company: 4,
+    miniGame: 1,
+  },
+  basePriceRange: [60, 500],
+  priceCurve: 'sigmoid',
+};
+
 // ============ 内部工具 ============
 
 interface SeededRandom {

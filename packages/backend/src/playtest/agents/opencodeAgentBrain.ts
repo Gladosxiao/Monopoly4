@@ -6,7 +6,7 @@
  * 1. 构造函数传入的 config 参数
  * 2. packages/backend/.playtest.env 文件
  * 3. 环境变量 PLAYTEST_LLM_API_KEY / PLAYTEST_LLM_BASE_URL / PLAYTEST_LLM_MODEL
- * 默认使用 KIMI (Moonshot) API。
+ * 默认使用 Kimi K2.5 模型（OpenAI-compatible API）。
  */
 
 import { existsSync, readFileSync } from 'node:fs';
@@ -53,7 +53,7 @@ function getLLMConfig(): LLMConfig {
     apiKey: fileEnv.PLAYTEST_LLM_API_KEY ?? process.env.PLAYTEST_LLM_API_KEY ?? '',
     baseUrl:
       fileEnv.PLAYTEST_LLM_BASE_URL ?? process.env.PLAYTEST_LLM_BASE_URL ?? 'https://api.moonshot.cn/v1',
-    model: fileEnv.PLAYTEST_LLM_MODEL ?? process.env.PLAYTEST_LLM_MODEL ?? 'moonshot-v1-8k',
+    model: fileEnv.PLAYTEST_LLM_MODEL ?? process.env.PLAYTEST_LLM_MODEL ?? 'kimi-k2-5',
   };
 }
 

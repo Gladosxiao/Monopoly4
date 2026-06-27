@@ -15,6 +15,7 @@ export {
   PLAYER4_TEMPLATE,
   EXPANDED_TEMPLATE,
   MAP80_TEMPLATE,
+  MEGA_TEMPLATE,
 } from './generator.js';
 
 export type {

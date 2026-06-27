@@ -72,7 +72,7 @@ export async function runPlaytest(config: PlaytestConfig = {}): Promise<Playtest
       startTime: new Date().toISOString(),
       endTime: new Date().toISOString(),
       duration: 0,
-      scenario: '4 人自由对局',
+      scenario: '自由对局',
       totalTurns: 0,
       result: 'error',
       players: [],
@@ -172,7 +172,7 @@ export async function runPlaytestWithResume(
       startTime: new Date().toISOString(),
       endTime: new Date().toISOString(),
       duration: 0,
-      scenario: '4 人自由对局',
+      scenario: '自由对局',
       totalTurns: checkpoint?.totalTurns ?? 0,
       result: 'error',
       players: [],
@@ -242,6 +242,8 @@ if (isMainModule) {
     ? 'unlimited'
     : undefined;
   const mapId = process.env.PLAYTEST_MAP_ID ?? 'expanded';
+  const playerCountEnv = parseInt(process.env.PLAYTEST_PLAYER_COUNT ?? '', 10);
+  const playerCount = Number.isFinite(playerCountEnv) && playerCountEnv >= 2 && playerCountEnv <= 8 ? playerCountEnv : 4;
   // 默认 1 年游戏时长，既保证能跑满 200 行动，又会在超时前自然结束
   const gameTime = validGameTimes.includes(gameTimeEnv as GameTime)
     ? (gameTimeEnv as GameTime)
@@ -272,6 +274,7 @@ if (isMainModule) {
     startingCoupons,
     htmlReportPath,
     gameConfig,
+    playerCount,
     // LLM 决策可能较慢，给予更宽松的超时
     actionTimeout: brainType === 'llm' ? 30000 : 15000,
   });

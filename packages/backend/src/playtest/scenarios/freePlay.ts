@@ -240,6 +240,8 @@ export async function runFreePlay(
   let totalTurns = resume?.startTurns ?? 0;
   let actionCount = 0;
   let previousPlayerId: string | null = null;
+  let currentTurnActionCount = 0;
+  const maxActionsPerTurn = config.maxActionsPerTurn ?? 10;
   let consecutiveNoAction = 0;
   const assetChangeEvents: AssetChangeEvent[] = [];
   const stockTrades: StockTradeEvent[] = [];
@@ -702,7 +704,7 @@ export async function runFreePlay(
     startTime: startTime.toISOString(),
     endTime: endTime.toISOString(),
     duration: endTime.getTime() - startTime.getTime(),
-    scenario: '4 人自由对局',
+    scenario: `${session.players.length} 人自由对局}`,
     totalTurns,
     result: finalState?.status === 'ended'
       ? 'completed'

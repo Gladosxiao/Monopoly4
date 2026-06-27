@@ -285,7 +285,7 @@ export async function createGameSession(config: PlaytestConfig): Promise<GameSes
     name: '自动化测试房间',
     hostId: players[0].userId,
     status: 'waiting',
-    maxPlayers: 4,
+    maxPlayers: players.length,
     mapId: gameConfig.mapId ?? 'expanded',
     config: gameConfig,
     players: [

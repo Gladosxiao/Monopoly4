@@ -8,6 +8,7 @@ import {
   PLAYER4_TEMPLATE,
   EXPANDED_TEMPLATE,
   MAP80_TEMPLATE,
+  MEGA_TEMPLATE,
 } from '@monopoly4/map-generator';
 
 export const MAP_REGISTRY: Record<string, { name: string; load: () => GameMap }> = {
@@ -18,6 +19,7 @@ export const MAP_REGISTRY: Record<string, { name: string; load: () => GameMap }>
   economy: { name: ECONOMY_TEMPLATE.name, load: () => generateMap(ECONOMY_TEMPLATE) as GameMap },
   player4: { name: PLAYER4_TEMPLATE.name, load: () => generateMap(PLAYER4_TEMPLATE) as GameMap },
   map80: { name: MAP80_TEMPLATE.name, load: () => generateMap(MAP80_TEMPLATE) as GameMap },
+  mega: { name: MEGA_TEMPLATE.name, load: () => generateMap(MEGA_TEMPLATE) as GameMap },
 };
 
 /**
