@@ -286,7 +286,7 @@ export async function createGameSession(config: PlaytestConfig): Promise<GameSes
     hostId: players[0].userId,
     status: 'waiting',
     maxPlayers: 4,
-    mapId: gameConfig.mapId ?? 'simple',
+    mapId: gameConfig.mapId ?? 'expanded',
     config: gameConfig,
     players: [
       {
@@ -353,6 +353,7 @@ export interface PlaytestCheckpoint {
   gameState: GameState;
   room: Room;
   totalTurns: number;
+  actionCount?: number;
   /** 每个玩家 userId -> brain 序列化状态 */
   brainsState: Record<string, unknown>;
   config: PlaytestConfig;

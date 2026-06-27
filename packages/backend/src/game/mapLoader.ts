@@ -1,16 +1,18 @@
 import type { GameMap } from '@monopoly4/shared';
+import { SIMPLE_MAP } from '@monopoly4/shared';
 import {
   generateMap,
   DEFAULT_TEMPLATE,
   FAST_TEMPLATE,
   ECONOMY_TEMPLATE,
   PLAYER4_TEMPLATE,
+  EXPANDED_TEMPLATE,
   MAP80_TEMPLATE,
 } from '@monopoly4/map-generator';
-import { SIMPLE_MAP } from '@monopoly4/shared';
 
 export const MAP_REGISTRY: Record<string, { name: string; load: () => GameMap }> = {
   simple: { name: SIMPLE_MAP.name, load: () => SIMPLE_MAP as GameMap },
+  expanded: { name: EXPANDED_TEMPLATE.name, load: () => generateMap(EXPANDED_TEMPLATE) as GameMap },
   default: { name: DEFAULT_TEMPLATE.name, load: () => generateMap(DEFAULT_TEMPLATE) as GameMap },
   fast: { name: FAST_TEMPLATE.name, load: () => generateMap(FAST_TEMPLATE) as GameMap },
   economy: { name: ECONOMY_TEMPLATE.name, load: () => generateMap(ECONOMY_TEMPLATE) as GameMap },

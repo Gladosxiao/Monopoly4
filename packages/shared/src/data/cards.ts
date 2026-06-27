@@ -2,7 +2,7 @@
 // 前后端共享，统一维护卡片名称、描述、价格、类型、目标等元数据
 
 export type CardType = 'attack' | 'defense' | 'control' | 'special';
-export type CardTarget = 'self' | 'opponent' | 'tile' | 'global' | 'road';
+export type CardTarget = 'self' | 'opponent' | 'tile' | 'global' | 'road' | 'stock';
 
 export interface CardDefinition {
   id: string;
@@ -259,7 +259,7 @@ export const CARD_DEFINITIONS: Record<string, CardDefinition> = {
     description: '令指定公司股票连涨 3 天（涨停）',
     type: 'special',
     cost: 30,
-    target: 'global',
+    target: 'stock',
     assetKey: 'red_card',
   },
   blackCard: {
@@ -268,7 +268,7 @@ export const CARD_DEFINITIONS: Record<string, CardDefinition> = {
     description: '令指定公司股票连跌 3 天（跌停）',
     type: 'special',
     cost: 30,
-    target: 'global',
+    target: 'stock',
     assetKey: 'black_card',
   },
   freePass: {

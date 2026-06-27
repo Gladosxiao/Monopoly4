@@ -131,6 +131,39 @@ export const PLAYER4_TEMPLATE: MapTemplate = {
 };
 
 /**
+ * 扩展模板：60 格，土地数量约为 SIMPLE_MAP 的 1.5 倍（38 块）。
+ * 8 组连续小地产 + 3 个占两步大地产，系统格保留关键功能。
+ */
+export const EXPANDED_TEMPLATE: MapTemplate = {
+  id: 'map_expanded',
+  name: '扩展版图',
+  totalTiles: 60,
+  largePropertyCount: 3,
+  largePropertySpan: 2, // 3 个大地产各占 2 格，共 6 格
+  smallPropertyGroups: [4, 4, 4, 4, 4, 4, 4, 4], // 32 个小块，分 8 组连续 4 个
+  specialTiles: {
+    fate: 3,
+    chance: 3,
+    prison: 1,
+    hospital: 1,
+    shop: 4,
+    card: 1,
+    tax: 2,
+    coupon10: 1,
+    coupon30: 1,
+    coupon50: 1,
+    park: 0,
+    lottery: 0,
+    magic: 0,
+    news: 0,
+    company: 3,
+    miniGame: 0,
+  },
+  basePriceRange: [60, 500],
+  priceCurve: 'sigmoid',
+};
+
+/**
  * 80 格大地图模板：6 个占两步大地产 + 12 组连续 4 个小地产，土地占比约 75%。
  */
 export const MAP80_TEMPLATE: MapTemplate = {

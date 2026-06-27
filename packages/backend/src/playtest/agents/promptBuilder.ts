@@ -158,6 +158,8 @@ export function buildActionsGuide(actions: AvailableAction[]): string {
           targetHint += '（填 {targetTileIndex: 整数格编号}）';
         } else if (ct === 'road') {
           targetHint += '（填 {targetGroup: 路段分组编号}）';
+        } else if (ct === 'stock') {
+          targetHint += '（填 {targetStockId: 股票 id，如 "stock-insurance"}）';
         } else if (ct === 'global') {
           targetHint += '（可省略）';
         }
@@ -231,11 +233,13 @@ const STRATEGY_HINTS = `
 - 不要违背性格去做平均化配置：地产专注型不要大量炒股，股市专注型不要疯狂买地。
 - 买地是为了收租收益，炒股是为了资本利得，两者都是扩大差距的手段，但你要按性格选择主战场。
 
-### 股票策略
+### 股票策略（扩大获利空间）
 - tradeStock 的 stockQuantity 是**股数**（正数买入，负数卖出），买入成本 = 股价 × 股数。
-- 股价≤24时买入100股；股价≥28或比买入成本高20%时卖出止盈；现金<总资产10%时必须卖出救急。
-- 禁止同一只股票反复买入卖出，买入后至少持有 5 回合。
-- 持股>10%自动成董事长获分红。
+- **买入纪律**：股价≤22时大胆买入100股；股价22-26时谨慎买入；>26时不买入。现金买入后不得低于性格目标现金比例。
+- **卖出纪律**：股价≥32或比买入成本高50%以上时卖出止盈；出现连续3天下跌时止损卖出；现金<总资产10%时卖出救急。
+- **耐心持有**：禁止同一只股票反复买入卖出，买入后至少持有 10 回合，让趋势充分发酵。
+- **红卡使用**：持有某股票200股以上且股价≤24时，可用红卡（redCard）指定该股票连涨3天，然后在高位卖出。
+- **董事长红利**：持股>10%自动成董事长获分红；接近10%时可加仓争夺董事长。
 
 ### 卡片/道具（积极使用，但买地第一）
 - **怪兽卡/拆除卡只能对有建筑（等级≥1）的地产使用**，不要对空地使用。
@@ -273,6 +277,7 @@ const OUTPUT_FORMAT = `
 - 使用恶魔卡（高优先级）：{"action":"useCard","target":{"cardId":"devil","cardTarget":{"targetGroup":1}},"reason":"夷平对手路段"}
 - 使用陷害卡（高优先级）：{"action":"useCard","target":{"cardId":"frame","cardTarget":{"targetPlayerId":"playtest-user-2"}},"reason":"让领先玩家入狱"}
 - 使用换地卡：{"action":"useCard","target":{"cardId":"swapLand","cardTarget":{"targetPlayerId":"playtest-user-2"}},"reason":"与对手交换土地"}
+- 使用红卡（股市专注型）：{"action":"useCard","target":{"cardId":"redCard","cardTarget":{"targetStockId":"stock-insurance"}},"reason":"拉升保险股价后高位卖出"}
 - 商店买地雷（高优先级）：{"action":"buyItem","target":{"itemId":"mine","itemQuantity":1},"reason":"补充陷阱"}
 - 商店买攻击卡（高优先级）：{"action":"buyCard","target":{"cardId":"priceRise"},"reason":"购买攻击卡"}
 - 买股票：{"action":"tradeStock","target":{"stockId":"S1","stockQuantity":100},"reason":"低价建仓"}

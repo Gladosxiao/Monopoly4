@@ -147,6 +147,27 @@ function calcLandOwnershipRate(state: GameState): number {
   return Math.round((owned / properties.length) * 100);
 }
 
+function calcMonopolyGroups(state: GameState): { group: number; ownerId: string; ownerName: string }[] {
+  const properties = state.map.tiles.filter((t) => t.type === 'property');
+  const groups = new Map<number, string[]>();
+  for (const p of properties) {
+    if (p.group === undefined) continue;
+    const arr = groups.get(p.group) ?? [];
+    arr.push(p.ownerId ?? '');
+    groups.set(p.group, arr);
+  }
+  const monopolies: { group: number; ownerId: string; ownerName: string }[] = [];
+  for (const [group, owners] of groups) {
+    if (owners.length === 0) continue;
+    const first = owners[0];
+    if (first && owners.every((o) => o === first)) {
+      const owner = state.players.find((p) => p.id === first);
+      monopolies.push({ group, ownerId: first, ownerName: owner?.username ?? '未知' });
+    }
+  }
+  return monopolies;
+}
+
 export async function runFreePlay(
   session: GameSession,
   config: PlaytestConfig,
@@ -168,8 +189,10 @@ export async function runFreePlay(
     importBrainsState(brains, resume.brainsState);
   }
 
-  // 跟踪回合数（断点续跑时从已完成的操作数继续）
+  // 跟踪回合数：totalTurns = 完整玩家回合数（一次掷骰+所有行动），actionCount = 实际操作次数
   let totalTurns = resume?.startTurns ?? 0;
+  let actionCount = 0;
+  let previousPlayerId: string | null = null;
   let consecutiveNoAction = 0;
   let timedOut = false;
   const MAX_NO_ACTION = 50; // 连续无动作次数上限，防止死循环
@@ -189,7 +212,7 @@ export async function runFreePlay(
   watchdog.start();
 
   if (verbose) {
-    console.log(`[FreePlay] 开始对局，maxTurns=${maxTurns}，startTurns=${totalTurns}`);
+    console.log(`[FreePlay] 开始对局，maxTurns=${maxTurns} 玩家回合，startTurns=${totalTurns}`);
     for (const [id, brain] of brains) {
       const p = session.players.find((pp) => pp.userId === id);
       console.log(`  ${p?.config.username} (${brain.name}) - ${p?.config.characterId}`);
@@ -241,7 +264,7 @@ export async function runFreePlay(
     await waitForLatestStateChange(session, stateBefore, 5000);
   }
 
-  // 主循环
+  // 主循环：每轮处理一个动作；当 currentPlayerIndex 变化时，totalTurns（完整玩家回合）递增
   while (totalTurns < maxTurns) {
     const state = session.latestState;
     if (!state) {
@@ -305,6 +328,17 @@ export async function runFreePlay(
       continue;
     }
 
+    // 检测到新玩家回合开始：上一个玩家已完成其完整回合
+    if (currentPlayer.id !== previousPlayerId) {
+      if (previousPlayerId === null) {
+        totalTurns = 1;
+      } else {
+        totalTurns++;
+      }
+      if (totalTurns > maxTurns) break;
+      previousPlayerId = currentPlayer.id;
+    }
+
     // 获取可用动作
     const availableActions = getAvailableActions(state, currentPlayer.id);
 
@@ -333,9 +367,10 @@ export async function runFreePlay(
     try {
       const decision = await brain.decide(state, currentPlayer, availableActions);
 
+      actionCount++;
       if (verbose) {
         console.log(
-          `[Turn ${totalTurns}] ${currentPlayer.username} (${brain.name}): ${decision.action} - ${decision.reason ?? ''}`
+          `[Round ${totalTurns}] [Action ${actionCount}] ${currentPlayer.username} (${brain.name}): ${decision.action} - ${decision.reason ?? ''}`
         );
       }
 
@@ -380,8 +415,6 @@ export async function runFreePlay(
           recordIssue(issue);
         }
       }
-
-      totalTurns++;
 
       // 记录动作统计
       actionStats[decision.action] = (actionStats[decision.action] ?? 0) + 1;
@@ -446,6 +479,7 @@ export async function runFreePlay(
               gameState: currentState,
               room,
               totalTurns,
+              actionCount,
               brainsState: exportBrainsState(brains),
               config,
             });
@@ -519,6 +553,8 @@ export async function runFreePlay(
     console.log(`攻击性行为总数: ${totalAttacks}`);
     console.log(`股市总盈亏: $${totalStockProfit.toLocaleString()}`);
     console.log(`地产购买率: ${landRate}% (${finalState.map.tiles.filter((t) => t.type === 'property' && t.ownerId).length}/${finalState.map.tiles.filter((t) => t.type === 'property').length})`);
+    const monopolies = calcMonopolyGroups(finalState);
+    console.log(`垄断同组数: ${monopolies.length} (` + monopolies.map((m) => `组${m.group}=${m.ownerName}`).join(', ') + ')');
     for (const player of finalState.players) {
       const m = allMetrics[player.id];
       const stockTotal = m.stock.realizedProfit + m.stock.unrealizedProfit;

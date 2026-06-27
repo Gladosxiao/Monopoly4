@@ -228,19 +228,20 @@ if (isMainModule) {
   const validGameTimes: GameTime[] = ['1m', '3m', '6m', '1y', '2y', 'perpetual'];
   const totalFunds = Number.isFinite(totalFundsEnv) && totalFundsEnv > 0 ? totalFundsEnv : 3000;
   const salaryEnv = parseInt(process.env.PLAYTEST_SALARY ?? '', 10);
-  const salary = Number.isFinite(salaryEnv) && salaryEnv >= 0 ? salaryEnv : 0;
+  const salary = Number.isFinite(salaryEnv) && salaryEnv >= 0 ? salaryEnv : 1000;
   const rentMultiplierEnv = parseFloat(process.env.PLAYTEST_RENT_MULTIPLIER ?? '');
-  const rentMultiplier = Number.isFinite(rentMultiplierEnv) && rentMultiplierEnv > 0 ? rentMultiplierEnv : 15;
+  const rentMultiplier = Number.isFinite(rentMultiplierEnv) && rentMultiplierEnv > 0 ? rentMultiplierEnv : 3;
   const stockVolatilityEnv = parseFloat(process.env.PLAYTEST_STOCK_VOLATILITY ?? '');
   const stockVolatility = Number.isFinite(stockVolatilityEnv) && stockVolatilityEnv > 0 ? stockVolatilityEnv : 0.6;
   const propertyPriceMultiplierEnv = parseFloat(process.env.PLAYTEST_PROPERTY_PRICE_MULTIPLIER ?? '');
-  const propertyPriceMultiplier = Number.isFinite(propertyPriceMultiplierEnv) && propertyPriceMultiplierEnv > 0 ? propertyPriceMultiplierEnv : 1;
+  const propertyPriceMultiplier = Number.isFinite(propertyPriceMultiplierEnv) && propertyPriceMultiplierEnv > 0 ? propertyPriceMultiplierEnv : 0.7;
   const forcePropertyPurchase = process.env.PLAYTEST_FORCE_PROPERTY_PURCHASE === 'true';
   const winCondition = validWinConditions.includes(Number(winConditionEnv) as WinCondition)
     ? (Number(winConditionEnv) as WinCondition)
     : winConditionEnv === 'unlimited'
     ? 'unlimited'
     : undefined;
+  const mapId = process.env.PLAYTEST_MAP_ID ?? 'expanded';
   // 默认 1 年游戏时长，既保证能跑满 200 行动，又会在超时前自然结束
   const gameTime = validGameTimes.includes(gameTimeEnv as GameTime)
     ? (gameTimeEnv as GameTime)
@@ -255,10 +256,11 @@ if (isMainModule) {
     forcePropertyPurchase,
     winCondition: winCondition as any,
     gameTime,
+    mapId,
   };
 
   console.log(
-    `[Playtest] 启动自动化对局测试 (maxTurns=${maxTurns}, brain=${brainType}, allCards=${giveAllCards}, allItems=${giveAllItems}, totalFunds=${totalFunds}, salary=${salary}, winCondition=${winCondition ?? '默认'}, gameTime=${gameTime})`
+    `[Playtest] 启动自动化对局测试 (maxTurns=${maxTurns}, brain=${brainType}, map=${mapId}, totalFunds=${totalFunds}, salary=${salary}, rentMultiplier=${rentMultiplier}, winCondition=${winCondition ?? '默认'}, gameTime=${gameTime})`
   );
 
   const report = await runPlaytest({

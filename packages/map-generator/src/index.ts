@@ -13,6 +13,7 @@ export {
   FAST_TEMPLATE,
   ECONOMY_TEMPLATE,
   PLAYER4_TEMPLATE,
+  EXPANDED_TEMPLATE,
   MAP80_TEMPLATE,
 } from './generator.js';
 
