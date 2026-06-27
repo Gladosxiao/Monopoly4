@@ -19,7 +19,7 @@ import { waitForState, sleep } from '../engine/gameSession.js';
 import { executeAction, getAvailableActions } from '../engine/actionExecutor.js';
 import { validateGameState } from '../engine/validator.js';
 import { Watchdog } from '../engine/watchdog.js';
-import { captureSnapshot, generateHtmlReport, type TurnSnapshot } from '../engine/statsCollector.js';
+import { captureSnapshot, generateHtmlReport, type TurnSnapshot, type AssetChangeEvent, type StockTradeEvent } from '../engine/statsCollector.js';
 import { GameMetricsCollector } from '../engine/metricsCollector.js';
 import { createHeuristicBrainFactory } from '../agents/heuristicBrain.js';
 import { createOpencodeAgentBrainFactory, OpencodeAgentBrain } from '../agents/opencodeAgentBrain.js';
@@ -90,6 +90,25 @@ function exportBrainsState(brains: Map<string, PlayerBrain>): Record<string, unk
     }
   }
   return state;
+}
+
+/** 计算玩家净资产（现金+存款-贷款+地产市值+股票市值） */
+function calcNetAsset(state: GameState, player: Player): number {
+  let propertyValue = 0;
+  for (const idx of player.properties) {
+    const tile = state.map.tiles[idx];
+    if (tile && tile.type === 'property') {
+      propertyValue += Math.floor((tile.basePrice ?? 0) * (1 + (tile.level ?? 0) * 0.5) * state.priceIndex);
+    }
+  }
+  let stockValue = 0;
+  if (player.stockHoldings && state.stocks) {
+    for (const [stockId, shares] of Object.entries(player.stockHoldings)) {
+      const stock = state.stocks.find((s) => s.id === stockId);
+      if (stock) stockValue += Math.floor(stock.price * shares);
+    }
+  }
+  return player.cash + (player.deposit ?? 0) - (player.loan ?? 0) + propertyValue + stockValue;
 }
 
 /** 导入 LLM brain 的对话状态 */
@@ -194,6 +213,8 @@ export async function runFreePlay(
   let actionCount = 0;
   let previousPlayerId: string | null = null;
   let consecutiveNoAction = 0;
+  const assetChangeEvents: AssetChangeEvent[] = [];
+  const stockTrades: StockTradeEvent[] = [];
   let timedOut = false;
   const MAX_NO_ACTION = 50; // 连续无动作次数上限，防止死循环
 
@@ -419,6 +440,49 @@ export async function runFreePlay(
       // 记录动作统计
       actionStats[decision.action] = (actionStats[decision.action] ?? 0) + 1;
 
+      // 记录资产大幅变动与股票交易
+      if (session.latestState && stateBeforeAction) {
+        const afterState = session.latestState;
+        const afterPlayer = afterState.players.find((p) => p.id === currentPlayer.id);
+        if (afterPlayer) {
+          const beforeAsset = calcNetAsset(stateBeforeAction, currentPlayer);
+          const afterAsset = calcNetAsset(afterState, afterPlayer);
+          const change = afterAsset - beforeAsset;
+          const changePct = beforeAsset > 0 ? Math.abs(change) / beforeAsset : 0;
+          const thresholdPct = 0.1;
+          const thresholdCash = (config.gameConfig?.totalFunds ?? 10000) * 0.1;
+          if (Math.abs(change) > 0 && (changePct >= thresholdPct || Math.abs(change) >= thresholdCash)) {
+            assetChangeEvents.push({
+              round: totalTurns,
+              action: actionCount,
+              player: currentPlayer.username,
+              beforeAsset,
+              afterAsset,
+              change,
+              changePct: Math.round(changePct * 1000) / 10,
+              reason: `${decision.action}: ${decision.reason ?? ''}`,
+            });
+          }
+        }
+        if (decision.action === 'tradeStock') {
+          const qty = (decision.target?.stockQuantity ?? 0) as number;
+          const stockId = (decision.target?.stockId ?? '') as string;
+          const stock = afterState.stocks?.find((s) => s.id === stockId);
+          const price = stock?.price ?? 0;
+          stockTrades.push({
+            round: totalTurns,
+            action: actionCount,
+            player: currentPlayer.username,
+            stockId,
+            stockName: stock?.name ?? stockId,
+            quantity: qty,
+            price,
+            total: Math.abs(qty) * price,
+            reason: decision.reason ?? '',
+          });
+        }
+      }
+
       // 记录攻击性行为与股票交易指标
       if (decision.action === 'useCard' && decision.target?.cardId && session.latestState) {
         const ct = decision.target.cardTarget as Record<string, unknown> | undefined;
@@ -498,7 +562,6 @@ export async function runFreePlay(
         expected: '动作执行成功',
         actual: `异常: ${err.message}`,
       });
-      totalTurns++;
     }
 
     // 短暂等待，让服务器处理
@@ -513,6 +576,8 @@ export async function runFreePlay(
       generateHtmlReport(
         snapshots,
         actionStats,
+        assetChangeEvents,
+        stockTrades,
         config.htmlReportPath,
         {
           shopVisits,

@@ -569,18 +569,36 @@ export class HeuristicBrain implements PlayerBrain {
   /** 寻找期望的遥控骰子点数 */
   private findDesiredRoll(state: GameState, me: Player): number {
     const tileCount = state.map.tiles.length;
+    let bestRoll = 0;
     for (let roll = 1; roll <= 6; roll++) {
       const targetIdx = (me.position + roll) % tileCount;
       const tile = state.map.tiles[targetIdx];
-      // 优先到达：空地产（可买）、自己地产（可升级）、商店
-      if (tile.type === 'property' && (!tile.ownerId || tile.ownerId === me.id)) {
-        return roll;
+      // 最高优先级：自己的可升级地产（有现金升级时）
+      if (
+        tile.type === 'property' &&
+        tile.ownerId === me.id &&
+        (tile.level ?? 0) < 5 &&
+        !this.isFullyBuilt(tile)
+      ) {
+        const upgradeCost = (tile.basePrice ?? 0) * state.priceIndex * ((tile.level ?? 0) + 1) * (state.config.propertyPriceMultiplier ?? 1);
+        if (me.cash >= upgradeCost + Math.max(500, (me.cash + (me.deposit ?? 0)) * 0.1)) {
+          return roll;
+        }
       }
-      if (tile.type === 'shop') {
-        return roll;
+      // 次高：空地产（可买）
+      if (tile.type === 'property' && !tile.ownerId) {
+        if (bestRoll === 0) bestRoll = roll;
+      }
+      // 再次：商店
+      if (tile.type === 'shop' && bestRoll === 0) {
+        bestRoll = roll;
       }
     }
-    return 0;
+    return bestRoll;
+  }
+
+  private isFullyBuilt(tile: any): boolean {
+    return tile.buildingType === 'chainStore' || tile.buildingType === 'park' || tile.buildingType === 'gasStation';
   }
 
   /** 寻找陷阱放置位置 */
