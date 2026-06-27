@@ -10,12 +10,15 @@ import {
   toggleReady as toggleReadySocket,
   selectCharacter as selectCharacterSocket,
   startGame,
+  addAI,
   getSocket,
   onRoomUpdated,
   onError,
+  onAiThinking,
+  onAiDecided,
 } from '../socket.js';
 import { navigateToLogin, navigateToLobby, navigateToGame, registerCleanup } from '../router.js';
-import { showToast, escapeHtml } from '../ui/common.js';
+import { showToast, showBanner, hideBanner, escapeHtml } from '../ui/common.js';
 import { isTestMode } from '../testMode/index.js';
 
 const app = document.getElementById('app')!;
@@ -56,7 +59,9 @@ export async function renderRoomPage(roomId: string, error?: string): Promise<vo
         <div class="action-buttons">
           <button id="btn-ready">准备</button>
           <button id="btn-start" class="lobby-primary" style="display:none">开始游戏</button>
-          ${isTestMode() ? '<button id="btn-add-bot" class="btn-bot">+ 添加AI</button>' : ''}
+          <button id="btn-add-heuristic" class="btn-bot" style="display:none">+ 启发式 AI</button>
+          <button id="btn-add-llm" class="btn-bot" style="display:none">+ LLM AI</button>
+          ${isTestMode() ? '<button id="btn-add-bot" class="btn-bot">+ 测试机器人</button>' : ''}
         </div>
       </div>
     </div>
@@ -76,6 +81,18 @@ export async function renderRoomPage(roomId: string, error?: string): Promise<vo
   container.querySelector('#btn-start')!.addEventListener('click', () => {
     startGame(roomId);
   });
+
+  // 添加启发式 AI
+  const addHeuristicBtn = container.querySelector<HTMLButtonElement>('#btn-add-heuristic');
+  if (addHeuristicBtn) {
+    addHeuristicBtn.addEventListener('click', () => addAI(roomId, 'heuristic'));
+  }
+
+  // 添加 LLM AI
+  const addLLMBtn = container.querySelector<HTMLButtonElement>('#btn-add-llm');
+  if (addLLMBtn) {
+    addLLMBtn.addEventListener('click', () => addAI(roomId, 'llm'));
+  }
 
   // 测试模式：添加AI机器人
   const addBotBtn = container.querySelector<HTMLButtonElement>('#btn-add-bot');
@@ -116,6 +133,18 @@ export async function renderRoomPage(roomId: string, error?: string): Promise<vo
   registerCleanup(
     onError((msg) => {
       showToast(msg, 'error');
+    })
+  );
+
+  registerCleanup(
+    onAiThinking((payload) => {
+      showBanner(`🤖 ${payload.username} ${payload.message}（约 ${payload.estimatedWaitSeconds} 秒）`);
+    })
+  );
+
+  registerCleanup(
+    onAiDecided((payload) => {
+      hideBanner();
     })
   );
 }
@@ -159,11 +188,17 @@ export function renderRoomPlayers(container: HTMLElement, room: Room): void {
 
   const isHost = room.hostId === currentUser?.id;
   const startBtn = container.querySelector<HTMLButtonElement>('#btn-start')!;
+  const addHeuristicBtn = container.querySelector<HTMLButtonElement>('#btn-add-heuristic');
+  const addLLMBtn = container.querySelector<HTMLButtonElement>('#btn-add-llm');
   if (isHost) {
     startBtn.style.display = 'inline-block';
     const allReady = room.players.every((p) => p.isReady || p.isHost);
     startBtn.disabled = !allReady || room.players.length < 2;
+    if (addHeuristicBtn) addHeuristicBtn.style.display = 'inline-block';
+    if (addLLMBtn) addLLMBtn.style.display = 'inline-block';
   } else {
     startBtn.style.display = 'none';
+    if (addHeuristicBtn) addHeuristicBtn.style.display = 'none';
+    if (addLLMBtn) addLLMBtn.style.display = 'none';
   }
 }

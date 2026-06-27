@@ -5,6 +5,7 @@ import cookieParser from 'cookie-parser';
 import { createServer } from 'http';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { networkInterfaces } from 'os';
 import authRoutes from './routes/auth.js';
 import roomRoutes from './routes/rooms.js';
 import mapRoutes from './routes/maps.js';
@@ -56,6 +57,19 @@ app.get('*', (req, res) => {
 setupSocketIO(httpServer);
 
 const PORT = process.env.PORT || 3000;
-httpServer.listen(PORT, () => {
-  console.log(`Server listening on port ${PORT}`);
+const HOST = process.env.HOST || '0.0.0.0';
+httpServer.listen(Number(PORT), HOST, () => {
+  console.log(`Server listening on ${HOST}:${PORT}`);
+  if (HOST === '0.0.0.0') {
+    const ips = Object.values(networkInterfaces())
+      .flat()
+      .filter((n) => n && n.family === 'IPv4' && !n.internal)
+      .map((n) => n!.address);
+    if (ips.length > 0) {
+      console.log(`局域网可访问地址:`);
+      for (const ip of ips) {
+        console.log(`  http://${ip}:${PORT}`);
+      }
+    }
+  }
 });

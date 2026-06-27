@@ -507,6 +507,9 @@ export interface ServerToClientEvents {
   'game:state': (state: GameState) => void;
   'game:log': (log: GameLog) => void;
   'error': (message: string) => void;
+  // AI 玩家状态广播
+  'ai:thinking': (payload: { username: string; estimatedWaitSeconds: number; message: string }) => void;
+  'ai:decided': (payload: { username: string }) => void;
   // 测试模式事件
   'test:update': (snapshot: unknown) => void;
   'test:freeShopResult': (shop: unknown) => void;
@@ -541,6 +544,10 @@ export interface ClientToServerEvents {
   'game:lotteryBet': (roomId: string, number: number) => void;
   'game:magicSpell': (roomId: string, targetPlayerId: string, spell: 'swapCash' | 'dismissSpirit' | 'stealCard' | 'jail') => void;
   'game:miniGameResult': (roomId: string, result: { coupons: number }) => void;
+  // AI 玩家事件
+  'room:addAI': (roomId: string, aiType: 'heuristic' | 'llm') => void;
+  'ai:thinking': (roomId: string, payload: { username: string; estimatedWaitSeconds: number; message: string }) => void;
+  'ai:decided': (roomId: string, payload: { username: string }) => void;
   // 测试模式事件
   'test:addBot': (roomId: string) => void;
   'test:getSnapshot': (roomId: string) => void;

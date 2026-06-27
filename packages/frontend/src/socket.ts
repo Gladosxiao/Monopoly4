@@ -92,6 +92,18 @@ export function onError(callback: (message: string) => void): () => void {
   return () => s.off('error', callback);
 }
 
+export function onAiThinking(callback: (payload: { username: string; estimatedWaitSeconds: number; message: string }) => void): () => void {
+  const s = getSocket();
+  s.on('ai:thinking', callback);
+  return () => s.off('ai:thinking', callback);
+}
+
+export function onAiDecided(callback: (payload: { username: string }) => void): () => void {
+  const s = getSocket();
+  s.on('ai:decided', callback);
+  return () => s.off('ai:decided', callback);
+}
+
 export function joinRoom(roomId: string): void {
   getSocket().emit('room:join', roomId);
 }
@@ -110,6 +122,10 @@ export function selectCharacter(roomId: string, characterId: string): void {
 
 export function startGame(roomId: string): void {
   getSocket().emit('game:start', roomId);
+}
+
+export function addAI(roomId: string, aiType: 'heuristic' | 'llm'): void {
+  getSocket().emit('room:addAI', roomId, aiType);
 }
 
 export function rollDice(roomId: string, diceCount?: number): void {

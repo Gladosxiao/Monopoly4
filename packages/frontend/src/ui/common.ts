@@ -70,6 +70,18 @@ export function showBanner(
   }, duration);
 }
 
+/** 立即隐藏当前 Banner。 */
+export function hideBanner(): void {
+  if (currentBanner) {
+    currentBanner.remove();
+    currentBanner = null;
+  }
+  if (bannerTimer) {
+    clearTimeout(bannerTimer);
+    bannerTimer = null;
+  }
+}
+
 /** 显示一个自定义输入弹窗，替代 window.prompt */
 export function showPrompt(
   message: string,

@@ -14,6 +14,7 @@ import { CHARACTERS, DEFAULT_GAME_CONFIG } from '@monopoly4/shared';
 import { rooms, games, socketRoomMap } from '../store.js';
 import { authMiddleware, type AuthRequest } from '../auth.js';
 import { saveRoomToDb, loadRoomFromDb } from '../routes/rooms.js';
+import { createAIClient } from '../ai/aiClient.js';
 import {
   createGame,
   roll,
@@ -54,8 +55,14 @@ import { getShopItems, canBuyItem } from '../game/itemSystem/index.js';
 import { saveGameRecord } from '../gameRecords.js';
 import * as testMode from '../game/testMode/index.js';
 import { runAITurn, startAIAuto } from '../game/testMode/aiPlayer.js';
+import type { Socket as ClientSocket } from 'socket.io-client';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'monopoly4-dev-secret';
+
+/** 追踪通过 room:addAI 创建的 AI 客户端，避免与测试模式 AI 调度重复执行。 */
+const aiClients = new Map<string, ClientSocket<ServerToClientEvents, ClientToServerEvents>>();
+/** 已占用 AI 用户名（按房间），防止重复添加。 */
+const aiUsernamesPerRoom = new Map<string, Set<string>>();
 
 /** 是否启用测试模式 Socket 事件。
  * 显式设置 ENABLE_TEST_MODE 时优先按其值；
@@ -93,6 +100,13 @@ export function setupSocketIO(httpServer: HttpServer): SocketIOServer<ClientToSe
   io.use((socket: Socket, next) => {
     const token = socket.handshake.auth.token as string | undefined;
     if (!token) return next(new Error('Unauthorized'));
+    // 支持 AI 玩家特殊 token：ai-token-{username}
+    if (token.startsWith('ai-token-')) {
+      const username = token.slice('ai-token-'.length);
+      socket.data.user = { id: `ai-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, username };
+      socket.data.isAI = true;
+      return next();
+    }
     try {
       const payload = jwt.verify(token, JWT_SECRET) as { userId: string; username: string };
       socket.data.user = { id: payload.userId, username: payload.username };
@@ -158,12 +172,14 @@ export function setupSocketIO(httpServer: HttpServer): SocketIOServer<ClientToSe
         if (!state || state.status !== 'rolling') { aiTimers.delete(roomId); return; }
         const cp = state.players[state.currentPlayerIndex];
         if (!cp || !cp.isAI || cp.isBankrupt) { aiTimers.delete(roomId); return; }
+        // 已存在独立 AI 客户端（启发式/LLM）的 AI 玩家，由客户端自行决策，不要重复调度
+        if (aiClients.has(cp.id)) { aiTimers.delete(roomId); return; }
         const timer = setTimeout(() => {
           aiTimers.delete(roomId);
           const s = games.get(roomId);
           if (!s || s.status !== 'rolling') return;
           const ai = s.players[s.currentPlayerIndex];
-          if (!ai || !ai.isAI || ai.isBankrupt) return;
+          if (!ai || !ai.isAI || ai.isBankrupt || aiClients.has(ai.id)) return;
           try {
             // AI 自动掷骰
             const result = roll(s);
@@ -227,6 +243,7 @@ export function setupSocketIO(httpServer: HttpServer): SocketIOServer<ClientToSe
           isReady: false,
           isHost: false,
           seatIndex: room.players.length,
+          isAI: !!socket.data.isAI,
         });
       }
 
@@ -301,6 +318,83 @@ export function setupSocketIO(httpServer: HttpServer): SocketIOServer<ClientToSe
       io.to(roomId).emit('room:updated', room);
       emitState(roomId, state);
       scheduleAITurn(roomId); // 检查是否需要 AI 自动行动
+    });
+
+    socket.on('room:addAI', (roomId, aiType) => {
+      const room = rooms.get(roomId) ?? loadRoomFromDb(roomId);
+      if (!room) {
+        socket.emit('error', '房间不存在');
+        return;
+      }
+      if (room.hostId !== user.id) {
+        socket.emit('error', '只有房主可以添加 AI');
+        return;
+      }
+      if (room.status !== 'waiting') {
+        socket.emit('error', '房间已开始或已结束');
+        return;
+      }
+      if (room.players.length >= room.maxPlayers) {
+        socket.emit('error', '房间已满');
+        return;
+      }
+
+      const usedNames = aiUsernamesPerRoom.get(roomId) ?? new Set<string>();
+      const existingUsernames = new Set(room.players.map((p) => p.username));
+      let index = usedNames.size + 1;
+      let username = `AI-${aiType === 'llm' ? 'LLM' : 'Bot'}-${index}`;
+      while (usedNames.has(username) || existingUsernames.has(username)) {
+        index++;
+        username = `AI-${aiType === 'llm' ? 'LLM' : 'Bot'}-${index}`;
+      }
+      usedNames.add(username);
+      aiUsernamesPerRoom.set(roomId, usedNames);
+
+      const serverUrl = `http://localhost:${process.env.PORT || 3000}`;
+      const llmConfig: Record<string, string> = {};
+      if (process.env.OPENCODE_API_KEY) llmConfig.apiKey = process.env.OPENCODE_API_KEY;
+      if (process.env.OPENCODE_API_BASE_URL) llmConfig.baseUrl = process.env.OPENCODE_API_BASE_URL;
+      if (process.env.OPENCODE_MODEL) llmConfig.model = process.env.OPENCODE_MODEL;
+      const aiSocket = createAIClient({
+        serverUrl,
+        roomId,
+        username,
+        aiType,
+        llmConfig,
+      });
+
+      // AI 加入房间后，在 room:updated 回调中记录其 userId 并跟踪
+      const updateHandler = (updatedRoom: Room) => {
+        if (updatedRoom.id !== roomId) return;
+        const aiPlayer = updatedRoom.players.find((p) => p.username === username);
+        if (aiPlayer && !aiClients.has(aiPlayer.userId)) {
+          aiClients.set(aiPlayer.userId, aiSocket);
+        }
+      };
+      io.on('room:updated', updateHandler);
+
+      // 清理：房间销毁或 AI 断开时移除跟踪
+      aiSocket.on('disconnect', () => {
+        aiClients.forEach((s, id) => {
+          if (s === aiSocket) aiClients.delete(id);
+        });
+        io.off('room:updated', updateHandler);
+      });
+
+      socket.emit('game:log', {
+        type: 'system',
+        message: `房主添加了 AI 玩家 ${username}（${aiType === 'llm' ? 'LLM' : '启发式'}）`,
+        timestamp: Date.now(),
+      } as any);
+    });
+
+    socket.on('ai:thinking', (roomId, payload) => {
+      // 仅转发由 AI 客户端发送的思考状态，通知房间内其他玩家
+      socket.to(roomId).emit('ai:thinking', payload);
+    });
+
+    socket.on('ai:decided', (roomId, payload) => {
+      socket.to(roomId).emit('ai:decided', payload);
     });
 
     socket.on('game:roll', (roomId, diceCount) => {

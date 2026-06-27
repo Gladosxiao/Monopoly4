@@ -150,8 +150,10 @@ export function buildActionsGuide(actions: AvailableAction[]): string {
         const ct = action.params?.targetType ?? 'self';
         targetHint = ` target.cardId=${cardId} 必填，target.cardTarget 类型=${ct}`;
         // 部分卡片实现与声明 target 不一致，需要特殊说明
-        if (cardId === 'swapLand') {
-          targetHint += '（特殊：换地卡需要填 {targetPlayerId: 玩家 id}，与对方随机交换一块同等大小土地）';
+        if (cardId === 'swapLand' || cardId === 'auction' || cardId === 'rebuild') {
+          targetHint += '（填 {targetTileIndex: 整数格编号}）';
+        } else if (cardId === 'buyLand') {
+          targetHint += '（无需 target，但必须站在无主的地产格上才能使用）';
         } else if (ct === 'opponent') {
           targetHint += '（填 {targetPlayerId: 玩家 id，如 "playtest-user-2"}，不是 username）';
         } else if (ct === 'tile') {
@@ -244,12 +246,14 @@ const STRATEGY_HINTS = `
 - **董事长红利**：持股>10%自动成董事长获分红；接近10%时可加仓争夺董事长。
 
 ### 卡片/道具（积极使用，但买地第一）
+- **购地卡（buyLand）只能在你站在无主地产格上使用**；如果当前格不是地产格或已有主，不要使用购地卡，直接跳过。
 - **怪兽卡/拆除卡只能对有建筑（等级≥1）的地产使用**，不要对空地使用。
+- **换地卡（swapLand）/换房卡（swapHouse）必须指定一个地产格编号（targetTileIndex）**，目标是对手持有的、能帮你完成同组垄断的那块地。
 - 坏神明附身立即用送神符驱除；前方有陷阱用机器娃娃清除。
 - 陷阱：在自己 Lv2+ 地产前方 1-3 格或对手必经之路放置地雷/路障/定时炸弹。
 - 攻击卡：对对手高级地产使用涨价卡/查封卡/恶魔卡/怪兽卡/拆除卡；**对资金最多/资产领先的玩家优先使用均贫卡/陷害卡/冬眠卡/梦游卡/乌龟卡/转向卡/停留卡**。
 - 用抢夺卡获取对手现金。
-- **换地卡（swapLand）/换房卡（swapHouse）策略**：当对手持有同组中你缺少的那块地时，优先用换地卡/换房卡夺取，形成同组垄断。
+- **换地卡（swapLand）/换房卡（swapHouse）策略**：核心目标是形成同色垄断。统计你持有的地产分组，如果同组中缺少的那块地在对手手里，立即对那块地的 targetTileIndex 使用换地卡/换房卡夺取。形成垄断后，用涨价卡、天使卡、升级快速提升该组租金。
 - **抢夺卡（snatch）/均贫卡（equalPoverty）**：用于瓦解对手的垄断组或拉平领先者。
 - **不要平均打击所有对手**：集中火力打击当前资产最高的玩家，防止其反超；对落后玩家可适当保留实力。
 
@@ -281,7 +285,7 @@ const OUTPUT_FORMAT = `
 - 使用涨价卡（高优先级）：{"action":"useCard","target":{"cardId":"priceRise","cardTarget":{"targetGroup":0}},"reason":"打击对手高租金路段"}
 - 使用恶魔卡（高优先级）：{"action":"useCard","target":{"cardId":"devil","cardTarget":{"targetGroup":1}},"reason":"夷平对手路段"}
 - 使用陷害卡（高优先级）：{"action":"useCard","target":{"cardId":"frame","cardTarget":{"targetPlayerId":"playtest-user-2"}},"reason":"让领先玩家入狱"}
-- 使用换地卡：{"action":"useCard","target":{"cardId":"swapLand","cardTarget":{"targetPlayerId":"playtest-user-2"}},"reason":"与对手交换土地"}
+- 使用换地卡：{"action":"useCard","target":{"cardId":"swapLand","cardTarget":{"targetTileIndex":12}},"reason":"夺取对手持有的同组缺失地块形成垄断"}
 - 使用红卡（股市专注型）：{"action":"useCard","target":{"cardId":"redCard","cardTarget":{"targetStockId":"stock-insurance"}},"reason":"拉升保险股价后高位卖出"}
 - 商店买地雷（高优先级）：{"action":"buyItem","target":{"itemId":"mine","itemQuantity":1},"reason":"补充陷阱"}
 - 商店买攻击卡（高优先级）：{"action":"buyCard","target":{"cardId":"priceRise"},"reason":"购买攻击卡"}
