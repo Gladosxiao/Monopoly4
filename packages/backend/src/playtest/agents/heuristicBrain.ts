@@ -45,7 +45,7 @@ export class HeuristicBrain implements PlayerBrain {
   ) {
     this.name = name;
     this.buyAggressiveness = options?.buyAggressiveness ?? 1 - (options?.buyThreshold ?? 0.3);
-    this.upgradeAggressiveness = options?.upgradeAggressiveness ?? 1 - (options?.upgradeThreshold ?? 0.5);
+    this.upgradeAggressiveness = options?.upgradeAggressiveness ?? 1 - (options?.upgradeThreshold ?? 0.2);
     this.allowLoan = options?.allowLoan ?? true;
     this.useCards = options?.useCards ?? true;
   }
@@ -115,8 +115,9 @@ export class HeuristicBrain implements PlayerBrain {
     const upgradeAction = availableActions.find((a) => a.type === 'upgradeProperty');
     if (upgradeAction) {
       const upgradeCost = (tile.basePrice ?? 0) * state.priceIndex * ((tile.level ?? 0) + 1) * (state.config.propertyPriceMultiplier ?? 1);
-      const reserveRatio = 1 - this.upgradeAggressiveness;
-      if (me.cash >= upgradeCost && me.cash > totalWealth * reserveRatio) {
+      // 积极升级：保留 500 现金即可升级，有同组垄断时优先升满
+      const reserve = Math.max(500, totalWealth * 0.1);
+      if (me.cash >= upgradeCost + reserve) {
         return { action: 'upgradeProperty', reason: `升级 ${tile.name} 到等级 ${(tile.level ?? 0) + 1}` };
       }
     }
