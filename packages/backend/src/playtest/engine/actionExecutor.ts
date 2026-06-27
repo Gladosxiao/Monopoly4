@@ -307,8 +307,9 @@ export function getAvailableActions(state: GameState, playerId: string): Availab
       });
     }
 
-    // 股票交易（仅在 acting 阶段，避免替代掷骰子）
-    if (state.stocks && state.stocks.length > 0) {
+    // 股票交易（仅在 acting 阶段，每回合最多 2 次，避免无限交易卡住回合）
+    const tradesThisTurn = player.stockTradesThisTurn ?? 0;
+    if (state.stocks && state.stocks.length > 0 && tradesThisTurn < 2) {
       for (const stock of state.stocks) {
         const holding = player.stockHoldings?.[stock.id] ?? 0;
         if (stock.availableShares >= 100 && player.cash >= stock.price * 100) {

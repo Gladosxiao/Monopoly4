@@ -96,6 +96,7 @@ export function tradeStock(
     player.stockHoldings[stock.id] = newHolding;
     player.stockCostBasis[stock.id] = Math.floor(newCost);
     stock.availableShares -= quantity;
+    player.stockTradesThisTurn = (player.stockTradesThisTurn ?? 0) + 1;
     updateChairmen(state);
     return {
       success: true,
@@ -119,6 +120,7 @@ export function tradeStock(
   }
   player.cash += totalPrice;
   stock.availableShares += sellQuantity;
+  player.stockTradesThisTurn = (player.stockTradesThisTurn ?? 0) + 1;
   updateChairmen(state);
   return {
     success: true,

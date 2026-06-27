@@ -2065,6 +2065,11 @@ export function endTurn(state: GameState): GameState {
   state.status = 'rolling';
   state.lastRoll = undefined;
   state.pendingTileIndex = undefined;
+  // 重置新回合玩家的股票交易计数
+  const nextPlayer = state.players[nextIndex];
+  if (nextPlayer) {
+    nextPlayer.stockTradesThisTurn = 0;
+  }
 
   return state;
 }

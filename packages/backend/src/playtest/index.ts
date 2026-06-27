@@ -226,15 +226,15 @@ if (isMainModule) {
   const gameTimeEnv = process.env.PLAYTEST_GAME_TIME;
   const validWinConditions: WinCondition[] = [3, 5, 10, 50, 100, 'unlimited'];
   const validGameTimes: GameTime[] = ['1m', '3m', '6m', '1y', '2y', 'perpetual'];
-  const totalFunds = Number.isFinite(totalFundsEnv) && totalFundsEnv > 0 ? totalFundsEnv : 3000;
+  const totalFunds = Number.isFinite(totalFundsEnv) && totalFundsEnv > 0 ? totalFundsEnv : 10000;
   const salaryEnv = parseInt(process.env.PLAYTEST_SALARY ?? '', 10);
-  const salary = Number.isFinite(salaryEnv) && salaryEnv >= 0 ? salaryEnv : 1000;
+  const salary = Number.isFinite(salaryEnv) && salaryEnv >= 0 ? salaryEnv : 3000;
   const rentMultiplierEnv = parseFloat(process.env.PLAYTEST_RENT_MULTIPLIER ?? '');
-  const rentMultiplier = Number.isFinite(rentMultiplierEnv) && rentMultiplierEnv > 0 ? rentMultiplierEnv : 3;
+  const rentMultiplier = Number.isFinite(rentMultiplierEnv) && rentMultiplierEnv > 0 ? rentMultiplierEnv : 1;
   const stockVolatilityEnv = parseFloat(process.env.PLAYTEST_STOCK_VOLATILITY ?? '');
-  const stockVolatility = Number.isFinite(stockVolatilityEnv) && stockVolatilityEnv > 0 ? stockVolatilityEnv : 0.6;
+  const stockVolatility = Number.isFinite(stockVolatilityEnv) && stockVolatilityEnv > 0 ? stockVolatilityEnv : 0.8;
   const propertyPriceMultiplierEnv = parseFloat(process.env.PLAYTEST_PROPERTY_PRICE_MULTIPLIER ?? '');
-  const propertyPriceMultiplier = Number.isFinite(propertyPriceMultiplierEnv) && propertyPriceMultiplierEnv > 0 ? propertyPriceMultiplierEnv : 0.7;
+  const propertyPriceMultiplier = Number.isFinite(propertyPriceMultiplierEnv) && propertyPriceMultiplierEnv > 0 ? propertyPriceMultiplierEnv : 0.5;
   const forcePropertyPurchase = process.env.PLAYTEST_FORCE_PROPERTY_PURCHASE === 'true';
   const winCondition = validWinConditions.includes(Number(winConditionEnv) as WinCondition)
     ? (Number(winConditionEnv) as WinCondition)

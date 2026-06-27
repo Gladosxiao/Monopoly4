@@ -326,6 +326,8 @@ export interface Player {
   stockHoldings: Record<string, number>;
   /** 每只股票的加权平均买入成本（仓位） */
   stockCostBasis: Record<string, number>;
+  /** 本回合已进行股票交易次数（用于限制每回合频繁交易） */
+  stockTradesThisTurn?: number;
   insuranceDays: number;
   isBankrupt: boolean;
   isAI: boolean;
