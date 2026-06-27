@@ -395,8 +395,8 @@ export async function runFreePlay(
         );
       }
 
-      // 执行动作
-      const stateBeforeAction = session.latestState;
+      // 执行动作前深拷贝状态，用于后续资产变动对比
+      const stateBeforeAction = session.latestState ? structuredClone(session.latestState) as GameState : null;
       const result = await executeAction(session, playerConn.socket, decision, currentPlayer.id);
 
       // 无论成功/失败，都等待 session.latestState 被更新为服务器最新状态，
