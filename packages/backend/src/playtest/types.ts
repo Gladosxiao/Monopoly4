@@ -56,6 +56,18 @@ export interface ActionDecision {
   reason?: string;
 }
 
+/**
+ * 整回合行动计划（一次性输出）。
+ * 掷骰子由执行器自动完成（或使用遥控骰子）；
+ * 本计划只包含落点后的所有操作，按顺序执行。
+ */
+export interface TurnPlan {
+  /** 本回合要执行的动作列表（按顺序） */
+  actions: ActionDecision[];
+  /** 整体策略说明 */
+  reason?: string;
+}
+
 /** 可用动作描述 */
 export interface AvailableAction {
   type: ActionType;
@@ -78,6 +90,11 @@ export interface PlayerBrain {
    * @param availableActions 本回合可用的动作列表
    */
   decide(state: GameState, me: Player, availableActions: AvailableAction[]): Promise<ActionDecision>;
+  /**
+   * 一次性输出整回合计划（预滚动作 + 遥控骰子决策）。
+   * 如果大脑不支持 planTurn，可回退到 decide。
+   */
+  planTurn?(state: GameState, me: Player, availableActions: AvailableAction[]): Promise<TurnPlan>;
 }
 
 // ==================== 配置 ====================

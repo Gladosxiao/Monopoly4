@@ -12,7 +12,7 @@
  */
 
 import type { GameState, Player, Tile } from '@monopoly4/shared';
-import type { PlayerBrain, ActionDecision, AvailableAction, ActionTarget } from '../types.js';
+import type { PlayerBrain, ActionDecision, AvailableAction, ActionTarget, TurnPlan } from '../types.js';
 
 /** 卡片效果分类 */
 const DEFENSE_CARDS = new Set(['freePass', 'dismissSpirit', 'angel']);
@@ -66,6 +66,88 @@ export class HeuristicBrain implements PlayerBrain {
 
     this.lastAction = { action: result.action, target: result.target, position: me.position };
     return result;
+  }
+
+  /**
+   * 一次性输出整回合行动计划。
+   * 掷骰子由执行器自动处理；本方法只在 acting 阶段输出落点后的动作列表。
+   */
+  async planTurn(state: GameState, me: Player, availableActions: AvailableAction[]): Promise<TurnPlan> {
+    const actions: ActionDecision[] = [];
+    const tile = state.map.tiles[me.position];
+    const totalWealth = me.cash + me.deposit;
+
+    // 1. 空地产且资金够 → 购买
+    const buyAction = availableActions.find((a) => a.type === 'buyProperty');
+    if (buyAction) {
+      const price = (tile.basePrice ?? 0) * state.priceIndex * (state.config.propertyPriceMultiplier ?? 1);
+      const reserve = Math.max(300, totalWealth * 0.1);
+      if (me.cash >= price + reserve) {
+        actions.push({ action: 'buyProperty', reason: `购买 ${tile.name}（价格 ${price.toFixed(0)}）` });
+      }
+    }
+
+    // 2. 自己地产可升级 → 升级
+    const upgradeAction = availableActions.find((a) => a.type === 'upgradeProperty');
+    if (upgradeAction) {
+      const upgradeCost = (tile.basePrice ?? 0) * state.priceIndex * ((tile.level ?? 0) + 1) * (state.config.propertyPriceMultiplier ?? 1);
+      const reserve = Math.max(500, totalWealth * 0.1);
+      if (me.cash >= upgradeCost + reserve) {
+        actions.push({ action: 'upgradeProperty', reason: `升级 ${tile.name} 到等级 ${(tile.level ?? 0) + 1}` });
+      }
+    }
+
+    // 3. 使用卡片/道具
+    if (this.useCards) {
+      const cardDecision = this.decideUseCard(state, me, availableActions);
+      if (cardDecision) actions.push(cardDecision);
+
+      const itemDecision = this.decideUseItem(state, me, availableActions);
+      if (itemDecision) actions.push(itemDecision);
+    }
+
+    // 4. 股票交易
+    const stockDecision = this.decideTradeStock(state, me, availableActions);
+    if (stockDecision) actions.push(stockDecision);
+
+    // 5. 商店格 → 购买卡片/道具
+    if (tile.type === 'shop' && this.useCards) {
+      const shopDecision = this.decideShopPurchase(state, me, availableActions);
+      if (shopDecision) actions.push(shopDecision);
+    }
+
+    // 6. 解救 NPC
+    const rescueAction = availableActions.find((a) => a.type === 'rescueNpc');
+    if (rescueAction) {
+      actions.push({
+        action: 'rescueNpc',
+        target: { npcId: rescueAction.params?.npcId as string },
+        reason: '解救 NPC',
+      });
+    }
+
+    // 7. 有贷款且资金够 → 还款
+    if (me.loan > 0 && me.cash > me.loan * 1.2) {
+      actions.push({ action: 'repayLoan', target: { amount: Math.min(me.loan, me.cash) }, reason: '偿还贷款' });
+    }
+
+    // 8. 资金紧张时贷款（在起点附近）
+    if (this.allowLoan && me.cash < totalWealth * 0.15 && me.loan === 0 && me.position <= 2) {
+      actions.push({ action: 'takeLoan', target: { amount: 5000 }, reason: '资金紧张，贷款 5000' });
+    }
+
+    // 9. 默认跳过
+    if (actions.length === 0) {
+      actions.push({ action: 'skipTurn', reason: '无可盈利操作，跳过' });
+    }
+
+    // 更新 lastAction 避免同一回合内无限购买
+    const last = actions[actions.length - 1];
+    if (last) {
+      this.lastAction = { action: last.action, target: last.target, position: me.position };
+    }
+
+    return { actions, reason: `启发式整回合计划：${actions.map((a) => a.action).join(', ')}` };
   }
 
   private decideRoll(state: GameState, me: Player, availableActions: AvailableAction[]): ActionDecision {

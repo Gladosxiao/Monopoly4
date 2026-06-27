@@ -13,13 +13,13 @@ import { existsSync, readFileSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { GameState, Player } from '@monopoly4/shared';
-import type { PlayerBrain, ActionDecision, AvailableAction, ActionType } from '../types.js';
+import type { PlayerBrain, ActionDecision, AvailableAction, ActionType, TurnPlan } from '../types.js';
 import { buildSystemPrompt, buildUserPrompt, buildActionsGuide, type PlayerPersonality } from './promptBuilder.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PLAYTEST_ENV_PATH = resolve(__dirname, '../../../.playtest.env');
 
-const MAX_RETRIES = 3;
+const MAX_RETRIES = 1;
 const LLM_TIMEOUT = 180000;
 
 /** LLM 调用配置 */
@@ -278,6 +278,66 @@ function matchesAvailableAction(
   }
 }
 
+/**
+ * 构建一次性整回合计划 prompt。
+ * 与 decide 不同，这里要求 LLM 输出一个动作数组，而不是单个动作。
+ */
+function buildPlanPrompt(
+  state: GameState,
+  me: Player,
+  availableActions: AvailableAction[],
+  recentLogs: string[]
+): string {
+  const playerSummary = [
+    `我:${me.username} 载具:${me.vehicle} 位置:${me.position}(${state.map.tiles[me.position]?.name}) 现金${me.cash} 存${me.deposit} 贷${me.loan} 券${me.coupons} 神${me.spirit?.spiritId ?? '-'}`,
+    `我的地产:${me.properties.map((idx) => `#${idx}${state.map.tiles[idx]?.name}Lv${state.map.tiles[idx]?.level ?? 0}`).join('; ') || '无'}`,
+    `卡片:${me.cards.map((c) => c.cardId).join(', ') || '无'}`,
+    `道具:${me.items.map((i) => `${i.itemId}x${i.quantity}`).join(', ') || '无'}`,
+    `持股:${me.stockHoldings ? Object.entries(me.stockHoldings).map(([k, v]) => `${k}:${v}`).join(', ') : '无'}`,
+  ].join('\n');
+
+  const surroundings: string[] = [];
+  const tileCount = state.map.tiles.length;
+  for (let d = 1; d <= 6; d++) {
+    const idx = (me.position + d) % tileCount;
+    const t = state.map.tiles[idx];
+    if (t.type === 'property') {
+      const owner = t.ownerId ? (state.players.find((p) => p.id === t.ownerId)?.username ?? '?') : '无';
+      surroundings.push(`+${d}#${idx}${t.name} 价${Math.round((t.basePrice ?? 0) * state.priceIndex)} 主${owner} Lv${t.level ?? 0}`);
+    } else {
+      surroundings.push(`+${d}#${idx}${t.name}`);
+    }
+  }
+
+  const actionsGuide = buildActionsGuide(availableActions);
+  const logsStr = recentLogs.length > 0 ? recentLogs.join('\n') : '（无）';
+
+  return `你是玩家 ${me.username}，当前处于行动阶段（已掷骰子并落地）。请输出本回合要执行的所有操作，按顺序执行。\n\n注意：\n1. 你必须输出一个 JSON 数组，数组中每个对象包含 action、target、reason。\n2. 数组中**不要**包含 roll；掷骰子已由系统自动完成。\n3. 优先执行买地/升级（如果 affordable），然后根据性格使用卡片/道具/股票/商店购买。\n4. 如果没什么可做，输出 [{"action":"skipTurn","target":{},"reason":"跳过"}]。\n5. 不要输出任何解释，只输出 JSON 数组。\n\n## 你的状态\n${playerSummary}\n\n## 前方6格\n${surroundings.join(' | ')}\n\n## 可用操作\n${actionsGuide}\n\n## 最近事件\n${logsStr}\n\n输出示例（假设可用）：\n[{"action":"buyProperty","target":{},"reason":"买下空地产"},{"action":"useCard","target":{"cardId":"priceRise","cardTarget":{"targetGroup":0}},"reason":"提升对手路段租金压力"}]`;
+}
+
+/** 校验 LLM 输出的整回合计划 */
+function validatePlan(raw: unknown, availableActions: AvailableAction[]): TurnPlan | null {
+  if (!Array.isArray(raw) || raw.length === 0) return null;
+
+  const actions: ActionDecision[] = [];
+  for (const item of raw) {
+    if (!item || typeof item !== 'object') return null;
+    const obj = item as Record<string, unknown>;
+    if (typeof obj.action !== 'string') return null;
+    const decision: ActionDecision = {
+      action: obj.action as ActionType,
+      reason: typeof obj.reason === 'string' ? obj.reason : undefined,
+    };
+    if (obj.target && typeof obj.target === 'object') {
+      decision.target = obj.target as ActionDecision['target'];
+    }
+    if (!matchesAvailableAction(decision, availableActions)) return null;
+    actions.push(decision);
+  }
+
+  return { actions, reason: 'LLM 整回合计划' };
+}
+
 /** 从 LLM 文本输出中提取 JSON */
 function extractJSON(text: string): unknown {
   // 尝试直接解析
@@ -397,6 +457,66 @@ export class OpencodeAgentBrain implements PlayerBrain {
 
     console.warn(`[OpencodeAgentBrain] LLM 重试 ${MAX_RETRIES} 次后回退到启发式大脑`);
     return this.fallback.decide(state, me, availableActions);
+  }
+
+  /**
+   * 一次性输出整回合行动计划。
+   * 掷骰子由执行器自动处理，本方法只在 acting 阶段调用。
+   * LLM 输出一个 JSON 数组，每个元素是一个 action/target/reason 对象，按顺序执行。
+   */
+  async planTurn(state: GameState, me: Player, availableActions: AvailableAction[]): Promise<TurnPlan> {
+    if (!this.config.apiKey) {
+      if (this.fallback.planTurn) {
+        return this.fallback.planTurn(state, me, availableActions);
+      }
+      const decision = await this.fallback.decide(state, me, availableActions);
+      return { actions: [decision], reason: 'fallback 单动作' };
+    }
+
+    if (availableActions.length === 0) {
+      return { actions: [{ action: 'skipTurn', reason: '无可用动作' }], reason: '无可用动作' };
+    }
+
+    // 过滤掉 roll：掷骰子由执行器自动完成
+    const filteredActions = availableActions.filter((a) => a.type !== 'roll');
+    const recentLogs = state.logs.slice(-5).map((l) => l.message);
+
+    this.messages = [{ role: 'system', content: buildSystemPrompt(this.personality) }];
+    this.messages.push({
+      role: 'user',
+      content: buildPlanPrompt(state, me, filteredActions, recentLogs),
+    });
+
+    for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+      try {
+        const rawOutput = await callLLM(this.messages, this.config);
+        const parsed = extractJSON(rawOutput);
+        const plan = validatePlan(parsed, filteredActions);
+
+        if (plan) {
+          console.log(
+            `[OpencodeAgentBrain] LLM 计划成功: ${plan.actions.map((d) => d.action).join(', ')} - ${plan.reason ?? ''}`
+          );
+          return plan;
+        }
+
+        console.warn(`[OpencodeAgentBrain] LLM 计划校验失败 (attempt ${attempt + 1})`);
+        this.messages.push({ role: 'assistant', content: rawOutput });
+        this.messages.push({
+          role: 'user',
+          content: `上一条计划无效。请严格从本回合可用动作列表中选择，并输出合法 JSON 数组。\n\n${buildActionsGuide(filteredActions)}`,
+        });
+      } catch (err: any) {
+        console.warn(`[OpencodeAgentBrain] LLM 调用失败 (attempt ${attempt + 1}): ${err.message}`);
+      }
+    }
+
+    console.warn(`[OpencodeAgentBrain] LLM 计划重试 ${MAX_RETRIES} 次后回退到启发式大脑`);
+    if (this.fallback.planTurn) {
+      return this.fallback.planTurn(state, me, availableActions);
+    }
+    const decision = await this.fallback.decide(state, me, availableActions);
+    return { actions: [decision], reason: 'fallback 单动作' };
   }
 }
 

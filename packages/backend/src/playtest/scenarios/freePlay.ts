@@ -13,6 +13,7 @@ import type {
   PlaytestReport,
   Issue,
   PlayerConfig,
+  ActionDecision,
 } from '../types.js';
 import type { GameSession, PlayerConnection, PlaytestCheckpoint } from '../engine/gameSession.js';
 import { waitForState, sleep } from '../engine/gameSession.js';
@@ -291,6 +292,9 @@ export async function runFreePlay(
   const consecutiveFailures: Record<string, number> = {};
   const MAX_CONSECUTIVE_FAILURES = 3;
 
+  // 缓存每个玩家本回合的 planTurn 结果，确保 LLM 每回合只调用一次
+  const pendingPlans: Map<string, ActionDecision[]> = new Map();
+
   /** 记录一次商店访问 */
   function recordShopLanding(player: Player, tile: Tile): void {
     if (tile.type !== 'shop') return;
@@ -317,7 +321,44 @@ export async function runFreePlay(
     await waitForLatestStateChange(session, stateBefore, 5000);
   }
 
-  // 主循环：每轮处理一个动作；当 currentPlayerIndex 变化时，totalTurns（完整玩家回合）递增
+  
+/** 决定 rolling 阶段是否使用遥控骰子；返回目标点数或 null（自动 roll） */
+function decideRemoteDice(state: GameState, me: Player): number | null {
+  const remoteDice = me.items.find((i) => i.itemId === 'remoteDice');
+  if (!remoteDice || remoteDice.quantity <= 0) return null;
+
+  const tileCount = state.map.tiles.length;
+  // 最高优先级：自己可升级地产
+  for (let roll = 1; roll <= 6; roll++) {
+    const idx = (me.position + roll) % tileCount;
+    const tile = state.map.tiles[idx];
+    if (
+      tile.type === 'property' &&
+      tile.ownerId === me.id &&
+      (tile.level ?? 0) < 5
+    ) {
+      const upgradeCost =
+        (tile.basePrice ?? 0) *
+        state.priceIndex *
+        ((tile.level ?? 0) + 1) *
+        (state.config.propertyPriceMultiplier ?? 1);
+      if (me.cash >= upgradeCost + Math.max(500, me.cash * 0.1)) {
+        return roll;
+      }
+    }
+  }
+  // 次高：空地产
+  for (let roll = 1; roll <= 6; roll++) {
+    const idx = (me.position + roll) % tileCount;
+    const tile = state.map.tiles[idx];
+    if (tile.type === 'property' && !tile.ownerId) {
+      return roll;
+    }
+  }
+  return null;
+}
+
+// 主循环：每轮处理一个动作；当 currentPlayerIndex 变化时，totalTurns（完整玩家回合）递增
   while (totalTurns < maxTurns) {
     const state = session.latestState;
     if (!state) {
@@ -388,6 +429,10 @@ export async function runFreePlay(
       } else {
         totalTurns++;
       }
+      // 切换玩家时清理上一玩家的缓存计划
+      if (previousPlayerId) {
+        pendingPlans.delete(previousPlayerId);
+      }
       if (totalTurns > maxTurns) break;
       previousPlayerId = currentPlayer.id;
     }
@@ -418,7 +463,41 @@ export async function runFreePlay(
 
     // 让大脑决策
     try {
-      const decision = await brain.decide(state, currentPlayer, availableActions);
+      let decision: ActionDecision;
+
+      if (state.status === 'rolling') {
+        // rolling 阶段：不调用 LLM，自动 roll 或使用遥控骰子
+        const remoteDiceValue = decideRemoteDice(state, currentPlayer);
+        if (remoteDiceValue !== null) {
+          decision = {
+            action: 'useItem',
+            target: { itemId: 'remoteDice', itemTarget: { diceValue: remoteDiceValue } },
+            reason: `遥控骰子掷 ${remoteDiceValue}`,
+          };
+        } else {
+          const diceCount = currentPlayer.vehicle === 'car' ? 3 : currentPlayer.vehicle === 'bike' ? 2 : 1;
+          decision = { action: 'roll', target: { diceCount }, reason: '自动掷骰子' };
+        }
+      } else {
+        // acting 阶段：使用缓存的 planTurn 结果，确保每回合只调用一次大脑
+        let plan = pendingPlans.get(currentPlayer.id);
+        if (!plan || plan.length === 0) {
+          if (brain.planTurn) {
+            const turnPlan = await brain.planTurn(state, currentPlayer, availableActions);
+            plan = turnPlan.actions;
+            if (verbose && plan.length > 0) {
+              console.log(
+                `[Round ${totalTurns}] ${currentPlayer.username} (${brain.name}) 计划: ${plan.map((d) => d.action).join(', ')} - ${turnPlan.reason ?? ''}`
+              );
+            }
+          } else {
+            const single = await brain.decide(state, currentPlayer, availableActions);
+            plan = [single];
+          }
+          pendingPlans.set(currentPlayer.id, plan);
+        }
+        decision = plan.shift()!;
+      }
 
       actionCount++;
       if (verbose) {
@@ -455,6 +534,7 @@ export async function runFreePlay(
           });
           await forceSkipTurn();
           consecutiveFailures[currentPlayer.id] = 0;
+          pendingPlans.delete(currentPlayer.id);
         }
       } else {
         consecutiveFailures[currentPlayer.id] = 0;
