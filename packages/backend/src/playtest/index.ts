@@ -230,11 +230,11 @@ if (isMainModule) {
   const salaryEnv = parseInt(process.env.PLAYTEST_SALARY ?? '', 10);
   const salary = Number.isFinite(salaryEnv) && salaryEnv >= 0 ? salaryEnv : 3000;
   const rentMultiplierEnv = parseFloat(process.env.PLAYTEST_RENT_MULTIPLIER ?? '');
-  const rentMultiplier = Number.isFinite(rentMultiplierEnv) && rentMultiplierEnv > 0 ? rentMultiplierEnv : 1;
+  const rentMultiplier = Number.isFinite(rentMultiplierEnv) && rentMultiplierEnv > 0 ? rentMultiplierEnv : 1.5;
   const stockVolatilityEnv = parseFloat(process.env.PLAYTEST_STOCK_VOLATILITY ?? '');
-  const stockVolatility = Number.isFinite(stockVolatilityEnv) && stockVolatilityEnv > 0 ? stockVolatilityEnv : 0.8;
+  const stockVolatility = Number.isFinite(stockVolatilityEnv) && stockVolatilityEnv > 0 ? stockVolatilityEnv : 0.6;
   const propertyPriceMultiplierEnv = parseFloat(process.env.PLAYTEST_PROPERTY_PRICE_MULTIPLIER ?? '');
-  const propertyPriceMultiplier = Number.isFinite(propertyPriceMultiplierEnv) && propertyPriceMultiplierEnv > 0 ? propertyPriceMultiplierEnv : 0.5;
+  const propertyPriceMultiplier = Number.isFinite(propertyPriceMultiplierEnv) && propertyPriceMultiplierEnv > 0 ? propertyPriceMultiplierEnv : 0.6;
   const forcePropertyPurchase = process.env.PLAYTEST_FORCE_PROPERTY_PURCHASE === 'true';
   const winCondition = validWinConditions.includes(Number(winConditionEnv) as WinCondition)
     ? (Number(winConditionEnv) as WinCondition)

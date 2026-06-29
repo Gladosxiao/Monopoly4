@@ -22,9 +22,9 @@ function getEnv() {
   const playerCount = Number.isFinite(playerCountEnv) && playerCountEnv >= 2 && playerCountEnv <= 8 ? playerCountEnv : 6;
   const totalFunds = parseInt(process.env.PLAYTEST_TOTAL_FUNDS ?? '', 10) || 10000;
   const salary = parseInt(process.env.PLAYTEST_SALARY ?? '', 10) || 3000;
-  const rentMultiplier = parseFloat(process.env.PLAYTEST_RENT_MULTIPLIER ?? '') || 1;
-  const stockVolatility = parseFloat(process.env.PLAYTEST_STOCK_VOLATILITY ?? '') || 0.8;
-  const propertyPriceMultiplier = parseFloat(process.env.PLAYTEST_PROPERTY_PRICE_MULTIPLIER ?? '') || 0.5;
+  const rentMultiplier = parseFloat(process.env.PLAYTEST_RENT_MULTIPLIER ?? '') || 1.5;
+  const stockVolatility = parseFloat(process.env.PLAYTEST_STOCK_VOLATILITY ?? '') || 0.6;
+  const propertyPriceMultiplier = parseFloat(process.env.PLAYTEST_PROPERTY_PRICE_MULTIPLIER ?? '') || 0.6;
   return { maxTurns, brainType, mapId, playerCount, totalFunds, salary, rentMultiplier, stockVolatility, propertyPriceMultiplier };
 }
 

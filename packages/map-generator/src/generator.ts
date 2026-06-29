@@ -142,11 +142,11 @@ export const EXPANDED_TEMPLATE: MapTemplate = {
   largePropertySpan: 2, // 3 个大地产各占 2 格，共 6 格
   smallPropertyGroups: [4, 4, 4, 4, 4, 4, 4, 4], // 32 个小块，分 8 组连续 4 个
   specialTiles: {
-    fate: 3,
-    chance: 3,
+    fate: 2,
+    chance: 2,
     prison: 1,
     hospital: 1,
-    shop: 4,
+    shop: 6,
     card: 1,
     tax: 2,
     coupon10: 1,

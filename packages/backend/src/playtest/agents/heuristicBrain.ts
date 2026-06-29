@@ -77,23 +77,49 @@ export class HeuristicBrain implements PlayerBrain {
     const tile = state.map.tiles[me.position];
     const totalWealth = me.cash + me.deposit;
 
-    // 1. 空地产且资金够 → 购买
+    // 1. 空地产且资金够 → 购买（优先完成路段垄断）
     const buyAction = availableActions.find((a) => a.type === 'buyProperty');
-    if (buyAction) {
+    if (buyAction && tile.type === 'property' && !tile.ownerId) {
       const price = (tile.basePrice ?? 0) * state.priceIndex * (state.config.propertyPriceMultiplier ?? 1);
-      const reserve = Math.max(300, totalWealth * 0.1);
+      const nearMono = this.findNearMonopolyGroup(state, me);
+      const isKeyTile = nearMono && nearMono.missingTile.index === tile.index;
+      const dominantGroup = tile.group !== undefined ? this.findMyDominantGroup(state, me) : undefined;
+      const inDominantGroup = tile.group !== undefined && dominantGroup === tile.group;
+      // 关键地块（可完成垄断）或优势路段地块：降低现金保留，优先购买
+      const reserve = isKeyTile
+        ? Math.max(100, totalWealth * 0.05)
+        : inDominantGroup
+        ? Math.max(200, totalWealth * 0.08)
+        : Math.max(300, totalWealth * 0.1);
       if (me.cash >= price + reserve) {
-        actions.push({ action: 'buyProperty', reason: `购买 ${tile.name}（价格 ${price.toFixed(0)}）` });
+        const reason = isKeyTile
+          ? `购买关键地块 ${tile.name}（价格 ${price.toFixed(0)}），完成路段垄断`
+          : inDominantGroup
+          ? `购买 ${tile.name}（价格 ${price.toFixed(0)}），巩固优势路段`
+          : `购买 ${tile.name}（价格 ${price.toFixed(0)}）`;
+        actions.push({ action: 'buyProperty', reason });
       }
     }
 
-    // 2. 自己地产可升级 → 升级
+    // 2. 自己地产可升级 → 升级（优先升级已垄断或优势路段）
     const upgradeAction = availableActions.find((a) => a.type === 'upgradeProperty');
-    if (upgradeAction) {
+    if (upgradeAction && tile.type === 'property' && tile.ownerId === me.id) {
       const upgradeCost = (tile.basePrice ?? 0) * state.priceIndex * ((tile.level ?? 0) + 1) * (state.config.propertyPriceMultiplier ?? 1);
-      const reserve = Math.max(500, totalWealth * 0.1);
+      const groupOwnership = tile.group !== undefined ? this.getGroupOwnership(state, tile.group) : new Map<string, number>();
+      const myGroupCount = tile.group !== undefined ? (groupOwnership.get(me.id) ?? 0) : 0;
+      const groupSize = tile.group !== undefined ? this.getGroupTiles(state, tile.group).length : 1;
+      const hasMonopoly = myGroupCount === groupSize && groupSize > 1;
+      // 垄断路段或即将垄断时积极升级；否则保守升级
+      const reserve = hasMonopoly
+        ? Math.max(200, totalWealth * 0.05)
+        : myGroupCount >= groupSize - 1
+        ? Math.max(300, totalWealth * 0.08)
+        : Math.max(500, totalWealth * 0.12);
       if (me.cash >= upgradeCost + reserve) {
-        actions.push({ action: 'upgradeProperty', reason: `升级 ${tile.name} 到等级 ${(tile.level ?? 0) + 1}` });
+        const reason = hasMonopoly
+          ? `升级垄断地块 ${tile.name} 到等级 ${(tile.level ?? 0) + 1}`
+          : `升级 ${tile.name} 到等级 ${(tile.level ?? 0) + 1}`;
+        actions.push({ action: 'upgradeProperty', reason });
       }
     }
 
@@ -183,24 +209,47 @@ export class HeuristicBrain implements PlayerBrain {
     const tile = state.map.tiles[me.position];
     const totalWealth = me.cash + me.deposit;
 
-    // 1. 空地产且资金够 → 购买（优先买地，保留最低 300 现金或 10% 总资产）
+    // 1. 空地产且资金够 → 购买（优先完成路段垄断）
     const buyAction = availableActions.find((a) => a.type === 'buyProperty');
-    if (buyAction) {
+    if (buyAction && tile.type === 'property' && !tile.ownerId) {
       const price = (tile.basePrice ?? 0) * state.priceIndex * (state.config.propertyPriceMultiplier ?? 1);
-      const reserve = Math.max(300, totalWealth * 0.1);
+      const nearMono = this.findNearMonopolyGroup(state, me);
+      const isKeyTile = nearMono && nearMono.missingTile.index === tile.index;
+      const dominantGroup = tile.group !== undefined ? this.findMyDominantGroup(state, me) : undefined;
+      const inDominantGroup = tile.group !== undefined && dominantGroup === tile.group;
+      const reserve = isKeyTile
+        ? Math.max(100, totalWealth * 0.05)
+        : inDominantGroup
+        ? Math.max(200, totalWealth * 0.08)
+        : Math.max(300, totalWealth * 0.1);
       if (me.cash >= price + reserve) {
-        return { action: 'buyProperty', reason: `购买 ${tile.name}（价格 ${price}）` };
+        const reason = isKeyTile
+          ? `购买关键地块 ${tile.name}（价格 ${price}），完成路段垄断`
+          : inDominantGroup
+          ? `购买 ${tile.name}（价格 ${price}），巩固优势路段`
+          : `购买 ${tile.name}（价格 ${price}）`;
+        return { action: 'buyProperty', reason };
       }
     }
 
-    // 2. 自己地产可升级 → 升级
+    // 2. 自己地产可升级 → 升级（优先升级垄断路段）
     const upgradeAction = availableActions.find((a) => a.type === 'upgradeProperty');
-    if (upgradeAction) {
+    if (upgradeAction && tile.type === 'property' && tile.ownerId === me.id) {
       const upgradeCost = (tile.basePrice ?? 0) * state.priceIndex * ((tile.level ?? 0) + 1) * (state.config.propertyPriceMultiplier ?? 1);
-      // 积极升级：保留 500 现金即可升级，有同组垄断时优先升满
-      const reserve = Math.max(500, totalWealth * 0.1);
+      const groupOwnership = tile.group !== undefined ? this.getGroupOwnership(state, tile.group) : new Map<string, number>();
+      const myGroupCount = tile.group !== undefined ? (groupOwnership.get(me.id) ?? 0) : 0;
+      const groupSize = tile.group !== undefined ? this.getGroupTiles(state, tile.group).length : 1;
+      const hasMonopoly = myGroupCount === groupSize && groupSize > 1;
+      const reserve = hasMonopoly
+        ? Math.max(200, totalWealth * 0.05)
+        : myGroupCount >= groupSize - 1
+        ? Math.max(300, totalWealth * 0.08)
+        : Math.max(500, totalWealth * 0.12);
       if (me.cash >= upgradeCost + reserve) {
-        return { action: 'upgradeProperty', reason: `升级 ${tile.name} 到等级 ${(tile.level ?? 0) + 1}` };
+        const reason = hasMonopoly
+          ? `升级垄断地块 ${tile.name} 到等级 ${(tile.level ?? 0) + 1}`
+          : `升级 ${tile.name} 到等级 ${(tile.level ?? 0) + 1}`;
+        return { action: 'upgradeProperty', reason };
       }
     }
 
@@ -247,7 +296,7 @@ export class HeuristicBrain implements PlayerBrain {
     return { action: 'skipTurn', reason: '无可盈利操作，跳过' };
   }
 
-  /** 股票交易决策 */
+  /** 股票交易决策：基于成本价与短期趋势的择时策略 */
   private decideTradeStock(state: GameState, me: Player, availableActions: AvailableAction[]): ActionDecision | null {
     if (!state.stocks || state.stocks.length === 0) return null;
 
@@ -256,54 +305,71 @@ export class HeuristicBrain implements PlayerBrain {
 
     const totalWealth = me.cash + me.deposit - me.loan;
 
-    // 1. 优先卖出高价股（止盈）或现金紧张时割肉
-    const sellAction = tradeActions.find((a) => {
-      const qty = a.params?.stockQuantity as number;
-      if (qty >= 0) return false;
-      const stock = state.stocks!.find((s) => s.id === a.params?.stockId);
-      return stock && stock.price >= 28;
-    });
-    if (sellAction) {
-      const stockId = sellAction.params?.stockId as string;
+    // 1. 止盈/止损卖出
+    for (const action of tradeActions) {
+      const qty = action.params?.stockQuantity as number;
+      if (qty >= 0) continue; // 只处理卖出动作
+      const stockId = action.params?.stockId as string;
       const stock = state.stocks!.find((s) => s.id === stockId);
-      return {
-        action: 'tradeStock',
-        target: { stockId, stockQuantity: -100 },
-        reason: `股价 ${stock?.price} 较高，卖出 ${stock?.name ?? stockId} 100 股止盈`,
-      };
-    }
+      if (!stock) continue;
+      const costBasis = me.stockCostBasis?.[stockId] ?? stock.price;
+      const shares = me.stockHoldings?.[stockId] ?? 0;
+      if (shares <= 0) continue;
 
-    // 现金紧张（低于总资产 10%）时卖出任意持股
-    if (me.cash < totalWealth * 0.1) {
-      const anySell = tradeActions.find((a) => (a.params?.stockQuantity as number) < 0);
-      if (anySell) {
-        const stockId = anySell.params?.stockId as string;
-        const stock = state.stocks!.find((s) => s.id === stockId);
+      // 止盈 25% 或止损 15%，或现金紧张时割肉
+      const profitRatio = stock.price / costBasis;
+      const cashRatio = me.cash / Math.max(1, totalWealth);
+      if (profitRatio >= 1.25 || profitRatio <= 0.85 || cashRatio < 0.08) {
+        const reason =
+          profitRatio >= 1.25
+            ? `股价 ${stock.price} 较成本 ${costBasis.toFixed(0)} 上涨 ${((profitRatio - 1) * 100).toFixed(0)}%，卖出止盈`
+            : profitRatio <= 0.85
+            ? `股价 ${stock.price} 较成本 ${costBasis.toFixed(0)} 下跌 ${((1 - profitRatio) * 100).toFixed(0)}%，止损卖出`
+            : '现金紧张，卖出股票补充资金';
         return {
           action: 'tradeStock',
-          target: { stockId, stockQuantity: -100 },
-          reason: '现金紧张，卖出股票补充资金',
+          target: { stockId, stockQuantity: -Math.min(100, shares) },
+          reason,
         };
       }
     }
 
-    // 2. heuristic 大脑默认把资金留给地产；只有地产充足且现金充裕时才配置股票
+    // 2. 买入：只在股价极低或处于上升趋势时买入
     const propertyCount = me.properties.length;
-    const affordableStock = tradeActions.find((a) => {
-      const qty = a.params?.stockQuantity as number;
-      if (qty < 0) return false;
-      const stock = state.stocks!.find((s) => s.id === a.params?.stockId);
-      return stock && stock.price <= 24 && propertyCount >= 4 && me.cash >= stock.price * 100 + 3000;
-    });
+    // 需要至少 4 块地产且现金充裕，才用余钱炒股
+    if (propertyCount < 4 || me.cash < totalWealth * 0.3) return null;
 
-    if (affordableStock) {
-      const stockId = affordableStock.params?.stockId as string;
+    // 计算每只股票近 3 日趋势（如 OHLC 历史足够）
+    for (const action of tradeActions) {
+      const qty = action.params?.stockQuantity as number;
+      if (qty < 0) continue;
+      const stockId = action.params?.stockId as string;
       const stock = state.stocks!.find((s) => s.id === stockId);
-      return {
-        action: 'tradeStock',
-        target: { stockId, stockQuantity: 100 },
-        reason: `资金充裕且地产充足，买入低价股票 ${stock?.name ?? stockId} 100 股`,
-      };
+      if (!stock) continue;
+
+      const history = stock.ohlcHistory ?? [];
+      const recent = history.slice(-3);
+      const isUptrend = recent.length >= 2 && recent[recent.length - 1].close > recent[0].open;
+      const isVeryCheap = stock.price <= 18;
+      const costBasis = me.stockCostBasis?.[stockId] ?? 0;
+      const shares = me.stockHoldings?.[stockId] ?? 0;
+      // 避免已持仓且当前亏损时加仓
+      if (shares > 0 && costBasis > 0 && stock.price < costBasis * 0.95) continue;
+
+      if (isVeryCheap || isUptrend) {
+        // 单只股票投入不超过当前现金 20%
+        const investAmount = Math.min(stock.price * 100, me.cash * 0.2);
+        const buyShares = Math.floor(investAmount / Math.max(1, stock.price));
+        if (buyShares >= 10 && me.cash >= stock.price * buyShares + 2000) {
+          return {
+            action: 'tradeStock',
+            target: { stockId, stockQuantity: buyShares },
+            reason: isVeryCheap
+              ? `股价 ${stock.price} 极低，买入 ${buyShares} 股${stock.name ?? stockId}`
+              : `股价 ${stock.price} 呈上升趋势，买入 ${buyShares} 股${stock.name ?? stockId}`,
+          };
+        }
+      }
     }
 
     return null;
@@ -313,6 +379,24 @@ export class HeuristicBrain implements PlayerBrain {
   private decideUseCard(state: GameState, me: Player, availableActions: AvailableAction[]): ActionDecision | null {
     const useCardAction = availableActions.find((a) => a.type === 'useCard');
     if (!useCardAction || me.cards.length === 0) return null;
+
+    // 0. 优先使用换地卡/换房卡完成垄断或提升等级
+    const swapLandTargetPlayer = this.findSwapLandTargetPlayer(state, me);
+    if (swapLandTargetPlayer) {
+      return {
+        action: 'useCard',
+        target: { cardId: 'swapLand', cardTarget: { targetPlayerId: swapLandTargetPlayer.id } },
+        reason: `换地卡：与 ${swapLandTargetPlayer.username} 交换土地，尝试完成路段垄断`,
+      };
+    }
+    const swapHouseTargetTile = this.findSwapHouseTargetTile(state, me);
+    if (swapHouseTargetTile && (swapHouseTargetTile.level ?? 0) >= 3) {
+      return {
+        action: 'useCard',
+        target: { cardId: 'swapHouse', cardTarget: { targetTileIndex: swapHouseTargetTile.index } },
+        reason: `换房卡：交换 ${swapHouseTargetTile.name} 的建筑等级`,
+      };
+    }
 
     // 1. 坏神明附身 → 送神符
     const badSpirit = me.spirit && ['smallMisfortuneGod', 'bigMisfortuneGod'].includes(me.spirit.spiritId);
@@ -481,6 +565,9 @@ export class HeuristicBrain implements PlayerBrain {
     const availableBuyItems = availableActions.filter((a) => a.type === 'buyItem');
     if (availableBuyCards.length === 0 && availableBuyItems.length === 0) return null;
 
+    // 点券充裕时更积极消费
+    const hasPlentyCoupons = me.coupons >= 100;
+
     // 1. 优先购买陷阱道具（地雷 > 路障 > 飞弹）
     const trapItems = ['mine', 'barrier'];
     for (const trapId of trapItems) {
@@ -491,29 +578,55 @@ export class HeuristicBrain implements PlayerBrain {
       }
     }
 
-    // 2. 购买攻击卡片（涨价卡 > 查封卡 > 怪兽卡/拆除卡 > 干扰卡）
-    const attackCards = ['priceRise', 'seal', 'monster', 'demolish', 'equalPoverty', 'frame', 'hibernation', 'turtle'];
+    // 2. 购买垄断相关卡片（换地卡、换房卡、改建卡）
+    const landCards = ['swapLand', 'swapHouse', 'rebuild'];
+    for (const cardId of landCards) {
+      if (me.cards.length < 14 && availableBuyCards.some((a) => a.params?.cardId === cardId)) {
+        return { action: 'buyCard', target: { cardId }, reason: `购买地产卡 ${cardId}` };
+      }
+    }
+
+    // 3. 购买攻击卡片（涨价卡 > 查封卡 > 怪兽卡/拆除卡 > 干扰卡）
+    const attackCards = ['priceRise', 'seal', 'monster', 'demolish', 'equalPoverty', 'frame', 'hibernation', 'turtle', 'devil'];
     for (const cardId of attackCards) {
-      if (me.cards.length < 12 && availableBuyCards.some((a) => a.params?.cardId === cardId)) {
+      if (me.cards.length < 14 && availableBuyCards.some((a) => a.params?.cardId === cardId)) {
         return { action: 'buyCard', target: { cardId }, reason: `购买攻击卡 ${cardId}` };
       }
     }
 
-    // 3. 购买飞弹
+    // 4. 购买飞弹
     if (!me.items.some((i) => i.itemId === 'missile') && availableBuyItems.some((a) => a.params?.itemId === 'missile')) {
       return { action: 'buyItem', target: { itemId: 'missile', itemQuantity: 1 }, reason: '购买飞弹攻击对手' };
     }
 
-    // 4. 补充遥控骰子（优先级降低，只在关键走位需要时才买）
-    const hasRemoteDice = me.items.some((i) => i.itemId === 'remoteDice');
-    if (!hasRemoteDice && availableBuyItems.some((a) => a.params?.itemId === 'remoteDice')) {
+    // 5. 补充遥控骰子
+    const remoteDice = me.items.find((i) => i.itemId === 'remoteDice');
+    if ((!remoteDice || remoteDice.quantity < 2) && availableBuyItems.some((a) => a.params?.itemId === 'remoteDice')) {
       return { action: 'buyItem', target: { itemId: 'remoteDice', itemQuantity: 1 }, reason: '补充遥控骰子' };
     }
 
-    // 5. 防御卡
+    // 6. 防御卡
     const hasFreePass = me.cards.some((c) => c.cardId === 'freePass');
+    const hasAngel = me.cards.some((c) => c.cardId === 'angel');
     if (!hasFreePass && availableBuyCards.some((a) => a.params?.cardId === 'freePass')) {
       return { action: 'buyCard', target: { cardId: 'freePass' }, reason: '购买免租卡防御' };
+    }
+    if (hasPlentyCoupons && !hasAngel && availableBuyCards.some((a) => a.params?.cardId === 'angel')) {
+      return { action: 'buyCard', target: { cardId: 'angel' }, reason: '购买天使卡防御' };
+    }
+
+    // 7. 点券充裕时的兜底购买：任意可用卡片/道具
+    if (hasPlentyCoupons) {
+      if (availableBuyCards.length > 0 && me.cards.length < 15) {
+        const fallbackCard = availableBuyCards[0];
+        const cardId = fallbackCard.params?.cardId as string;
+        return { action: 'buyCard', target: { cardId }, reason: `点券充裕，购买 ${cardId}` };
+      }
+      if (availableBuyItems.length > 0) {
+        const fallbackItem = availableBuyItems[0];
+        const itemId = fallbackItem.params?.itemId as string;
+        return { action: 'buyItem', target: { itemId, itemQuantity: 1 }, reason: `点券充裕，购买 ${itemId}` };
+      }
     }
 
     return null;
@@ -701,6 +814,100 @@ export class HeuristicBrain implements PlayerBrain {
 
   private isFullyBuilt(tile: any): boolean {
     return tile.buildingType === 'chainStore' || tile.buildingType === 'park' || tile.buildingType === 'gasStation';
+  }
+
+  /** 获取某路段各玩家拥有数量 */
+  private getGroupOwnership(state: GameState, group: number): Map<string, number> {
+    const ownership = new Map<string, number>();
+    for (const tile of state.map.tiles) {
+      if (tile.type === 'property' && tile.group === group && tile.ownerId) {
+        ownership.set(tile.ownerId, (ownership.get(tile.ownerId) ?? 0) + 1);
+      }
+    }
+    return ownership;
+  }
+
+  /** 获取某路段所有地块 */
+  private getGroupTiles(state: GameState, group: number): Tile[] {
+    return state.map.tiles.filter((t) => t.type === 'property' && t.group === group);
+  }
+
+  /** 查找玩家最接近垄断的路段（差 1 块即垄断） */
+  private findNearMonopolyGroup(state: GameState, me: Player): { group: number; missingTile: Tile } | null {
+    const groups = new Set(state.map.tiles.filter((t) => t.type === 'property' && t.group !== undefined).map((t) => t.group!));
+    for (const group of groups) {
+      const tiles = this.getGroupTiles(state, group);
+      const myCount = tiles.filter((t) => t.ownerId === me.id).length;
+      const emptyTiles = tiles.filter((t) => !t.ownerId);
+      // 若我已拥有 n-1 块且存在空地，则差一块垄断
+      if (myCount === tiles.length - 1 && emptyTiles.length === 1) {
+        return { group, missingTile: emptyTiles[0] };
+      }
+    }
+    return null;
+  }
+
+  /** 查找我拥有最多地块的路段（用于优先买地/升级） */
+  private findMyDominantGroup(state: GameState, me: Player): number | undefined {
+    const groups = new Set(state.map.tiles.filter((t) => t.type === 'property' && t.group !== undefined).map((t) => t.group!));
+    let bestGroup: number | undefined;
+    let bestScore = -1;
+    for (const group of groups) {
+      const tiles = this.getGroupTiles(state, group);
+      const myCount = tiles.filter((t) => t.ownerId === me.id).length;
+      const emptyCount = tiles.filter((t) => !t.ownerId).length;
+      if (myCount === 0) continue;
+      // 优先：已拥有多、剩余空地少
+      const score = myCount * 10 - emptyCount;
+      if (score > bestScore) {
+        bestScore = score;
+        bestGroup = group;
+      }
+    }
+    return bestGroup;
+  }
+
+  /** 查找可用换地卡目标玩家：该玩家拥有的地块能让我完成垄断 */
+  private findSwapLandTargetPlayer(state: GameState, me: Player): Player | null {
+    const swapLandCard = me.cards.find((c) => c.cardId === 'swapLand');
+    if (!swapLandCard) return null;
+
+    const groups = new Set(state.map.tiles.filter((t) => t.type === 'property' && t.group !== undefined).map((t) => t.group!));
+    for (const group of groups) {
+      const tiles = this.getGroupTiles(state, group);
+      const myTiles = tiles.filter((t) => t.ownerId === me.id);
+      const enemyTiles = tiles.filter((t) => t.ownerId && t.ownerId !== me.id);
+      const emptyCount = tiles.filter((t) => !t.ownerId).length;
+      // 目标：该路段只剩一个对手地块，换入后我能垄断
+      if (myTiles.length + 1 === tiles.length && enemyTiles.length === 1 && emptyCount === 0) {
+        const enemy = state.players.find((p) => p.id === enemyTiles[0].ownerId);
+        if (enemy && !enemy.isBankrupt) return enemy;
+      }
+    }
+    return null;
+  }
+
+  /** 查找可用换房卡目标地块：对手高等级且与我当前地块同大小 */
+  private findSwapHouseTargetTile(state: GameState, me: Player): Tile | null {
+    const swapHouseCard = me.cards.find((c) => c.cardId === 'swapHouse');
+    if (!swapHouseCard) return null;
+
+    const myTile = state.map.tiles[me.position];
+    if (myTile.type !== 'property' || myTile.ownerId !== me.id) return null;
+    const mySize = myTile.size ?? 'small';
+
+    // 找对手同大小高等级地块
+    let best: Tile | null = null;
+    let bestLevel = 2;
+    for (const tile of state.map.tiles) {
+      if (tile.type !== 'property' || !tile.ownerId || tile.ownerId === me.id) continue;
+      if ((tile.size ?? 'small') !== mySize) continue;
+      if ((tile.level ?? 0) > bestLevel) {
+        bestLevel = tile.level ?? 0;
+        best = tile;
+      }
+    }
+    return best;
   }
 
   /** 寻找陷阱放置位置 */

@@ -218,7 +218,8 @@ MAX_TURNS=100 npm run playtest
 PLAYTEST_GIVE_ALL_CARDS=true PLAYTEST_GIVE_ALL_ITEMS=true PLAYTEST_STARTING_COUPONS=5000 npm run playtest
 
 # 调整经济压力参数（详见 docs/design/13-numerical-design.md）
-PLAYTEST_TOTAL_FUNDS=15000 PLAYTEST_SALARY=5000 PLAYTEST_RENT_MULTIPLIER=0.5 PLAYTEST_PROPERTY_PRICE_MULTIPLIER=0.5 npm run playtest
+# 当前 Playtest 默认：rentMultiplier=1.5, propertyPriceMultiplier=0.6
+PLAYTEST_RENT_MULTIPLIER=1.5 PLAYTEST_PROPERTY_PRICE_MULTIPLIER=0.6 npm run playtest
 ```
 
 ## 集成到 CI
