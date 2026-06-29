@@ -289,15 +289,45 @@
 
 ---
 
+## 15. AI 玩家
+
+| 功能 | 当前实现 | 状态 |
+|---|---|---|
+| 测试模式 AI 机器人 | `game/testMode/aiPlayer.ts`：自动掷骰/买地/升级/解救 NPC | ✅ 已实现 |
+| 真实房间添加启发式 AI | `packages/backend/src/ai/aiClient.ts` + `socket/game.ts` 的 `room:addAI` | ✅ 已实现 |
+| 真实房间添加 LLM AI | 同上，通过 `createOpencodeAgentBrainFactory` 整回合计划 | ✅ 已实现 |
+| AI 自动准备 | AI 客户端加入房间后自动 emit `room:ready` | ✅ 已实现 |
+| AI 思考状态广播 | LLM AI 通过 `ai:thinking`/`ai:decided` 向房间内其他玩家广播 | ✅ 已实现 |
+| 前端 AI 按钮 | 房间页房主可见「+ 启发式 AI」「+ LLM AI」按钮 | ✅ 已实现 |
+| 前端思考提示 | 收到 `ai:thinking` 时顶部 Banner 显示预计等待时间 | ✅ 已实现 |
+| AI 与测试模式调度隔离 | `aiClients` Map 跟踪独立 AI 客户端，避免重复执行 | ✅ 已实现 |
+| AI 重连/断开清理 | AI 客户端断开时移除跟踪，防内存泄漏 | ⚠️ 基础实现 |
+| 12 角色 AI 个性差异 | 当前仅 LLM 使用固定 personality 数组 | ❌ 未实现 |
+
+**代码位置**：`packages/backend/src/ai/aiClient.ts`、`packages/backend/src/socket/game.ts`、`packages/frontend/src/pages/room.ts`、`packages/frontend/src/socket.ts`
+**详细文档**：`docs/design/11-automated-playtesting.md`
+
+---
+
 ## 关键建议
 
 1. **近期优先**：
    - 补充 12 名角色的属性差异（初始现金、投资偏好、移动能力等）。
    - 更复杂的路段效果、研究院产物研发逻辑。
+   - 基于真实玩家房间反馈进一步调校 `rentMultiplier` / `propertyPriceMultiplier` 默认值（参考 `docs/design/13-numerical-design.md`）。
 2. **中期目标**：
    - 地图限定事件与神明挡灾/加倍倍率细化。
    - 前端完整动画与特效（移动、建筑升级、破产清算等）。
+   - LLM AI 个性策略与长期记忆优化。
 3. **长期扩展**：
    - AI 托管与单机对战机器人。
    - 更多地图模板（台湾/大陆/日本/美国主题）。
    - 前端 `board.ts` 完整动画与特效。
+
+## 参考文档
+
+- `docs/design/04-game-rules.md`：完整游戏规则映射。
+- `docs/design/09-rent-system.md`：过路费公式与神明/卡片影响。
+- `docs/design/10-events-finance.md`：事件、股票、公司、保险系统。
+- `docs/design/11-automated-playtesting.md`：自动化对测与 LLM AI 架构。
+- `docs/design/13-numerical-design.md`：数值设计思路与平衡框架。

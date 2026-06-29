@@ -216,6 +216,9 @@ MAX_TURNS=100 npm run playtest
 
 # 全卡片/全道具对局（用于验证卡片/道具使用逻辑）
 PLAYTEST_GIVE_ALL_CARDS=true PLAYTEST_GIVE_ALL_ITEMS=true PLAYTEST_STARTING_COUPONS=5000 npm run playtest
+
+# 调整经济压力参数（详见 docs/design/13-numerical-design.md）
+PLAYTEST_TOTAL_FUNDS=15000 PLAYTEST_SALARY=5000 PLAYTEST_RENT_MULTIPLIER=0.5 PLAYTEST_PROPERTY_PRICE_MULTIPLIER=0.5 npm run playtest
 ```
 
 ## 集成到 CI
@@ -229,6 +232,15 @@ GitHub Actions 中每晚运行：
     MAX_TURNS: 50
   run: npm run playtest
 ```
+
+## 与真实房间 AI 的关系
+
+Playtest 框架中的启发式大脑和 LLM 大脑已被复用到真实多人房间：
+
+- `packages/backend/src/ai/aiClient.ts` 以 socket.io-client 形式连接到本服，加入房间并自动决策。
+- 房主在房间页点击「+ 启发式 AI」或「+ LLM AI」即可添加 AI 玩家。
+- LLM AI 思考时通过 `ai:thinking`/`ai:decided` 向房间内其他玩家广播状态与预计等待时间。
+- 真实房间复用 `agents/heuristicBrain.ts` 与 `agents/opencodeAgentBrain.ts`，避免 Playtest 与生产代码重复。
 
 ## 与现有测试的关系
 
