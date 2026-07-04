@@ -214,3 +214,69 @@ npm run playtest
 - `docs/design/09-rent-system.md`：过路费公式详解。
 - `docs/design/10-events-finance.md`：事件、股票、保险系统。
 - `packages/backend/src/playtest/scenarios/pressureTest.ts`：压力测试参数。
+
+## 8. 实现一致性核查与 Gap 分析
+
+> 本节将设计文档中的数值约定与当前代码实现逐条核对，标出仍存在的 gap，作为后续迭代依据。
+
+### 8.1 已一致的核心数值
+
+| 设计约定 | 代码实现位置 | 状态 |
+|---|---|---|
+| 生产默认 `totalFunds=10000`、`salary=10000` | `packages/shared/src/index.ts` `DEFAULT_GAME_CONFIG` | ✅ 一致 |
+| Playtest 默认 `rentMultiplier=1.5`、`propertyPriceMultiplier=0.6`、`salary=3000` | `packages/backend/src/playtest/index.ts` | ✅ 一致 |
+| 地价/租金降至原价 10%，`baseRent ≈ basePrice × 10%` | `packages/map-generator/src/generator.ts` `assignPrices` | ✅ 一致 |
+| 物价指数 `priceIndex = 总资产平均值 / 初始总资产`，上限 6 | `packages/backend/src/game/engine.ts` `calculatePriceIndex` + `endTurn` 中 `Math.min(6, ...)` | ✅ 一致 |
+| 住宅租金 `baseRent × (1 + level × 0.5) × (1 + groupBonus) × priceIndex` | `packages/backend/src/game/engine.ts` `calculateRent` | ✅ 一致 |
+| 同组加成：2 块 +20%、3 块及以上 +50% | `packages/backend/src/game/engine.ts` `getGroupBonus` | ✅ 一致 |
+| 连锁店 `baseRent × chainStoreCount × priceIndex` | `packages/backend/src/game/engine.ts` `calculateRent` | ✅ 一致 |
+| 升级费用 `basePrice × (currentLevel + 1) × 0.5 × priceIndex` | `packages/backend/src/game/engine.ts` `upgradeProperty` | ✅ 一致 |
+| 存款利息 10%/月，有贷款时停发 | `packages/backend/src/game/engine.ts` `monthlySettlement` | ✅ 一致 |
+| 股票总股本 10000 股，董事长 >10% | `packages/backend/src/game/financialSystem/stocks.ts` | ✅ 一致 |
+| 分红 = 公司盈余 × 10%，每月 15 日 | `packages/backend/src/game/financialSystem/stocks.ts` | ✅ 一致 |
+| 卡片/道具定价来自原版并归一化 | `packages/shared/src/data/cards.ts`、`items.ts` | ✅ 一致 |
+
+### 8.2 发现的 Gap 与待完善项
+
+| Gap | 设计文档要求 | 当前实现 | 影响与建议 |
+|---|---|---|---|
+| **贷款利息** | 3 个月免息，之后计息 | `takeLoan` 仅实现免息，注释明确“后续未实现额外利息” | 低：当前 Playtest 中贷款使用率本身不高；建议补上月度利息计算，避免贷款成为无成本融资。 |
+| **贷款额度定义** | 额度 = 总资产 | 额度 = 存款 + 地产估值 + 股票市值 - 已贷金额（现金不计入） | 中：文档与代码不一致；已在代码注释中说明“避免重复借贷循环”。建议同步更新设计文档或开放现金抵押（折扣计入）。 |
+| **大地产建筑选择** | 购买大地产后选择建筑类型（公园/商场/旅馆/加油站/研究所） | 购买后默认 `buildingType='house'`，前端有改建按钮但改建免费 | 高：大地产缺少建造费用决策，影响经济深度；建议补全建造费用与购买时选择弹窗。 |
+| **建造/改建费用** | 建造费用 = `basePrice × 建筑系数` | 当前 `rebuildTile` 改建免费 | 高：免费改建让卡片经济失衡，建议按建筑类型收取建造费。 |
+| **研究院产物研发** | 研究所按等级制造道具 | 代码中 `lab` 建筑租金为 0，未实现研发逻辑 | 中：缺少一条重要的道具获取途径，影响后期策略多样性。 |
+| **系统格临时实现** | 税务格固定金额、得点券格固定产出、监狱格完整交互 | 税务格 `-5000`、得点券格固定 30、监狱格仅跳过回合 | 中：这些临时值没有经过平衡验证，需要按地图规模调整。 |
+| **地图限定事件** | 不同地图触发限定命运/新闻 | 当前仅 `single` 地图字段，条件未启用 | 低：主要影响主题代入感，对核心数值影响小。 |
+| **12 角色属性差异** | 角色在初始现金/投资偏好/移动能力上有差异 | 当前 12 角色仅颜色/头像不同 | 中：原版角色对称，但设计文档提到希望补充差异；需先明确是否偏离原版。 |
+| **LLM/启发式 AI 经济行为** | AI 应在适当时机买地、升级、炒股、逛商店 | 启发式大脑已覆盖主要策略；LLM 仍偏保守 | 中：需要更多对局数据校准 prompt 与 personality。 |
+
+### 8.3 对数值设计思路的进一步讨论
+
+1. **地价降到原价 10% 的副作用**：虽然避免了早期破产，但也导致后期 5 级地租对总资金 10000 的玩家压力不足。当前通过 `rentMultiplier=1.5` 在 Playtest 中补偿，但生产默认 `rentMultiplier=1` 下，高端地产可能缺乏“一击必杀”的威慑力。
+2. **`rentMultiplier` 与 `propertyPriceMultiplier` 的耦合**：降低买地价格（`propertyPriceMultiplier < 1`）会加快地产积累，从而更快形成垄断；提高租金（`rentMultiplier > 1`）会加速破产。两者组合是调节对局时长的最有效杠杆。
+3. **工资 `salary` 的安全网作用**：生产 `salary=10000` 让玩家每圈回到起点可补充大量现金，降低早期破产概率；Playtest `salary=3000` 则放大现金流压力，更快暴露资金边界 bug。
+4. **股票收益的放大器角色**：当前股价日波动 ±10% 配合 `stockVolatility=0.6`，让股价在 200 回合内有显著涨跌，但董事长分红（盈余 10%）相对地产租金偏弱。股票更适合作为“翻盘”工具而非主要收入来源。
+5. **点券经济与小游戏的平衡**：小游戏平均产出 20-80 点券，商店卡片价格 20-160 点券，玩家需要多次小游戏/逛商店才能购买强力卡片。当前每个地图只有 1 个小游戏格，点券产出可能偏低，导致强力卡片（冬眠、同盟）使用率低。
+
+## 9. 本轮启发式对局调参记录
+
+> 运行命令：`MAX_TURNS=200 npx tsx src/playtest/run5heuristic.ts`
+> 配置：`rentMultiplier=1.5`、`propertyPriceMultiplier=0.6`、`totalFunds=10000`、`salary=3000`、`mapId=expanded`、4 玩家启发式大脑。
+
+### 9.1 汇总结果
+
+（待 5 局运行完成后填入）
+
+| 指标 | 第 1 局 | 第 2 局 | 第 3 局 | 第 4 局 | 第 5 局 | 平均 |
+|---|---|---|---|---|---|---|
+| 结果 | - | - | - | - | - | - |
+| 回合数 | - | - | - | - | - | - |
+| 破产数 | - | - | - | - | - | - |
+| 土地购买率 | - | - | - | - | - | - |
+| 商店访问率 | - | - | - | - | - | - |
+| 股票总盈亏 | - | - | - | - | - | - |
+| 攻击行为数 | - | - | - | - | - | - |
+
+### 9.2 发现的问题与修复
+
+（待运行完成后补充）
