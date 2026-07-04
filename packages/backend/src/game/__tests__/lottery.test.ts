@@ -1,13 +1,14 @@
 import { describe, it, expect, vi } from 'vitest';
 import { placeLotteryBet, drawLottery } from '../engine.js';
-import { makeTestState } from './setup.js';
+import { makeTestState, firstSpecialSlot, smallPropertyAt } from './setup.js';
 
 describe('乐透', () => {
   it('在乐透格可投注 1000 元并记录号码', () => {
     const state = makeTestState();
     state.status = 'acting';
-    state.players[0].position = 4;
-    state.map.tiles[4].type = 'lottery';
+    const lotteryTile = firstSpecialSlot(state);
+    state.players[0].position = lotteryTile;
+    state.map.tiles[lotteryTile].type = 'lottery';
     const beforeCash = state.players[0].cash;
     const result = placeLotteryBet(state, 'p1', 7);
     expect(result.success).toBe(true);
@@ -19,7 +20,7 @@ describe('乐透', () => {
   it('非乐透格不能投注', () => {
     const state = makeTestState();
     state.status = 'acting';
-    state.players[0].position = 1;
+    state.players[0].position = smallPropertyAt(state, 0, 0);
     const result = placeLotteryBet(state, 'p1', 3);
     expect(result.success).toBe(false);
   });
@@ -27,8 +28,9 @@ describe('乐透', () => {
   it('每月只能投注一次', () => {
     const state = makeTestState();
     state.status = 'acting';
-    state.players[0].position = 4;
-    state.map.tiles[4].type = 'lottery';
+    const lotteryTile = firstSpecialSlot(state);
+    state.players[0].position = lotteryTile;
+    state.map.tiles[lotteryTile].type = 'lottery';
     placeLotteryBet(state, 'p1', 2);
     const result = placeLotteryBet(state, 'p1', 5);
     expect(result.success).toBe(false);
@@ -36,8 +38,9 @@ describe('乐透', () => {
 
   it('开奖后中奖者分得奖金池，未中奖则累积', () => {
     const state = makeTestState();
-    state.players[0].position = 4;
-    state.map.tiles[4].type = 'lottery';
+    const lotteryTile = firstSpecialSlot(state);
+    state.players[0].position = lotteryTile;
+    state.map.tiles[lotteryTile].type = 'lottery';
     state.status = 'acting';
     placeLotteryBet(state, 'p1', 5);
 

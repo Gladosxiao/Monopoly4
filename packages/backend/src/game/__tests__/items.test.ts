@@ -4,7 +4,7 @@
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import type { GameState } from '@monopoly4/shared';
-import { makeTestState, giveItem, setOwner } from './setup.js';
+import { makeTestState, giveItem, setOwner, setPlayerPosition, smallPropertyAt, largePropertyAt } from './setup.js';
 import { useItem } from '../engine.js';
 import { freeBuyItem } from '../testMode/index.js';
 
@@ -64,27 +64,30 @@ describe('陷阱道具', () => {
     const state = makeTestState();
     prepareActingState(state);
     giveItem(state.players[0], 'barrier');
-    const result = useItem(state, 'p1', 'barrier', { targetTileIndex: 5 });
+    const targetTile = smallPropertyAt(state, 1, 0);
+    const result = useItem(state, 'p1', 'barrier', { targetTileIndex: targetTile });
     expect(result.success).toBe(true);
-    expect(state.map.tiles[5].traps?.some((t) => t.type === 'barrier')).toBe(true);
+    expect(state.map.tiles[targetTile].traps?.some((t) => t.type === 'barrier')).toBe(true);
   });
 
   it('地雷可放置在道路上', () => {
     const state = makeTestState();
     prepareActingState(state);
     giveItem(state.players[0], 'mine');
-    const result = useItem(state, 'p1', 'mine', { targetTileIndex: 5 });
+    const targetTile = smallPropertyAt(state, 1, 0);
+    const result = useItem(state, 'p1', 'mine', { targetTileIndex: targetTile });
     expect(result.success).toBe(true);
-    expect(state.map.tiles[5].traps?.some((t) => t.type === 'mine')).toBe(true);
+    expect(state.map.tiles[targetTile].traps?.some((t) => t.type === 'mine')).toBe(true);
   });
 
   it('定时炸弹放置后带有剩余步数', () => {
     const state = makeTestState();
     prepareActingState(state);
     giveItem(state.players[0], 'timeBomb');
-    const result = useItem(state, 'p1', 'timeBomb', { targetTileIndex: 5 });
+    const targetTile = smallPropertyAt(state, 1, 0);
+    const result = useItem(state, 'p1', 'timeBomb', { targetTileIndex: targetTile });
     expect(result.success).toBe(true);
-    const trap = state.map.tiles[5].traps?.find((t) => t.type === 'timeBomb');
+    const trap = state.map.tiles[targetTile].traps?.find((t) => t.type === 'timeBomb');
     expect(trap?.remainingSteps).toBe(38);
   });
 
@@ -99,12 +102,13 @@ describe('陷阱道具', () => {
   it('同一块地最多放置 3 个陷阱', () => {
     const state = makeTestState();
     prepareActingState(state);
+    const targetTile = smallPropertyAt(state, 1, 0);
     for (let i = 0; i < 3; i++) {
       giveItem(state.players[0], 'barrier');
-      useItem(state, 'p1', 'barrier', { targetTileIndex: 5 });
+      useItem(state, 'p1', 'barrier', { targetTileIndex: targetTile });
     }
     giveItem(state.players[0], 'barrier');
-    const result = useItem(state, 'p1', 'barrier', { targetTileIndex: 5 });
+    const result = useItem(state, 'p1', 'barrier', { targetTileIndex: targetTile });
     expect(result.success).toBe(false);
   });
 });
@@ -129,28 +133,31 @@ describe('工具道具', () => {
 
   it('机器娃娃清除前方陷阱', () => {
     const state = makeTestState();
-    state.players[0].position = 1;
+    const playerTile = smallPropertyAt(state, 0, 0);
+    const trapTile = smallPropertyAt(state, 0, 1);
+    setPlayerPosition(state, 'p1', playerTile);
     prepareActingState(state);
-    // 在前方第 5 格放置地雷
+    // 在前方相邻格放置地雷
     giveItem(state.players[0], 'mine');
-    useItem(state, 'p1', 'mine', { targetTileIndex: 6 });
-    expect(state.map.tiles[6].traps?.length).toBeGreaterThan(0);
+    useItem(state, 'p1', 'mine', { targetTileIndex: trapTile });
+    expect(state.map.tiles[trapTile].traps?.length).toBeGreaterThan(0);
 
     giveItem(state.players[0], 'robotDoll');
     const result = useItem(state, 'p1', 'robotDoll');
     expect(result.success).toBe(true);
-    expect(state.map.tiles[6].traps?.length ?? 0).toBe(0);
+    expect(state.map.tiles[trapTile].traps?.length ?? 0).toBe(0);
   });
 
   it('飞弹降低目标建筑等级并使站立玩家住院', () => {
     const state = makeTestState();
-    setOwner(state, 21, 'p2', 'mall', 2);
-    state.players[1].position = 21;
+    const targetTile = largePropertyAt(state, 0);
+    setOwner(state, targetTile, 'p2', 'mall', 2);
+    setPlayerPosition(state, 'p2', targetTile);
     prepareActingState(state);
     giveItem(state.players[0], 'missile');
-    const result = useItem(state, 'p1', 'missile', { targetTileIndex: 21 });
+    const result = useItem(state, 'p1', 'missile', { targetTileIndex: targetTile });
     expect(result.success).toBe(true);
-    expect(state.map.tiles[21].level).toBe(1);
+    expect(state.map.tiles[targetTile].level).toBe(1);
     expect(state.players[1].statusEffects.some((e) => e.type === 'hospital')).toBe(true);
   });
 });
@@ -158,32 +165,35 @@ describe('工具道具', () => {
 describe('研发产物', () => {
   it('机器人可免费升级自己的土地', () => {
     const state = makeTestState();
-    setOwner(state, 1, 'p1', 'house', 1);
+    const targetTile = smallPropertyAt(state, 0, 0);
+    setOwner(state, targetTile, 'p1', 'house', 1);
     prepareActingState(state);
     giveItem(state.players[0], 'robot');
-    const result = useItem(state, 'p1', 'robot', { targetTileIndex: 1 });
+    const result = useItem(state, 'p1', 'robot', { targetTileIndex: targetTile });
     expect(result.success).toBe(true);
-    expect(state.map.tiles[1].level).toBe(2);
+    expect(state.map.tiles[targetTile].level).toBe(2);
   });
 
   it('传送机移动到目标地块', () => {
     const state = makeTestState();
     prepareActingState(state);
+    const targetTile = smallPropertyAt(state, 2, 1);
     giveItem(state.players[0], 'teleporter');
-    const result = useItem(state, 'p1', 'teleporter', { targetTileIndex: 10 });
+    const result = useItem(state, 'p1', 'teleporter', { targetTileIndex: targetTile });
     expect(result.success).toBe(true);
-    expect(state.players[0].position).toBe(10);
+    expect(state.players[0].position).toBe(targetTile);
   });
 
   it('核子飞弹使范围内玩家住院并降建筑等级', () => {
     const state = makeTestState();
-    setOwner(state, 5, 'p2', 'house', 2);
-    state.players[1].position = 5;
+    const targetTile = smallPropertyAt(state, 1, 0);
+    setOwner(state, targetTile, 'p2', 'house', 2);
+    setPlayerPosition(state, 'p2', targetTile);
     prepareActingState(state);
     giveItem(state.players[0], 'nuke');
-    const result = useItem(state, 'p1', 'nuke', { targetTileIndex: 5 });
+    const result = useItem(state, 'p1', 'nuke', { targetTileIndex: targetTile });
     expect(result.success).toBe(true);
-    expect(state.map.tiles[5].level).toBe(1);
+    expect(state.map.tiles[targetTile].level).toBe(1);
     expect(state.players[1].statusEffects.some((e) => e.type === 'hospital')).toBe(true);
   });
 });

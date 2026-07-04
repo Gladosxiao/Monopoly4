@@ -4,7 +4,7 @@
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import type { GameState } from '@monopoly4/shared';
-import { makeTestState, makeThreePlayerState, setOwner, giveCard } from './setup.js';
+import { makeTestState, makeThreePlayerState, setOwner, giveCard, smallPropertyAt, largePropertyAt, firstShop } from './setup.js';
 import { useCard, endTurn, buyProperty, payMoney } from '../engine.js';
 import { buyCard } from '../cardSystem/index.js';
 
@@ -86,101 +86,114 @@ describe('控制类卡片', () => {
 describe('攻击/土地类卡片', () => {
   it('购地卡强制购买当前土地', () => {
     const state = makeTestState();
-    state.players[0].position = 1;
+    const idx = smallPropertyAt(state, 0, 0);
+    state.players[0].position = idx;
     prepareActingState(state, 0);
     const id = giveCard(state.players[0], 'buyLand');
     const result = useCard(state, 'p1', id);
     expect(result.success).toBe(true);
-    expect(state.map.tiles[1].ownerId).toBe('p1');
+    expect(state.map.tiles[idx].ownerId).toBe('p1');
   });
 
   it('换地卡交换两块同等大小土地', () => {
     const state = makeTestState();
-    setOwner(state, 1, 'p1', 'house', 0);
-    setOwner(state, 3, 'p2', 'house', 0);
+    const idx1 = smallPropertyAt(state, 0, 0);
+    const idx2 = smallPropertyAt(state, 0, 2);
+    setOwner(state, idx1, 'p1', 'house', 0);
+    setOwner(state, idx2, 'p2', 'house', 0);
     prepareActingState(state);
     const id = giveCard(state.players[0], 'swapLand');
-    const result = useCard(state, 'p1', id, { targetTileIndex: 1, targetPlayerId: 'p2' });
+    const result = useCard(state, 'p1', id, { targetTileIndex: idx1, targetPlayerId: 'p2' });
     expect(result.success).toBe(true);
-    expect(state.map.tiles[1].ownerId).toBe('p2');
-    expect(state.map.tiles[3].ownerId).toBe('p1');
+    expect(state.map.tiles[idx1].ownerId).toBe('p2');
+    expect(state.map.tiles[idx2].ownerId).toBe('p1');
   });
 
   it('换地卡对不同大小土地失败', () => {
     const state = makeTestState();
-    setOwner(state, 1, 'p1', 'house', 0); // small
-    setOwner(state, 21, 'p2', 'house', 0); // large
+    const small = smallPropertyAt(state, 0, 0);
+    const large = largePropertyAt(state, 0);
+    setOwner(state, small, 'p1', 'house', 0); // small
+    setOwner(state, large, 'p2', 'house', 0); // large
     prepareActingState(state);
     const id = giveCard(state.players[0], 'swapLand');
-    const result = useCard(state, 'p1', id, { targetTileIndex: 21, targetPlayerId: 'p2' });
+    const result = useCard(state, 'p1', id, { targetTileIndex: large, targetPlayerId: 'p2' });
     expect(result.success).toBe(false);
   });
 
   it('拍卖卡强制购买对手土地并转移所有权', () => {
     const state = makeTestState();
-    setOwner(state, 1, 'p2', 'house', 2);
+    const idx = smallPropertyAt(state, 0, 0);
+    setOwner(state, idx, 'p2', 'house', 2);
     const before = state.players[0].cash;
     prepareActingState(state);
     const id = giveCard(state.players[0], 'auction');
-    const result = useCard(state, 'p1', id, { targetTileIndex: 1 });
+    const result = useCard(state, 'p1', id, { targetTileIndex: idx });
     expect(result.success).toBe(true);
-    expect(state.map.tiles[1].ownerId).toBe('p1');
+    expect(state.map.tiles[idx].ownerId).toBe('p1');
     expect(state.players[0].cash).toBeLessThan(before);
   });
 
   it('天使卡为路段所有建筑加盖一层', () => {
     const state = makeTestState();
-    setOwner(state, 1, 'p1', 'house', 1);
-    setOwner(state, 3, 'p2', 'house', 2);
+    const idx1 = smallPropertyAt(state, 0, 0);
+    const idx2 = smallPropertyAt(state, 0, 2);
+    setOwner(state, idx1, 'p1', 'house', 1);
+    setOwner(state, idx2, 'p2', 'house', 2);
     prepareActingState(state);
     const id = giveCard(state.players[0], 'angel');
     const result = useCard(state, 'p1', id, { targetGroup: 0 });
     expect(result.success).toBe(true);
-    expect(state.map.tiles[1].level).toBe(2);
-    expect(state.map.tiles[3].level).toBe(3);
+    expect(state.map.tiles[idx1].level).toBe(2);
+    expect(state.map.tiles[idx2].level).toBe(3);
   });
 
   it('恶魔卡为路段所有建筑降一级', () => {
     const state = makeTestState();
-    setOwner(state, 1, 'p1', 'house', 2);
-    setOwner(state, 3, 'p2', 'house', 3);
+    const idx1 = smallPropertyAt(state, 0, 0);
+    const idx2 = smallPropertyAt(state, 0, 2);
+    setOwner(state, idx1, 'p1', 'house', 2);
+    setOwner(state, idx2, 'p2', 'house', 3);
     prepareActingState(state);
     const id = giveCard(state.players[0], 'devil');
     const result = useCard(state, 'p1', id, { targetGroup: 0 });
     expect(result.success).toBe(true);
-    expect(state.map.tiles[1].level).toBe(1);
-    expect(state.map.tiles[3].level).toBe(2);
+    expect(state.map.tiles[idx1].level).toBe(1);
+    expect(state.map.tiles[idx2].level).toBe(2);
   });
 
   it('怪兽卡摧毁一栋建筑彻底归零', () => {
     const state = makeTestState();
-    setOwner(state, 21, 'p2', 'mall', 3);
+    const idx = largePropertyAt(state, 0);
+    setOwner(state, idx, 'p2', 'mall', 3);
     prepareActingState(state);
     const id = giveCard(state.players[0], 'monster');
-    const result = useCard(state, 'p1', id, { targetTileIndex: 21 });
+    const result = useCard(state, 'p1', id, { targetTileIndex: idx });
     expect(result.success).toBe(true);
-    expect(state.map.tiles[21].level).toBe(0);
-    expect(state.map.tiles[21].buildingType).toBe('house');
+    expect(state.map.tiles[idx].level).toBe(0);
+    expect(state.map.tiles[idx].buildingType).toBe('house');
   });
 
   it('拆除卡降低目标建筑一级', () => {
     const state = makeTestState();
-    setOwner(state, 21, 'p2', 'mall', 2);
+    const idx = largePropertyAt(state, 0);
+    setOwner(state, idx, 'p2', 'mall', 2);
     prepareActingState(state);
     const id = giveCard(state.players[0], 'demolish');
-    const result = useCard(state, 'p1', id, { targetTileIndex: 21 });
+    const result = useCard(state, 'p1', id, { targetTileIndex: idx });
     expect(result.success).toBe(true);
-    expect(state.map.tiles[21].level).toBe(1);
+    expect(state.map.tiles[idx].level).toBe(1);
   });
 
   it('改建卡改变建筑类型', () => {
     const state = makeTestState();
-    setOwner(state, 21, 'p1', 'house', 0);
+    const idx = largePropertyAt(state, 0);
+    setOwner(state, idx, 'p1', 'house', 0);
     prepareActingState(state);
     const id = giveCard(state.players[0], 'rebuild');
-    const result = useCard(state, 'p1', id, { targetTileIndex: 21, buildingType: 'hotel' });
+    const result = useCard(state, 'p1', id, { targetTileIndex: idx, buildingType: 'hotel' });
     expect(result.success).toBe(true);
-    expect(state.map.tiles[21].buildingType).toBe('hotel');
+    expect(state.map.tiles[idx].buildingType).toBe('hotel');
   });
 });
 
@@ -245,7 +258,7 @@ describe('防御/特殊类卡片', () => {
 describe('商店与剩余卡片', () => {
   it('商店购买卡片', () => {
     const state = makeTestState();
-    state.players[0].position = 26; // 商店
+    state.players[0].position = firstShop(state);
     prepareActingState(state);
     const result = buyCard(state, 'p1', 'stay');
     expect(result.success).toBe(true);

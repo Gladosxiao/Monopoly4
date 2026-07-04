@@ -34,6 +34,9 @@ import {
   advanceToNextDay,
   DEFAULT_TEST_CONFIG,
   TEST_PLAYERS,
+  smallPropertyAt,
+  largePropertyAt,
+  firstCompany,
 } from './setup.js';
 import { rooms } from '../../store.js';
 import { toggleReady, selectCharacter } from '../../socket/game.js';
@@ -56,46 +59,51 @@ describe('calculateRent', () => {
 
   it('住宅：基础租金 + 等级系数', () => {
     const state = makeTestState();
-    setOwner(state, 1, 'p1', 'house', 1);
+    const idx = smallPropertyAt(state, 0, 0);
+    setOwner(state, idx, 'p1', 'house', 1);
     const owner = state.players[0];
     const visitor = state.players[1];
-    expect(calculateRent(state.map.tiles[1], owner, state, visitor).rent).toBe(4); // 3 * 1.5
+    expect(calculateRent(state.map.tiles[idx], owner, state, visitor).rent).toBe(4); // 3 * 1.5
   });
 
   it('住宅：同组 2 块加成 20%', () => {
     const state = makeTestState();
-    setOwner(state, 1, 'p1', 'house', 0);
-    setOwner(state, 3, 'p1', 'house', 0);
+    const idx = smallPropertyAt(state, 0, 0);
+    setOwner(state, idx, 'p1', 'house', 0);
+    setOwner(state, smallPropertyAt(state, 0, 2), 'p1', 'house', 0);
     const owner = state.players[0];
     const visitor = state.players[1];
-    expect(calculateRent(state.map.tiles[1], owner, state, visitor).rent).toBe(3); // 30 * 1.2
+    expect(calculateRent(state.map.tiles[idx], owner, state, visitor).rent).toBe(3); // 30 * 1.2
   });
 
   it('连锁店：按全图连锁店数量联合收费，并随等级提升', () => {
     const state = makeTestState();
-    setOwner(state, 1, 'p1', 'chainStore', 1);
-    setOwner(state, 3, 'p1', 'chainStore', 1);
-    setOwner(state, 5, 'p1', 'chainStore', 1);
+    const idx = smallPropertyAt(state, 0, 0);
+    setOwner(state, idx, 'p1', 'chainStore', 1);
+    setOwner(state, smallPropertyAt(state, 0, 2), 'p1', 'chainStore', 1);
+    setOwner(state, smallPropertyAt(state, 1, 0), 'p1', 'chainStore', 1);
     const owner = state.players[0];
     const visitor = state.players[1];
     // 3 * 3 * 1.2 = 10.8 -> 10
-    expect(calculateRent(state.map.tiles[1], owner, state, visitor).rent).toBe(10);
+    expect(calculateRent(state.map.tiles[idx], owner, state, visitor).rent).toBe(10);
   });
 
   it('商场：baseRent * level * 转盘倍数', () => {
     const state = makeTestState();
-    setOwner(state, 21, 'p1', 'mall', 2);
+    const idx = largePropertyAt(state, 0);
+    setOwner(state, idx, 'p1', 'mall', 2);
     const owner = state.players[0];
     const visitor = state.players[1];
-    expect(calculateRent(state.map.tiles[21], owner, state, visitor).rent).toBe(60); // 30 * 2 * 1
+    expect(calculateRent(state.map.tiles[idx], owner, state, visitor).rent).toBe(60); // 30 * 2 * 1
   });
 
   it('旅馆：baseRent * level * 天数，并附带休息天数', () => {
     const state = makeTestState();
-    setOwner(state, 21, 'p1', 'hotel', 2);
+    const idx = largePropertyAt(state, 0);
+    setOwner(state, idx, 'p1', 'hotel', 2);
     const owner = state.players[0];
     const visitor = state.players[1];
-    const result = calculateRent(state.map.tiles[21], owner, state, visitor);
+    const result = calculateRent(state.map.tiles[idx], owner, state, visitor);
     expect(result.rent).toBe(60);
     expect(result.hotelDays).toBe(1);
   });
@@ -103,83 +111,92 @@ describe('calculateRent', () => {
   it('加油站：按本回合步数收费', () => {
     const state = makeTestState();
     state.lastRoll = 5;
-    setOwner(state, 21, 'p1', 'gasStation', 0);
+    const idx = largePropertyAt(state, 0);
+    setOwner(state, idx, 'p1', 'gasStation', 0);
     const owner = state.players[0];
     const visitor = state.players[1];
-    expect(calculateRent(state.map.tiles[21], owner, state, visitor).rent).toBe(250); // 5 * 50
+    expect(calculateRent(state.map.tiles[idx], owner, state, visitor).rent).toBe(250); // 5 * 50
   });
 
   it('公园：不收过路费', () => {
     const state = makeTestState();
-    setOwner(state, 21, 'p1', 'park', 0);
+    const idx = largePropertyAt(state, 0);
+    setOwner(state, idx, 'p1', 'park', 0);
     const owner = state.players[0];
     const visitor = state.players[1];
-    expect(calculateRent(state.map.tiles[21], owner, state, visitor).rent).toBe(0);
+    expect(calculateRent(state.map.tiles[idx], owner, state, visitor).rent).toBe(0);
   });
 
   it('小穷神：过路费 +50%', () => {
     const state = makeTestState();
-    setOwner(state, 1, 'p1', 'house', 0);
+    const idx = smallPropertyAt(state, 0, 0);
+    setOwner(state, idx, 'p1', 'house', 0);
     const owner = state.players[0];
     const visitor = state.players[1];
     visitor.spirit = { spiritId: 'smallPovertyGod', remainingDays: 7 };
-    expect(calculateRent(state.map.tiles[1], owner, state, visitor).rent).toBe(4); // 3 * 1.5
+    expect(calculateRent(state.map.tiles[idx], owner, state, visitor).rent).toBe(4); // 3 * 1.5
   });
 
   it('大穷神：过路费翻倍', () => {
     const state = makeTestState();
-    setOwner(state, 1, 'p1', 'house', 0);
+    const idx = smallPropertyAt(state, 0, 0);
+    setOwner(state, idx, 'p1', 'house', 0);
     const owner = state.players[0];
     const visitor = state.players[1];
     visitor.spirit = { spiritId: 'bigPovertyGod', remainingDays: 7 };
-    expect(calculateRent(state.map.tiles[1], owner, state, visitor).rent).toBe(6); // 3 * 2
+    expect(calculateRent(state.map.tiles[idx], owner, state, visitor).rent).toBe(6); // 3 * 2
   });
 
   it('小财神：过路费减半', () => {
     const state = makeTestState();
-    setOwner(state, 1, 'p1', 'house', 0);
+    const idx = smallPropertyAt(state, 0, 0);
+    setOwner(state, idx, 'p1', 'house', 0);
     const owner = state.players[0];
     const visitor = state.players[1];
     visitor.spirit = { spiritId: 'smallWealthGod', remainingDays: 7 };
-    expect(calculateRent(state.map.tiles[1], owner, state, visitor).rent).toBe(1); // 30 * 0.5
+    expect(calculateRent(state.map.tiles[idx], owner, state, visitor).rent).toBe(1); // 30 * 0.5
   });
 
   it('大财神：免过路费', () => {
     const state = makeTestState();
-    setOwner(state, 1, 'p1', 'house', 5);
+    const idx = smallPropertyAt(state, 0, 0);
+    setOwner(state, idx, 'p1', 'house', 5);
     const owner = state.players[0];
     const visitor = state.players[1];
     visitor.spirit = { spiritId: 'bigWealthGod', remainingDays: 7 };
-    expect(calculateRent(state.map.tiles[1], owner, state, visitor).rent).toBe(0);
+    expect(calculateRent(state.map.tiles[idx], owner, state, visitor).rent).toBe(0);
   });
 
   it('涨价卡：指定路段翻倍', () => {
     const state = makeTestState();
-    setOwner(state, 1, 'p1', 'house', 0);
-    setOwner(state, 3, 'p1', 'house', 0);
+    const idx = smallPropertyAt(state, 0, 0);
+    setOwner(state, idx, 'p1', 'house', 0);
+    setOwner(state, smallPropertyAt(state, 0, 2), 'p1', 'house', 0);
     state.roadEffects.push({ id: 'r1', type: 'priceRise', group: 0, multiplier: 2, remainingDays: 5, sourcePlayerId: 'p1' });
     const owner = state.players[0];
     const visitor = state.players[1];
-    expect(calculateRent(state.map.tiles[1], owner, state, visitor).rent).toBe(7); // 3 * 1.2 * 2
+    expect(calculateRent(state.map.tiles[idx], owner, state, visitor).rent).toBe(7); // 3 * 1.2 * 2
   });
 
   it('查封卡：指定路段无法收租', () => {
     const state = makeTestState();
-    setOwner(state, 1, 'p1', 'house', 5);
+    const idx = smallPropertyAt(state, 0, 0);
+    setOwner(state, idx, 'p1', 'house', 5);
     state.roadEffects.push({ id: 'r1', type: 'seal', group: 0, multiplier: 0, remainingDays: 5, sourcePlayerId: 'p2' });
     const owner = state.players[0];
     const visitor = state.players[1];
-    expect(calculateRent(state.map.tiles[1], owner, state, visitor).rent).toBe(0);
+    expect(calculateRent(state.map.tiles[idx], owner, state, visitor).rent).toBe(0);
   });
 
   it('同盟卡：彼此不收过路费', () => {
     const state = makeTestState();
-    setOwner(state, 1, 'p1', 'house', 5);
+    const idx = smallPropertyAt(state, 0, 0);
+    setOwner(state, idx, 'p1', 'house', 5);
     const owner = state.players[0];
     const visitor = state.players[1];
     visitor.statusEffects.push({ type: 'alliance', remainingDays: 7, sourcePlayerId: 'p1' });
     owner.statusEffects.push({ type: 'alliance', remainingDays: 7, sourcePlayerId: 'p2' });
-    expect(calculateRent(state.map.tiles[1], owner, state, visitor).rent).toBe(0);
+    expect(calculateRent(state.map.tiles[idx], owner, state, visitor).rent).toBe(0);
   });
 });
 
@@ -217,12 +234,13 @@ describe('卡片效果（影响过路费）', () => {
 
   it('使用改建卡可改变建筑类型', () => {
     const state = makeTestState();
-    setOwner(state, 21, 'p1', 'mall', 0);
+    const idx = largePropertyAt(state, 0);
+    setOwner(state, idx, 'p1', 'mall', 0);
     const p1 = state.players[0];
     const instanceId = giveCard(p1, 'rebuild');
-    const result = useCard(state, 'p1', instanceId, { targetTileIndex: 21, buildingType: 'hotel' });
+    const result = useCard(state, 'p1', instanceId, { targetTileIndex: idx, buildingType: 'hotel' });
     expect(result.success).toBe(true);
-    expect(state.map.tiles[21].buildingType).toBe('hotel');
+    expect(state.map.tiles[idx].buildingType).toBe('hotel');
   });
 
   it('使用免费卡后获得一次免租状态', () => {
@@ -257,9 +275,10 @@ describe('卡片效果（影响过路费）', () => {
 describe('handleTileEffect 过路费结算', () => {
   it('免费卡在一次过路费结算后会被消耗', () => {
     const state = makeTestState();
+    const idx = smallPropertyAt(state, 0, 0);
     state.currentPlayerIndex = 0;
-    state.pendingTileIndex = 1;
-    setOwner(state, 1, 'p2', 'house', 0);
+    state.pendingTileIndex = idx;
+    setOwner(state, idx, 'p2', 'house', 0);
     const p1 = state.players[0];
     const p2 = state.players[1];
     p1.statusEffects.push({ type: 'freePass', remainingDays: 1 });
@@ -372,7 +391,7 @@ describe('movePlayer', () => {
   it('更新玩家位置并循环绕回', () => {
     const state = makeTestState();
     const player = getCurrentPlayer(state);
-    player.position = 38;
+    player.position = state.map.tiles.length - 2;
     movePlayer(state, 5);
     expect(player.position).toBe(3);
   });
@@ -380,7 +399,7 @@ describe('movePlayer', () => {
   it('跨越起点时发放工资', () => {
     const state = makeTestState();
     const player = getCurrentPlayer(state);
-    player.position = 38;
+    player.position = state.map.tiles.length - 2;
     movePlayer(state, 5);
     expect(player.cash).toBe(110000);
     expect(state.logs.some((l) => l.type === 'player:salary')).toBe(true);
@@ -390,35 +409,39 @@ describe('movePlayer', () => {
 describe('buyProperty', () => {
   it('购买小块土地后默认为住宅', () => {
     const state = makeTestState();
-    state.pendingTileIndex = 1;
+    const idx = smallPropertyAt(state, 0, 0);
+    state.pendingTileIndex = idx;
     const result = buyProperty(state);
     expect(result.success).toBe(true);
-    expect(state.map.tiles[1].buildingType).toBe('house');
-    expect(state.map.tiles[1].ownerId).toBe('p1');
-    expect(state.players[0].properties).toContain(1);
+    expect(state.map.tiles[idx].buildingType).toBe('house');
+    expect(state.map.tiles[idx].ownerId).toBe('p1');
+    expect(state.players[0].properties).toContain(idx);
   });
 
   it('购买大块土地后默认为商场（特殊建筑）', () => {
     const state = makeTestState();
-    state.pendingTileIndex = 21;
+    const idx = largePropertyAt(state, 0);
+    state.pendingTileIndex = idx;
     const result = buyProperty(state);
     expect(result.success).toBe(true);
-    expect(state.map.tiles[21].buildingType).toBe('mall');
-    expect(state.map.tiles[21].ownerId).toBe('p1');
+    expect(state.map.tiles[idx].buildingType).toBe('mall');
+    expect(state.map.tiles[idx].ownerId).toBe('p1');
   });
 
   it('现金不足时无法购买', () => {
     const state = makeTestState();
+    const idx = smallPropertyAt(state, 0, 0);
     state.players[0].cash = 0;
-    state.pendingTileIndex = 1;
+    state.pendingTileIndex = idx;
     const result = buyProperty(state);
     expect(result.success).toBe(false);
   });
 
   it('已被购买的地块无法再次购买', () => {
     const state = makeTestState();
-    state.pendingTileIndex = 1;
-    setOwner(state, 1, 'p2', 'house', 0);
+    const idx = smallPropertyAt(state, 0, 0);
+    state.pendingTileIndex = idx;
+    setOwner(state, idx, 'p2', 'house', 0);
     const result = buyProperty(state);
     expect(result.success).toBe(false);
   });
@@ -427,25 +450,28 @@ describe('buyProperty', () => {
 describe('upgradeProperty', () => {
   it('可升级自己的住宅', () => {
     const state = makeTestState();
-    state.pendingTileIndex = 1;
-    setOwner(state, 1, 'p1', 'house', 0);
+    const idx = smallPropertyAt(state, 0, 0);
+    state.pendingTileIndex = idx;
+    setOwner(state, idx, 'p1', 'house', 0);
     const result = upgradeProperty(state);
     expect(result.success).toBe(true);
-    expect(state.map.tiles[1].level).toBe(1);
+    expect(state.map.tiles[idx].level).toBe(1);
   });
 
   it('最高升级到 5 级', () => {
     const state = makeTestState();
-    state.pendingTileIndex = 1;
-    setOwner(state, 1, 'p1', 'house', 5);
+    const idx = smallPropertyAt(state, 0, 0);
+    state.pendingTileIndex = idx;
+    setOwner(state, idx, 'p1', 'house', 5);
     const result = upgradeProperty(state);
     expect(result.success).toBe(false);
   });
 
   it('连锁店不可升级', () => {
     const state = makeTestState();
-    state.pendingTileIndex = 1;
-    setOwner(state, 1, 'p1', 'chainStore', 1);
+    const idx = smallPropertyAt(state, 0, 0);
+    state.pendingTileIndex = idx;
+    setOwner(state, idx, 'p1', 'chainStore', 1);
     const result = upgradeProperty(state);
     expect(result.success).toBe(false);
   });
@@ -454,34 +480,38 @@ describe('upgradeProperty', () => {
 describe('rebuildTile', () => {
   it('小块土地可改建为连锁店', () => {
     const state = makeTestState();
-    state.pendingTileIndex = 1;
-    setOwner(state, 1, 'p1', 'house', 2);
-    const result = rebuildTile(state, 1, 'chainStore');
+    const idx = smallPropertyAt(state, 0, 0);
+    state.pendingTileIndex = idx;
+    setOwner(state, idx, 'p1', 'house', 2);
+    const result = rebuildTile(state, idx, 'chainStore');
     expect(result.success).toBe(true);
-    expect(state.map.tiles[1].buildingType).toBe('chainStore');
-    expect(state.map.tiles[1].level).toBe(1);
+    expect(state.map.tiles[idx].buildingType).toBe('chainStore');
+    expect(state.map.tiles[idx].level).toBe(1);
   });
 
   it('小块土地不可改建为特殊建筑', () => {
     const state = makeTestState();
-    setOwner(state, 1, 'p1', 'house', 0);
-    const result = rebuildTile(state, 1, 'mall');
+    const idx = smallPropertyAt(state, 0, 0);
+    setOwner(state, idx, 'p1', 'house', 0);
+    const result = rebuildTile(state, idx, 'mall');
     expect(result.success).toBe(false);
   });
 
   it('大块土地不可改建为连锁店', () => {
     const state = makeTestState();
-    setOwner(state, 21, 'p1', 'mall', 0);
-    const result = rebuildTile(state, 21, 'chainStore');
+    const idx = largePropertyAt(state, 0);
+    setOwner(state, idx, 'p1', 'mall', 0);
+    const result = rebuildTile(state, idx, 'chainStore');
     expect(result.success).toBe(false);
   });
 
   it('大块土地可改建为旅馆', () => {
     const state = makeTestState();
-    setOwner(state, 21, 'p1', 'mall', 0);
-    const result = rebuildTile(state, 21, 'hotel');
+    const idx = largePropertyAt(state, 0);
+    setOwner(state, idx, 'p1', 'mall', 0);
+    const result = rebuildTile(state, idx, 'hotel');
     expect(result.success).toBe(true);
-    expect(state.map.tiles[21].buildingType).toBe('hotel');
+    expect(state.map.tiles[idx].buildingType).toBe('hotel');
   });
 });
 
@@ -539,7 +569,7 @@ describe('endTurn', () => {
 describe('月度结算', () => {
   it('跨月时重新计算物价指数', () => {
     const state = makeTestState();
-    setOwner(state, 1, 'p1', 'house', 0);
+    setOwner(state, smallPropertyAt(state, 0, 0), 'p1', 'house', 0);
     state.day = 30;
     state.pendingTileIndex = 0;
     endTurn(state); // p1 -> p2，不跨天
@@ -587,13 +617,14 @@ describe('破产结算', () => {
 
   it('支付过路费导致破产，无产可破时直接结算', () => {
     const state = makeTestState();
-    setOwner(state, 1, 'p1', 'house', 5);
+    const idx = smallPropertyAt(state, 0, 0);
+    setOwner(state, idx, 'p1', 'house', 5);
     const p1 = state.players[0];
     const p2 = state.players[1];
     p2.cash = 0;
     p2.deposit = 0;
     state.currentPlayerIndex = 1;
-    state.pendingTileIndex = 1;
+    state.pendingTileIndex = idx;
 
     handleTileEffect(state);
 
@@ -605,10 +636,17 @@ describe('破产结算', () => {
 
   it('法拍后仍不足以支付过路费，剩余地产转移给债主', () => {
     const state = makeTestState();
-    setOwner(state, 1, 'p1', 'house', 5);
-    state.map.tiles[1].baseRent = 50000;
+    const rentIdx = smallPropertyAt(state, 0, 0);
+    setOwner(state, rentIdx, 'p1', 'house', 5);
+    state.map.tiles[rentIdx].baseRent = 50000;
     // p2 拥有 4 处低价地产，前 3 次法拍无法覆盖高租金，第 4 处转移给债主
-    for (const idx of [5, 7, 9, 11]) {
+    const p2Properties = [
+      smallPropertyAt(state, 0, 1),
+      smallPropertyAt(state, 1, 0),
+      smallPropertyAt(state, 2, 0),
+      smallPropertyAt(state, 3, 0),
+    ];
+    for (const idx of p2Properties) {
       setOwner(state, idx, 'p2', 'house', 0);
       state.map.tiles[idx].basePrice = 1000;
     }
@@ -617,14 +655,15 @@ describe('破产结算', () => {
     p2.cash = 0;
     p2.deposit = 0;
     state.currentPlayerIndex = 1;
-    state.pendingTileIndex = 1;
+    state.pendingTileIndex = rentIdx;
 
     handleTileEffect(state);
 
+    const transferredIdx = p2Properties[p2Properties.length - 1];
     expect(p2.isBankrupt).toBe(true);
     expect(p2.properties).toEqual([]);
-    expect(state.map.tiles[11].ownerId).toBe('p1');
-    expect(p1.properties).toContain(11);
+    expect(state.map.tiles[transferredIdx].ownerId).toBe('p1');
+    expect(p1.properties).toContain(transferredIdx);
     expect(state.logs.filter((l) => l.type === 'liquidation:property').length).toBe(3);
     expect(state.logs.some((l) => l.type === 'player:bankrupt')).toBe(true);
   });
@@ -773,64 +812,74 @@ describe('简短完整游戏流程', () => {
   it('汽车模式下多轮掷骰、移动、购买地产并推进天数', () => {
     const state = makeTestState({ moveMode: 'car' });
     const [p1, p2] = state.players;
+    const len = state.map.tiles.length;
+    const prop = smallPropertyAt(state, 0, 0);
+    const company = firstCompany(state);
 
-    // 第 1 轮：p1 掷 3 点，移动到 tile 3 并购买
-    let rollResult = roll(state, 3);
+    // 第 1 轮：p1 从 prop 前 1 格出发，掷 1 点，移动到 prop 并购买
+    setPlayerPosition(state, 'p1', (prop - 1 + len) % len);
+    let rollResult = roll(state, 1);
     expect(rollResult.success).toBe(true);
     movePlayer(state, rollResult.steps!);
-    expect(getCurrentPlayer(state).position).toBe(3);
+    expect(getCurrentPlayer(state).position).toBe(prop);
     expect(buyProperty(state).success).toBe(true);
-    expect(state.map.tiles[3].ownerId).toBe('p1');
-    expect(p1.properties).toContain(3);
+    expect(state.map.tiles[prop].ownerId).toBe('p1');
+    expect(p1.properties).toContain(prop);
 
     state.pendingTileIndex = 0;
     endTurn(state); // p1 -> p2
 
-    // 第 1 轮：p2 掷 3 点，移动到 tile 3，支付过路费
-    rollResult = roll(state, 3);
+    // 第 1 轮：p2 同样从 prop 前 1 格出发，掷 1 点，支付过路费
+    setPlayerPosition(state, 'p2', (prop - 1 + len) % len);
+    rollResult = roll(state, 1);
     movePlayer(state, rollResult.steps!);
-    expect(getCurrentPlayer(state).position).toBe(3);
-    state.pendingTileIndex = 3;
+    expect(getCurrentPlayer(state).position).toBe(prop);
+    state.pendingTileIndex = prop;
     endTurn(state); // p2 -> p1，进入第 2 天
 
     expect(state.day).toBe(2);
     expect(p2.cash).toBeLessThan(100000); // 支付过路费
     expect(p1.cash).toBeGreaterThan(90000); // 收到过路费
 
-    // 第 2 轮：p1 掷 3 点，移动到 tile 6（电脑公司）
-    rollResult = roll(state, 3);
+    // 第 2 轮：p1 从 company 前 1 格出发，掷 1 点，移动到 company
+    setPlayerPosition(state, 'p1', (company - 1 + len) % len);
+    rollResult = roll(state, 1);
     movePlayer(state, rollResult.steps!);
-    expect(getCurrentPlayer(state).position).toBe(6);
-    state.pendingTileIndex = 6;
+    expect(getCurrentPlayer(state).position).toBe(company);
+    state.pendingTileIndex = company;
     endTurn(state); // p1 -> p2
 
-    // 第 2 轮：p2 掷 3 点，移动到 tile 6（电脑公司）
-    rollResult = roll(state, 3);
+    // 第 2 轮：p2 同样从 company 前 1 格出发，掷 1 点，移动到 company
+    setPlayerPosition(state, 'p2', (company - 1 + len) % len);
+    rollResult = roll(state, 1);
     movePlayer(state, rollResult.steps!);
-    expect(getCurrentPlayer(state).position).toBe(6);
-    state.pendingTileIndex = 6;
+    expect(getCurrentPlayer(state).position).toBe(company);
+    state.pendingTileIndex = company;
     endTurn(state); // p2 -> p1，进入第 3 天
 
     expect(state.day).toBe(3);
     expect(state.month).toBe(1);
     expect(state.status).toBe('rolling');
-    expect(state.map.tiles[3].ownerId).toBe('p1');
+    expect(state.map.tiles[prop].ownerId).toBe('p1');
     expect(state.logs.some((l) => l.type === 'player:buy')).toBe(true);
     expect(state.logs.some((l) => l.type === 'player:rent')).toBe(true);
   });
 
   it('高等级地产导致对手破产并结束游戏', () => {
     const state = makeTestState({ moveMode: 'walk' });
-    setOwner(state, 1, 'p1', 'house', 5);
+    const idx = smallPropertyAt(state, 0, 0);
+    setOwner(state, idx, 'p1', 'house', 5);
     const p2 = state.players[1];
     p2.cash = 0;
     p2.deposit = 0;
 
     // p2 回合，走到 p1 的地产
     state.currentPlayerIndex = 1;
+    const len = state.map.tiles.length;
+    setPlayerPosition(state, 'p2', (idx - 1 + len) % len);
     movePlayer(state, 1);
-    expect(getCurrentPlayer(state).position).toBe(1);
-    state.pendingTileIndex = 1;
+    expect(getCurrentPlayer(state).position).toBe(idx);
+    state.pendingTileIndex = idx;
     endTurn(state);
 
     expect(p2.isBankrupt).toBe(true);

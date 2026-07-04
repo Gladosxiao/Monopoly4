@@ -7,7 +7,14 @@
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { handleTileEffect, payMoney, transferMoney, endTurn } from '../engine.js';
-import { makeTestState, setOwner, DEFAULT_TEST_CONFIG } from './setup.js';
+import {
+  makeTestState,
+  setOwner,
+  DEFAULT_TEST_CONFIG,
+  smallPropertyAt,
+  largePropertyAt,
+  firstShop,
+} from './setup.js';
 
 describe('rent payment bankruptcy', () => {
   beforeEach(() => {
@@ -20,32 +27,34 @@ describe('rent payment bankruptcy', () => {
 
   it('支付过路费导致破产并将地产转移给债主', () => {
     const state = makeTestState();
-    setOwner(state, 1, 'p2', 'house', 0);
-    state.map.tiles[1].baseRent = 50;
+    const idx = smallPropertyAt(state, 0, 0);
+    setOwner(state, idx, 'p2', 'house', 0);
+    state.map.tiles[idx].baseRent = 50;
     state.players[0].cash = 10;
     state.players[0].deposit = 10;
     state.currentPlayerIndex = 0;
-    state.pendingTileIndex = 1;
+    state.pendingTileIndex = idx;
 
     handleTileEffect(state);
 
     expect(state.players[0].isBankrupt).toBe(true);
     expect(state.players[0].cash).toBe(0);
     expect(state.players[0].deposit).toBe(0);
-    expect(state.map.tiles[1].ownerId).toBe('p2');
-    expect(state.players[1].properties).toContain(1);
+    expect(state.map.tiles[idx].ownerId).toBe('p2');
+    expect(state.players[1].properties).toContain(idx);
     expect(state.players[0].properties).toEqual([]);
     expect(state.logs.some((l) => l.type === 'player:bankrupt')).toBe(true);
   });
 
   it('部分支付后破产，债主获得剩余全部资金', () => {
     const state = makeTestState();
-    setOwner(state, 1, 'p2', 'house', 5); // 高租金
-    state.map.tiles[1].baseRent = 500;
+    const idx = smallPropertyAt(state, 0, 0);
+    setOwner(state, idx, 'p2', 'house', 5); // 高租金
+    state.map.tiles[idx].baseRent = 500;
     state.players[0].cash = 100;
     state.players[0].deposit = 0;
     state.currentPlayerIndex = 0;
-    state.pendingTileIndex = 1;
+    state.pendingTileIndex = idx;
     const ownerInitialCash = state.players[1].cash;
 
     handleTileEffect(state);
@@ -144,32 +153,37 @@ describe('game end by bankruptcy', () => {
 describe('property transfer after bankruptcy', () => {
   it('三次法拍不足后破产，剩余地产转移给债主', () => {
     const state = makeTestState();
-    setOwner(state, 1, 'p1', 'house', 0);
-    setOwner(state, 3, 'p1', 'house', 0);
-    setOwner(state, 21, 'p1', 'house', 0);
-    setOwner(state, 23, 'p1', 'house', 0);
+    const idx1 = smallPropertyAt(state, 0, 0);
+    const idx3 = smallPropertyAt(state, 0, 2);
+    const idx21 = largePropertyAt(state, 0);
+    const idx23 = firstShop(state);
+    const idx5 = smallPropertyAt(state, 1, 0);
+    setOwner(state, idx1, 'p1', 'house', 0);
+    setOwner(state, idx3, 'p1', 'house', 0);
+    setOwner(state, idx21, 'p1', 'house', 0);
+    setOwner(state, idx23, 'p1', 'house', 0);
     // 让地块价值极低，三次法拍也无法覆盖高租金
-    for (const idx of [1, 3, 21, 23]) {
+    for (const idx of [idx1, idx3, idx21, idx23]) {
       state.map.tiles[idx].basePrice = 100;
     }
     state.players[0].cash = 0;
     state.players[0].deposit = 0;
     state.currentPlayerIndex = 0;
-    state.pendingTileIndex = 5;
-    setOwner(state, 5, 'p2', 'house', 0);
-    state.map.tiles[5].baseRent = 5000;
+    state.pendingTileIndex = idx5;
+    setOwner(state, idx5, 'p2', 'house', 0);
+    state.map.tiles[idx5].baseRent = 5000;
 
     handleTileEffect(state);
 
     expect(state.players[0].isBankrupt).toBe(true);
     // 已法拍的地块回归未拥有状态
-    expect(state.map.tiles[1].ownerId).toBeUndefined();
-    expect(state.map.tiles[3].ownerId).toBeUndefined();
-    expect(state.map.tiles[21].ownerId).toBeUndefined();
+    expect(state.map.tiles[idx1].ownerId).toBeUndefined();
+    expect(state.map.tiles[idx3].ownerId).toBeUndefined();
+    expect(state.map.tiles[idx21].ownerId).toBeUndefined();
     // 剩余未法拍地产转移给债主
-    expect(state.map.tiles[23].ownerId).toBe('p2');
-    expect(state.players[1].properties).toContain(5);
-    expect(state.players[1].properties).toContain(23);
+    expect(state.map.tiles[idx23].ownerId).toBe('p2');
+    expect(state.players[1].properties).toContain(idx5);
+    expect(state.players[1].properties).toContain(idx23);
     expect(state.players[0].properties).toEqual([]);
   });
 });
