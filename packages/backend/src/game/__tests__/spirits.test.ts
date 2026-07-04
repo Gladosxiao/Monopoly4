@@ -14,7 +14,7 @@ import {
   buyCard,
 } from '../engine.js';
 import { triggerFateEvent, triggerNewsEvent } from '../eventSystem/index.js';
-import { makeTestState, setOwner, giveCard, giveItem } from './setup.js';
+import { makeTestState, setOwner, giveCard, giveItem, smallPropertyAt } from './setup.js';
 
 function setSpirit(state: ReturnType<typeof makeTestState>, playerId: string, spiritId: string) {
   const player = state.players.find((p) => p.id === playerId)!;
@@ -33,13 +33,14 @@ describe('fortune / misfortune god', () => {
     const state = makeTestState();
     setSpirit(state, 'p1', 'smallFortuneGod');
     state.currentPlayerIndex = 0;
-    state.pendingTileIndex = 1;
+    const tileIndex = smallPropertyAt(state, 0, 0);
+    state.pendingTileIndex = tileIndex;
     const initialCash = state.players[0].cash;
 
     const result = buyProperty(state);
 
     expect(result.success).toBe(true);
-    expect(state.map.tiles[1].ownerId).toBe('p1');
+    expect(state.map.tiles[tileIndex].ownerId).toBe('p1');
     expect(state.players[0].cash).toBe(initialCash);
     expect(state.logs.some((l) => l.message?.includes('小福神显灵'))).toBe(true);
   });
@@ -48,8 +49,9 @@ describe('fortune / misfortune god', () => {
     const state = makeTestState();
     setSpirit(state, 'p1', 'bigMisfortuneGod');
     state.currentPlayerIndex = 0;
-    state.pendingTileIndex = 1;
-    const tile = state.map.tiles[1];
+    const tileIndex = smallPropertyAt(state, 0, 0);
+    state.pendingTileIndex = tileIndex;
+    const tile = state.map.tiles[tileIndex];
     const price = Math.floor(tile.basePrice * state.priceIndex);
     const penalty = Math.floor(price * 0.1);
     const initialCash = state.players[0].cash;
@@ -57,7 +59,7 @@ describe('fortune / misfortune god', () => {
     const result = buyProperty(state);
 
     expect(result.success).toBe(false);
-    expect(state.map.tiles[1].ownerId).toBeUndefined();
+    expect(state.map.tiles[tileIndex].ownerId).toBeUndefined();
     expect(state.players[0].cash).toBe(initialCash - penalty);
   });
 
@@ -85,11 +87,12 @@ describe('angel / devil', () => {
     const state = makeTestState();
     setSpirit(state, 'p1', 'angel');
     const player = state.players[0];
-    player.position = 1;
+    const tileIndex = smallPropertyAt(state, 0, 0);
+    player.position = tileIndex;
     state.currentPlayerIndex = 0;
 
     giveItem(player, 'missile', 1);
-    useItem(state, 'p1', 'missile', { targetTileIndex: 1 });
+    useItem(state, 'p1', 'missile', { targetTileIndex: tileIndex });
 
     const hospital = player.statusEffects.find((e) => e.type === 'hospital');
     expect(hospital).toBeDefined();
@@ -100,11 +103,12 @@ describe('angel / devil', () => {
     const state = makeTestState();
     setSpirit(state, 'p1', 'devil');
     const player = state.players[0];
-    player.position = 1;
+    const tileIndex = smallPropertyAt(state, 0, 0);
+    player.position = tileIndex;
     state.currentPlayerIndex = 0;
 
     giveItem(player, 'missile', 1);
-    useItem(state, 'p1', 'missile', { targetTileIndex: 1 });
+    useItem(state, 'p1', 'missile', { targetTileIndex: tileIndex });
 
     const hospital = player.statusEffects.find((e) => e.type === 'hospital');
     expect(hospital).toBeDefined();
@@ -115,29 +119,31 @@ describe('angel / devil', () => {
 describe('land god protection', () => {
   it('土地公挡下拆除卡', () => {
     const state = makeTestState();
-    setOwner(state, 1, 'p1', 'house', 3);
+    const tileIndex = smallPropertyAt(state, 0, 0);
+    setOwner(state, tileIndex, 'p1', 'house', 3);
     setSpirit(state, 'p1', 'landGod');
     state.currentPlayerIndex = 1;
     const id = giveCard(state.players[1], 'demolish');
 
-    const result = useCard(state, 'p2', id, { targetTileIndex: 1 });
+    const result = useCard(state, 'p2', id, { targetTileIndex: tileIndex });
 
     expect(result.success).toBe(true);
-    expect(state.map.tiles[1].level).toBe(3);
+    expect(state.map.tiles[tileIndex].level).toBe(3);
     expect(state.logs.some((l) => l.type === 'spirit:protect')).toBe(true);
   });
 
   it('土地公挡下怪兽卡', () => {
     const state = makeTestState();
-    setOwner(state, 1, 'p1', 'house', 3);
+    const tileIndex = smallPropertyAt(state, 0, 0);
+    setOwner(state, tileIndex, 'p1', 'house', 3);
     setSpirit(state, 'p1', 'landGod');
     state.currentPlayerIndex = 1;
     const id = giveCard(state.players[1], 'monster');
 
-    const result = useCard(state, 'p2', id, { targetTileIndex: 1 });
+    const result = useCard(state, 'p2', id, { targetTileIndex: tileIndex });
 
     expect(result.success).toBe(true);
-    expect(state.map.tiles[1].level).toBe(3);
+    expect(state.map.tiles[tileIndex].level).toBe(3);
   });
 });
 
@@ -188,10 +194,11 @@ describe('fortune god card on pass', () => {
 
   it('福神经过对手土地时随机获得卡片', () => {
     const state = makeTestState();
-    setOwner(state, 1, 'p2', 'house', 0);
+    const tileIndex = smallPropertyAt(state, 0, 0);
+    setOwner(state, tileIndex, 'p2', 'house', 0);
     setSpirit(state, 'p1', 'smallFortuneGod');
     state.currentPlayerIndex = 0;
-    state.pendingTileIndex = 1;
+    state.pendingTileIndex = tileIndex;
     const before = state.players[0].cards.length;
 
     handleTileEffect(state);

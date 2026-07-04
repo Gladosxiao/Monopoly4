@@ -1,12 +1,13 @@
 import { describe, it, expect } from 'vitest';
 import { takeLoan, repayLoan, calculateLoanLimit } from '../engine.js';
-import { makeTestState, setOwner } from './setup.js';
+import { makeTestState, setOwner, smallPropertyAt } from './setup.js';
 
 describe('贷款与还款', () => {
   function makeLoanState() {
     const state = makeTestState();
-    // 给玩家1 一处地产作为抵押（蘑菇村 basePrice=30）
-    setOwner(state, 1, 'p1', 'house', 0);
+    // 给玩家1 一处地产作为抵押（第一组第一个小地产）
+    const tile = smallPropertyAt(state, 0, 0);
+    setOwner(state, tile, 'p1', 'house', 0);
     return state;
   }
 

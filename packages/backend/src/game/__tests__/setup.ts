@@ -100,6 +100,84 @@ export function setPlayerPosition(state: GameState, playerId: string, position: 
   player.position = position;
 }
 
+// ==================== 动态地图坐标 helper（兼容生成式 SIMPLE_MAP） ====================
+
+/** 查找满足条件的地块索引，找不到时抛出清晰错误 */
+function findTileIndex(state: GameState, predicate: (t: Tile) => boolean): number {
+  const tile = state.map.tiles.find(predicate);
+  if (!tile) throw new Error(`[test-setup] 未找到符合条件的地块`);
+  return tile.index;
+}
+
+/** 第一个任意地产格 */
+export function firstProperty(state: GameState): number {
+  return findTileIndex(state, (t) => t.type === 'property');
+}
+
+/** 某小组的第 n 个小地产（n 从 0 开始） */
+export function smallPropertyAt(state: GameState, group: number, n: number): number {
+  const tiles = state.map.tiles.filter(
+    (t) => t.type === 'property' && t.size === 'small' && t.group === group
+  );
+  if (n >= tiles.length) throw new Error(`[test-setup] 小组 ${group} 没有第 ${n} 个小地产`);
+  return tiles[n].index;
+}
+
+/** 第 n 个大地产（n 从 0 开始） */
+export function largePropertyAt(state: GameState, n: number): number {
+  const tiles = state.map.tiles.filter((t) => t.type === 'property' && t.size === 'large');
+  if (n >= tiles.length) throw new Error(`[test-setup] 没有第 ${n} 个大地产`);
+  return tiles[n].index;
+}
+
+/** 第 n 个大地产的第 offset 个子格（offset 从 0 开始） */
+export function largePropertySubTileAt(state: GameState, n: number, offset: number): number {
+  const start = largePropertyAt(state, n);
+  return start + offset;
+}
+
+/** 第一个非地产系统格（用于临时改成 coupon/magic/lottery） */
+export function firstSpecialSlot(state: GameState): number {
+  return firstShop(state);
+}
+
+/** 第 n 个商店格（n 从 0 开始） */
+export function shopAt(state: GameState, n: number): number {
+  const tiles = state.map.tiles.filter((t) => t.type === 'shop');
+  if (n >= tiles.length) throw new Error(`[test-setup] 没有第 ${n} 个商店`);
+  return tiles[n].index;
+}
+
+/** 第一个商店格 */
+export function firstShop(state: GameState): number {
+  return shopAt(state, 0);
+}
+
+/** 第二个商店格 */
+export function secondShop(state: GameState): number {
+  return shopAt(state, 1);
+}
+
+/** 第一个医院格 */
+export function firstHospital(state: GameState): number {
+  return findTileIndex(state, (t) => t.type === 'hospital');
+}
+
+/** 第一个监狱格 */
+export function firstPrison(state: GameState): number {
+  return findTileIndex(state, (t) => t.type === 'prison');
+}
+
+/** 第一个命运格 */
+export function firstFate(state: GameState): number {
+  return findTileIndex(state, (t) => t.type === 'fate');
+}
+
+/** 第一个公司格 */
+export function firstCompany(state: GameState): number {
+  return findTileIndex(state, (t) => t.type === 'company');
+}
+
 import { endTurn } from '../engine.js';
 
 export function advanceToNextDay(state: GameState): void {

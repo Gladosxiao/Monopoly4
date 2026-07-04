@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { endTurn } from '../engine.js';
-import { makeTestState, setOwner } from './setup.js';
+import { makeTestState, setOwner, smallPropertyAt } from './setup.js';
 import type { GameConfig } from '@monopoly4/shared';
 import { db } from '../../db.js';
 
@@ -18,7 +18,7 @@ describe('胜利条件', () => {
     const state = makeTestState({ gameTime: '1m', totalFunds: 10000 } as Partial<GameConfig>);
     state.month = 2; // 超过 1 个月限制
     state.day = 1;
-    setOwner(state, 1, 'p2', 'house', 5); // p2 拥有高价值地产
+    setOwner(state, smallPropertyAt(state, 0, 0), 'p2', 'house', 5); // p2 拥有高价值地产
     state.pendingTileIndex = 0;
     endTurn(state);
     expect(state.status).toBe('ended');

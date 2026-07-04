@@ -4,7 +4,7 @@
 
 import { describe, it, expect, vi } from 'vitest';
 import type { GameState } from '@monopoly4/shared';
-import { makeTestState, giveCard, giveItem, setOwner } from './setup.js';
+import { makeTestState, giveCard, giveItem, setOwner, smallPropertyAt } from './setup.js';
 import { spawnNpcs, moveNpcs, triggerNpcEffect, rescueNpc } from '../npcSystem/index.js';
 import { endTurn, canRescueNpc } from '../engine.js';
 
@@ -105,10 +105,11 @@ describe('NPC 效果触发', () => {
   it('流氓破坏建筑一级', () => {
     const state = makeTestState();
     const p1 = state.players[0];
-    setOwner(state, 1, 'p1', 'house', 2);
-    p1.position = 1;
-    placeNpc(state, 'hoodlum', 1);
+    const propIdx = smallPropertyAt(state, 0, 0);
+    setOwner(state, propIdx, 'p1', 'house', 2);
+    p1.position = propIdx;
+    placeNpc(state, 'hoodlum', propIdx);
     triggerNpcEffect(state, state.npcs[0], p1);
-    expect(state.map.tiles[1].level).toBe(1);
+    expect(state.map.tiles[propIdx].level).toBe(1);
   });
 });

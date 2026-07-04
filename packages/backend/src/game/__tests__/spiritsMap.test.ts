@@ -4,7 +4,7 @@
 
 import { describe, it, expect, vi } from 'vitest';
 import type { GameState } from '@monopoly4/shared';
-import { makeTestState, setPlayerPosition } from './setup.js';
+import { makeTestState, setPlayerPosition, smallPropertyAt } from './setup.js';
 import { spawnSpirits, moveSpirits, pickUpSpirit } from '../spiritSystem/index.js';
 
 function placeSpirit(state: GameState, spiritId: string, tileIndex: number): string {
@@ -34,7 +34,9 @@ describe('地图神明生成与移动', () => {
 
   it('moveSpirits 会移动神明并移除到期者', () => {
     const state = makeTestState();
-    state.spirits = [{ id: 's1', spiritId: 'smallWealthGod', pathIndex: 5, remainingDays: 1 }];
+    const prop = smallPropertyAt(state, 1, 0);
+    const pathIndex = state.map.path.indexOf(prop);
+    state.spirits = [{ id: 's1', spiritId: 'smallWealthGod', pathIndex, remainingDays: 1 }];
     moveSpirits(state);
     expect(state.spirits.length).toBe(0);
   });
@@ -44,10 +46,11 @@ describe('地图神明拾取', () => {
   it('玩家经过有神明的格子会附身', () => {
     const state = makeTestState();
     const p1 = state.players[0];
-    setPlayerPosition(state, 'p1', 5);
-    placeSpirit(state, 'smallWealthGod', 5);
+    const prop = smallPropertyAt(state, 1, 0);
+    setPlayerPosition(state, 'p1', prop);
+    placeSpirit(state, 'smallWealthGod', prop);
 
-    pickUpSpirit(state, p1, state.map.path.indexOf(5));
+    pickUpSpirit(state, p1, state.map.path.indexOf(prop));
 
     expect(p1.spirit?.spiritId).toBe('smallWealthGod');
     expect(state.spirits.length).toBe(0);
@@ -56,8 +59,9 @@ describe('地图神明拾取', () => {
   it('无神明格子不会触发拾取', () => {
     const state = makeTestState();
     const p1 = state.players[0];
-    setPlayerPosition(state, 'p1', 5);
-    pickUpSpirit(state, p1, state.map.path.indexOf(5));
+    const prop = smallPropertyAt(state, 1, 0);
+    setPlayerPosition(state, 'p1', prop);
+    pickUpSpirit(state, p1, state.map.path.indexOf(prop));
     expect(p1.spirit).toBeUndefined();
   });
 });
