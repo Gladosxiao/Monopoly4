@@ -1,0 +1,625 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>小游戏独立测试 · 大富翁4</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=ZCOOL+KuaiLe&family=Noto+Sans+SC:wght@400;500;700&display=swap"
+    rel="stylesheet"
+  />
+  <style>
+    /* ==================== 基础重置 ==================== */
+    *,
+    *::before,
+    *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    html,
+    body {
+      width: 100%;
+      min-height: 100%;
+    }
+
+    body {
+      font-family: "Outfit", "Noto Sans SC", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background:
+        radial-gradient(ellipse at 20% 0%, rgba(91, 141, 239, 0.18), transparent 50%),
+        radial-gradient(ellipse at 80% 100%, rgba(236, 72, 153, 0.12), transparent 55%),
+        radial-gradient(ellipse at 50% 50%, rgba(245, 158, 11, 0.08), transparent 60%),
+        #1a1a2e;
+      color: #e8eaf0;
+      min-height: 100vh;
+      padding: 48px 24px 80px;
+      line-height: 1.5;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+
+    /* ==================== 布局容器 ==================== */
+    .page {
+      max-width: 1120px;
+      margin: 0 auto;
+    }
+
+    .page-header {
+      text-align: center;
+      margin-bottom: 48px;
+    }
+
+    .page-title {
+      font-family: "ZCOOL KuaiLe", "Outfit", sans-serif;
+      font-size: clamp(36px, 5vw, 56px);
+      font-weight: 400;
+      letter-spacing: 0.04em;
+      background: linear-gradient(135deg, #ec4899 0%, #fbbf24 45%, #60a5fa 100%);
+      -webkit-background-clip: text;
+      background-clip: text;
+      -webkit-text-fill-color: transparent;
+      margin-bottom: 12px;
+    }
+
+    .page-subtitle {
+      font-size: 16px;
+      color: #94a3b8;
+      max-width: 640px;
+      margin: 0 auto;
+    }
+
+    /* ==================== 卡片网格 ==================== */
+    .game-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 24px;
+      margin-bottom: 56px;
+    }
+
+    @media (max-width: 880px) {
+      .game-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .game-card {
+      position: relative;
+      border-radius: 20px;
+      padding: 28px 24px 24px;
+      background: rgba(26, 34, 54, 0.7);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      box-shadow: 0 20px 50px -20px rgba(0, 0, 0, 0.6);
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      transition: transform 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease;
+      overflow: hidden;
+      isolation: isolate;
+    }
+
+    .game-card::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      z-index: -1;
+      background: var(--card-glow, transparent);
+      opacity: 0.55;
+      transition: opacity 0.3s ease;
+    }
+
+    .game-card:hover {
+      transform: translateY(-6px);
+      border-color: rgba(255, 255, 255, 0.18);
+      box-shadow: 0 30px 60px -20px rgba(0, 0, 0, 0.8);
+    }
+
+    .game-card:hover::before {
+      opacity: 0.9;
+    }
+
+    .game-card[data-game="balloon"] {
+      --card-accent: #ec4899;
+      --card-glow: radial-gradient(circle at 80% 0%, rgba(236, 72, 153, 0.35), transparent 60%);
+    }
+
+    .game-card[data-game="luckyDrop"] {
+      --card-accent: #fbbf24;
+      --card-glow: radial-gradient(circle at 80% 0%, rgba(251, 191, 36, 0.32), transparent 60%);
+    }
+
+    .game-card[data-game="penguinDig"] {
+      --card-accent: #60a5fa;
+      --card-glow: radial-gradient(circle at 80% 0%, rgba(96, 165, 250, 0.32), transparent 60%);
+    }
+
+    .card-header {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .card-icon {
+      width: 64px;
+      height: 64px;
+      border-radius: 18px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 36px;
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.04);
+    }
+
+    .game-card[data-game="balloon"] .card-icon {
+      background: linear-gradient(135deg, rgba(236, 72, 153, 0.25), rgba(236, 72, 153, 0.05));
+      border-color: rgba(236, 72, 153, 0.35);
+    }
+    .game-card[data-game="luckyDrop"] .card-icon {
+      background: linear-gradient(135deg, rgba(251, 191, 36, 0.25), rgba(251, 191, 36, 0.05));
+      border-color: rgba(251, 191, 36, 0.35);
+    }
+    .game-card[data-game="penguinDig"] .card-icon {
+      background: linear-gradient(135deg, rgba(96, 165, 250, 0.25), rgba(96, 165, 250, 0.05));
+      border-color: rgba(96, 165, 250, 0.35);
+    }
+
+    .card-title-block {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .card-title {
+      font-family: "ZCOOL KuaiLe", "Outfit", sans-serif;
+      font-size: 24px;
+      font-weight: 400;
+      letter-spacing: 0.05em;
+      color: #ffffff;
+      margin-bottom: 4px;
+    }
+
+    .card-tag {
+      display: inline-block;
+      font-size: 11px;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--card-accent);
+      background: color-mix(in srgb, var(--card-accent) 18%, transparent);
+      padding: 3px 8px;
+      border-radius: 999px;
+      font-weight: 600;
+    }
+
+    .card-desc {
+      color: #cbd5e1;
+      font-size: 14.5px;
+      line-height: 1.65;
+      flex: 1;
+    }
+
+    .card-meta {
+      display: flex;
+      gap: 16px;
+      padding: 12px 14px;
+      border-radius: 12px;
+      background: rgba(15, 23, 42, 0.5);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+      font-size: 12.5px;
+      color: #94a3b8;
+    }
+
+    .card-meta-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .card-meta-item strong {
+      color: #e8eaf0;
+      font-weight: 600;
+    }
+
+    .start-btn {
+      width: 100%;
+      padding: 14px 20px;
+      border: none;
+      border-radius: 12px;
+      background: var(--card-accent);
+      color: #0f172a;
+      font-family: "Outfit", "Noto Sans SC", sans-serif;
+      font-size: 15px;
+      font-weight: 700;
+      letter-spacing: 0.03em;
+      cursor: pointer;
+      transition: transform 0.15s ease, box-shadow 0.2s ease, filter 0.2s ease;
+      box-shadow: 0 8px 20px -8px var(--card-accent);
+    }
+
+    .start-btn:hover {
+      transform: translateY(-2px);
+      filter: brightness(1.1);
+      box-shadow: 0 12px 28px -10px var(--card-accent);
+    }
+
+    .start-btn:active {
+      transform: translateY(0);
+    }
+
+    .start-btn:disabled {
+      background: #2a3447;
+      color: #64748b;
+      cursor: not-allowed;
+      box-shadow: none;
+      filter: none;
+    }
+
+    /* ==================== 最近成绩高亮 ==================== */
+    .latest-result {
+      padding: 18px 20px;
+      margin-bottom: 24px;
+      border-radius: 14px;
+      background: linear-gradient(
+        135deg,
+        rgba(91, 141, 239, 0.12) 0%,
+        rgba(236, 72, 153, 0.08) 50%,
+        rgba(251, 191, 36, 0.08) 100%
+      );
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .latest-result[data-game="balloon"] {
+      background: linear-gradient(135deg, rgba(236, 72, 153, 0.18), rgba(236, 72, 153, 0.04));
+      border-color: rgba(236, 72, 153, 0.3);
+    }
+    .latest-result[data-game="luckyDrop"] {
+      background: linear-gradient(135deg, rgba(251, 191, 36, 0.18), rgba(251, 191, 36, 0.04));
+      border-color: rgba(251, 191, 36, 0.3);
+    }
+    .latest-result[data-game="penguinDig"] {
+      background: linear-gradient(135deg, rgba(96, 165, 250, 0.18), rgba(96, 165, 250, 0.04));
+      border-color: rgba(96, 165, 250, 0.3);
+    }
+
+    .latest-eyebrow {
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: #94a3b8;
+      margin-bottom: 10px;
+    }
+
+    .latest-body {
+      display: flex;
+      align-items: center;
+      gap: 18px;
+      flex-wrap: wrap;
+    }
+
+    .latest-icon {
+      width: 56px;
+      height: 56px;
+      border-radius: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 30px;
+      background: rgba(15, 23, 42, 0.5);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .latest-info {
+      flex: 1;
+      min-width: 120px;
+    }
+
+    .latest-name {
+      font-family: "ZCOOL KuaiLe", "Outfit", sans-serif;
+      font-size: 20px;
+      color: #ffffff;
+      letter-spacing: 0.04em;
+      margin-bottom: 2px;
+    }
+
+    .latest-time {
+      font-size: 12px;
+      color: #94a3b8;
+    }
+
+    .latest-stats {
+      display: flex;
+      gap: 24px;
+      align-items: center;
+    }
+
+    .latest-stat {
+      text-align: center;
+      min-width: 64px;
+    }
+
+    .latest-stat-label {
+      font-size: 11px;
+      color: #94a3b8;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      margin-bottom: 4px;
+    }
+
+    .latest-stat-value {
+      font-size: 28px;
+      font-weight: 700;
+      color: #ffffff;
+      line-height: 1;
+    }
+
+    .latest-stat-coupons {
+      color: #fbbf24;
+    }
+
+    /* ==================== 历史记录 ==================== */
+    .history-section {
+      background: rgba(26, 34, 54, 0.65);
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      border-radius: 20px;
+      padding: 28px;
+      box-shadow: 0 20px 50px -20px rgba(0, 0, 0, 0.5);
+    }
+
+    .history-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+
+    .history-title {
+      font-family: "ZCOOL KuaiLe", "Outfit", sans-serif;
+      font-size: 22px;
+      font-weight: 400;
+      color: #ffffff;
+      letter-spacing: 0.05em;
+    }
+
+    .history-stats {
+      display: flex;
+      gap: 20px;
+      font-size: 13px;
+      color: #94a3b8;
+    }
+
+    .history-stats strong {
+      color: #fbbf24;
+      font-weight: 700;
+      margin-left: 4px;
+    }
+
+    .history-table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    .history-table th,
+    .history-table td {
+      text-align: left;
+      padding: 12px 14px;
+      font-size: 14px;
+    }
+
+    .history-table th {
+      color: #94a3b8;
+      font-weight: 500;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      font-size: 11px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    }
+
+    .history-table td {
+      color: #e8eaf0;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+    }
+
+    .history-table tr:last-child td {
+      border-bottom: none;
+    }
+
+    .history-table tr:hover td {
+      background: rgba(255, 255, 255, 0.03);
+    }
+
+    .game-tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 3px 10px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 500;
+    }
+
+    .game-tag[data-game="balloon"] {
+      background: rgba(236, 72, 153, 0.15);
+      color: #f9a8d4;
+    }
+    .game-tag[data-game="luckyDrop"] {
+      background: rgba(251, 191, 36, 0.15);
+      color: #fcd34d;
+    }
+    .game-tag[data-game="penguinDig"] {
+      background: rgba(96, 165, 250, 0.15);
+      color: #93c5fd;
+    }
+
+    .score-cell {
+      font-weight: 700;
+      color: #ffffff;
+    }
+
+    .coupon-cell {
+      color: #fbbf24;
+      font-weight: 600;
+    }
+
+    .empty-state {
+      text-align: center;
+      padding: 40px 20px;
+      color: #64748b;
+      font-size: 14px;
+    }
+
+    /* ==================== 底部说明 ==================== */
+    .page-footer {
+      text-align: center;
+      margin-top: 48px;
+      color: #64748b;
+      font-size: 13px;
+    }
+
+    .page-footer a {
+      color: #94a3b8;
+      text-decoration: none;
+      border-bottom: 1px dashed rgba(148, 163, 184, 0.3);
+      padding-bottom: 1px;
+    }
+
+    .page-footer a:hover {
+      color: #cbd5e1;
+      border-bottom-color: rgba(203, 213, 225, 0.5);
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <header class="page-header">
+      <h1 class="page-title">🎮 小游戏独立测试</h1>
+      <p class="page-subtitle">
+        无需进入完整对局，点击下方任意卡片即可单独启动小游戏进行测试。每次结束后，结果会记录在下方历史中。
+      </p>
+    </header>
+
+    <section class="game-grid" id="game-grid">
+      <article class="game-card" data-game="balloon">
+        <div class="card-header">
+          <div class="card-icon" aria-hidden="true">🎈</div>
+          <div class="card-title-block">
+            <h2 class="card-title">七彩气球</h2>
+            <span class="card-tag">Balloon</span>
+          </div>
+        </div>
+        <p class="card-desc">
+          30 秒内点击不断出现的气球得分。彩色气球分数更高，黑球会扣分。考验点击节奏与反应速度。
+        </p>
+        <div class="card-meta">
+          <div class="card-meta-item">⏱ <strong>30s</strong></div>
+          <div class="card-meta-item">🎯 <strong>点击反应</strong></div>
+          <div class="card-meta-item">👤 <strong>单人</strong></div>
+        </div>
+        <button class="start-btn" data-start="balloon">开始游戏</button>
+      </article>
+
+      <article class="game-card" data-game="luckyDrop">
+        <div class="card-header">
+          <div class="card-icon" aria-hidden="true">🎁</div>
+          <div class="card-title-block">
+            <h2 class="card-title">喜从天降</h2>
+            <span class="card-tag">Lucky Drop</span>
+          </div>
+        </div>
+        <p class="card-desc">
+          30 秒内用底部接物器接住空中掉落的礼物。接错炸弹会扣分，越往后期礼物下落越快。
+        </p>
+        <div class="card-meta">
+          <div class="card-meta-item">⏱ <strong>30s</strong></div>
+          <div class="card-meta-item">🎯 <strong>反应 + 方向</strong></div>
+          <div class="card-meta-item">👤 <strong>单人</strong></div>
+        </div>
+        <button class="start-btn" data-start="luckyDrop">开始游戏</button>
+      </article>
+
+      <article class="game-card" data-game="penguinDig">
+        <div class="card-header">
+          <div class="card-icon" aria-hidden="true">🐧</div>
+          <div class="card-title-block">
+            <h2 class="card-title">企鹅挖宝</h2>
+            <span class="card-tag">Penguin Dig</span>
+          </div>
+        </div>
+        <p class="card-desc">
+          30 秒内点击雪地挖出宝藏。深挖可能出大金块，但小心踩到企鹅会被扣分。考验运气与决策。
+        </p>
+        <div class="card-meta">
+          <div class="card-meta-item">⏱ <strong>30s</strong></div>
+          <div class="card-meta-item">🎯 <strong>运气 + 时机</strong></div>
+          <div class="card-meta-item">👤 <strong>单人</strong></div>
+        </div>
+        <button class="start-btn" data-start="penguinDig">开始游戏</button>
+      </article>
+    </section>
+
+    <section class="history-section">
+      <div class="latest-result" id="latest-result" hidden>
+        <div class="latest-eyebrow">最近一次</div>
+        <div class="latest-body">
+          <div class="latest-icon" id="latest-icon">🎮</div>
+          <div class="latest-info">
+            <div class="latest-name" id="latest-name">—</div>
+            <div class="latest-time" id="latest-time">—</div>
+          </div>
+          <div class="latest-stats">
+            <div class="latest-stat">
+              <div class="latest-stat-label">得分</div>
+              <div class="latest-stat-value" id="latest-score">0</div>
+            </div>
+            <div class="latest-stat">
+              <div class="latest-stat-label">点券</div>
+              <div class="latest-stat-value latest-stat-coupons" id="latest-coupons">0</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <header class="history-header">
+        <h2 class="history-title">最近记录</h2>
+        <div class="history-stats" id="history-stats">
+          <span>完成<strong id="stat-count">0</strong></span>
+          <span>总点券<strong id="stat-coupons">0</strong></span>
+          <span>最高分<strong id="stat-best">—</strong></span>
+        </div>
+      </header>
+      <table class="history-table">
+        <thead>
+          <tr>
+            <th>游戏</th>
+            <th>得分</th>
+            <th>点券</th>
+            <th>用时</th>
+            <th>结束时间</th>
+          </tr>
+        </thead>
+        <tbody id="history-body">
+          <tr>
+            <td colspan="5" class="empty-state">还没有记录，开始一局看看吧！</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <footer class="page-footer">
+      <p>
+        测试页 · 大富翁4 Web 复刻版 · <a href="/">返回登录</a>
+      </p>
+    </footer>
+  </div>
+
+  <script type="module" src="/src/test-minigames.ts"></script>
+</body>
+</html>
