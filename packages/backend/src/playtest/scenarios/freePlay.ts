@@ -170,7 +170,7 @@ function importBrainsState(brains: Map<string, PlayerBrain>, state: Record<strin
 function waitForLatestStateChange(
   session: GameSession,
   before: GameState | null,
-  timeoutMs = 5000
+  timeoutMs = 1000
 ): Promise<void> {
   return new Promise((resolve) => {
     if (session.latestState !== before) {
@@ -184,7 +184,7 @@ function waitForLatestStateChange(
         clearInterval(check);
         resolve();
       }
-    }, 30);
+    }, 5);
   });
 }
 
@@ -318,10 +318,10 @@ export async function runFreePlay(
       conn.socket.emit('game:skip', session.roomId);
     }
     // 等待状态变化，避免下一轮仍卡在同一状态
-    await waitForLatestStateChange(session, stateBefore, 5000);
+    await waitForLatestStateChange(session, stateBefore, 1000);
   }
 
-  
+
 /** 决定 rolling 阶段是否使用遥控骰子；返回目标点数或 null（自动 roll） */
 function decideRemoteDice(state: GameState, me: Player): number | null {
   const remoteDice = me.items.find((i) => i.itemId === 'remoteDice');
@@ -387,7 +387,7 @@ function decideRemoteDice(state: GameState, me: Player): number | null {
           console.log(`[FreePlay] ${miniGamePlayer.username} 自动完成小游戏，获得 ${coupons} 点券`);
         }
         miniGameConn.socket.emit('game:miniGameResult', session.roomId, { coupons });
-        await waitForLatestStateChange(session, stateBefore, 5000);
+        await waitForLatestStateChange(session, stateBefore, 1000);
       }
       watchdog.notifyStateChanged();
       consecutiveNoAction = 0;
@@ -532,7 +532,7 @@ function decideRemoteDice(state: GameState, me: Player): number | null {
 
       // 无论成功/失败，都等待 session.latestState 被更新为服务器最新状态，
       // 避免下一轮基于过期的 state 做决策。
-      await waitForLatestStateChange(session, stateBeforeAction, 3000);
+      await waitForLatestStateChange(session, stateBeforeAction, 1000);
 
       if (!result.success) {
         // 执行失败不算严重问题，但记录下来
