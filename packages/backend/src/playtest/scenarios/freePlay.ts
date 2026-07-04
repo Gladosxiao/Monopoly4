@@ -542,6 +542,9 @@ function decideRemoteDice(state: GameState, me: Player): number | null {
             `  ⚠ 执行失败 (${consecutiveFailures[currentPlayer.id]}/${MAX_CONSECUTIVE_FAILURES}): ${result.error}`
           );
         }
+        // 动作失败后，缓存的 planTurn 可能已基于旧状态（如现金、地块等级变化），
+        // 立即让大脑在下一次 acting 时重新计划，避免用失效计划连续失败。
+        pendingPlans.delete(currentPlayer.id);
         if (consecutiveFailures[currentPlayer.id] >= MAX_CONSECUTIVE_FAILURES) {
           recordIssue({
             severity: 'medium',

@@ -804,9 +804,13 @@ export class HeuristicBrain implements PlayerBrain {
       if (tile.type === 'property' && !tile.ownerId) {
         if (bestRoll === 0) bestRoll = roll;
       }
-      // 再次：商店
+      // 再次：商店（点券/卡片/道具不足时提升优先级）
       if (tile.type === 'shop' && bestRoll === 0) {
-        bestRoll = roll;
+        const usefulItems = me.items.reduce((sum, i) => sum + (i.quantity ?? 0), 0);
+        const needsShop = me.cards.length < 5 || usefulItems < 3 || me.coupons >= 80;
+        if (needsShop) {
+          bestRoll = roll;
+        }
       }
       // 再次：小游戏（可获点券）
       if (tile.type === 'miniGame' && bestRoll === 0) {
