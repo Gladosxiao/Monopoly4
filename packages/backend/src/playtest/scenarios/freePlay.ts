@@ -706,8 +706,9 @@ function decideRemoteDice(state: GameState, me: Player): number | null {
       });
     }
 
-    // 短暂等待，让服务器处理
-    await sleep(100);
+    // 短暂等待，让服务器处理；可通过环境变量加速本地批量对局
+    const sleepMs = parseInt(process.env.PLAYTEST_SLEEP_MS ?? '', 10);
+    await sleep(Number.isFinite(sleepMs) && sleepMs >= 0 ? sleepMs : 100);
   }
 
   watchdog.stop();
