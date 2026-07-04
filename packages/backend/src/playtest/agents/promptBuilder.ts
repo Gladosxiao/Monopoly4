@@ -58,6 +58,8 @@ function buildSurroundings(state: GameState, me: Player): string {
       tiles.push(`+${d}#${idx}商店(可买卡片道具)`);
     } else if (t.type === 'fate') {
       tiles.push(`+${d}#${idx}命运`);
+    } else if (t.type === 'miniGame') {
+      tiles.push(`+${d}#${idx}小游戏(可获点券)`);
     } else {
       tiles.push(`+${d}#${idx}${t.name}`);
     }

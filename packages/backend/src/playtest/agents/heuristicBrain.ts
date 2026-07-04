@@ -808,6 +808,10 @@ export class HeuristicBrain implements PlayerBrain {
       if (tile.type === 'shop' && bestRoll === 0) {
         bestRoll = roll;
       }
+      // 再次：小游戏（可获点券）
+      if (tile.type === 'miniGame' && bestRoll === 0) {
+        bestRoll = roll;
+      }
     }
     return bestRoll;
   }

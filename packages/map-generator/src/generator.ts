@@ -26,7 +26,7 @@ export const DEFAULT_TEMPLATE: MapTemplate = {
     prison: 1,
     hospital: 1,
     shop: 2,
-    card: 1,
+    card: 0,
     tax: 2,
     coupon30: 0,
     park: 0,
@@ -36,7 +36,7 @@ export const DEFAULT_TEMPLATE: MapTemplate = {
     company: 3,
     coupon10: 0,
     coupon50: 0,
-    miniGame: 0,
+    miniGame: 1,
   },
   basePriceRange: [80, 600],
   priceCurve: 'sigmoid',
@@ -56,13 +56,14 @@ export const FAST_TEMPLATE: MapTemplate = {
     ...DEFAULT_TEMPLATE.specialTiles,
     fate: 2,
     chance: 2,
-    card: 2,
+    card: 1,
     tax: 2,
     shop: 2,
     coupon30: 0,
     coupon50: 1,
     coupon10: 1,
     company: 3,
+    miniGame: 1,
   },
   basePriceRange: [100, 500],
 };
@@ -76,7 +77,7 @@ export const ECONOMY_TEMPLATE: MapTemplate = {
   name: '地产为王',
   largePropertyCount: 5,
   largePropertySpan: 2,
-  smallPropertyGroups: [4, 4, 4, 4, 4], // 20 个小块，分 5 组连续 4 个
+  smallPropertyGroups: [4, 4, 4, 4, 3], // 19 个小块，保持地产为王的同时加入 1 个小游戏格
   specialTiles: {
     fate: 1,
     chance: 1,
@@ -93,7 +94,7 @@ export const ECONOMY_TEMPLATE: MapTemplate = {
     magic: 0,
     news: 0,
     company: 3,
-    miniGame: 0,
+    miniGame: 1,
   },
   basePriceRange: [120, 700],
 };
@@ -114,7 +115,7 @@ export const PLAYER4_TEMPLATE: MapTemplate = {
     prison: 1,
     hospital: 1,
     shop: 1,
-    card: 2,
+    card: 1,
     tax: 1,
     coupon10: 1,
     coupon30: 0,
@@ -124,14 +125,14 @@ export const PLAYER4_TEMPLATE: MapTemplate = {
     magic: 0,
     news: 0,
     company: 3,
-    miniGame: 0,
+    miniGame: 1,
   },
   basePriceRange: [100, 550],
   priceCurve: 'sigmoid',
 };
 
 /**
- * 扩展模板：60 格，土地数量约为 SIMPLE_MAP 的 1.5 倍（38 块）。
+ * 扩展模板：60 格，土地数量约为默认 40 格模板的 1.5 倍（38 块）。
  * 8 组连续小地产 + 3 个占两步大地产，系统格保留关键功能。
  */
 export const EXPANDED_TEMPLATE: MapTemplate = {
@@ -147,7 +148,7 @@ export const EXPANDED_TEMPLATE: MapTemplate = {
     prison: 1,
     hospital: 1,
     shop: 6,
-    card: 1,
+    card: 0,
     tax: 2,
     coupon10: 1,
     coupon30: 1,
@@ -157,7 +158,7 @@ export const EXPANDED_TEMPLATE: MapTemplate = {
     magic: 0,
     news: 0,
     company: 3,
-    miniGame: 0,
+    miniGame: 1,
   },
   basePriceRange: [60, 500],
   priceCurve: 'sigmoid',

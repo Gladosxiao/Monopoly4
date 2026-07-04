@@ -374,6 +374,26 @@ function decideRemoteDice(state: GameState, me: Player): number | null {
       break;
     }
 
+    // 自动完成小游戏阶段（自动化对局无人机界面）
+    if (state.status === 'minigame') {
+      const miniGamePlayer = state.players[state.currentPlayerIndex];
+      const miniGameConn = miniGamePlayer
+        ? session.players.find((p) => p.userId === miniGamePlayer.id)
+        : undefined;
+      if (miniGamePlayer && miniGameConn) {
+        const stateBefore = session.latestState;
+        const coupons = Math.floor(Math.random() * 61) + 20; // 20~80 点券
+        if (verbose) {
+          console.log(`[FreePlay] ${miniGamePlayer.username} 自动完成小游戏，获得 ${coupons} 点券`);
+        }
+        miniGameConn.socket.emit('game:miniGameResult', session.roomId, { coupons });
+        await waitForLatestStateChange(session, stateBefore, 5000);
+      }
+      watchdog.notifyStateChanged();
+      consecutiveNoAction = 0;
+      continue;
+    }
+
     // 非 rolling/acting 状态，等待
     if (state.status !== 'rolling' && state.status !== 'acting') {
       watchdog.notifyStateChanged();
