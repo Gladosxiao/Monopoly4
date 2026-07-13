@@ -271,7 +271,9 @@ export class BalloonMiniGame implements IMiniGame {
       if (b.popped) continue;
       const dx = x - b.x;
       const dy = y - b.y;
-      if (dx * dx + dy * dy <= b.radius * b.radius) {
+      // 点击判定范围扩大到 1.5 倍半径，提升操作容错率
+      const hitRadius = b.radius * 1.5;
+      if (dx * dx + dy * dy <= hitRadius * hitRadius) {
         this.popBalloon(b, i, now);
         break;
       }

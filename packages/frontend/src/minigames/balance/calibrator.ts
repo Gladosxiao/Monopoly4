@@ -80,11 +80,12 @@ export function calibratePenguinDig(baseline: CalibrationBaseline): CalibrationR
   // 根据冷却反推预计点击次数
   const projectedClicks = digDuration / recommendedCooldownMs;
 
-  // 反推分值倍率，使期望点券等于基准
-  const recommendedScoreMultiplier =
+  // 反推分值倍率，使期望点券等于基准，并限制在合理范围（与游戏内 applyCalibration 一致）
+  let recommendedScoreMultiplier =
     scorePerDig === 0 || projectedClicks === 0
       ? 1
       : baselineCoupons / (projectedClicks * scorePerDig);
+  recommendedScoreMultiplier = Math.max(0.5, Math.min(3.0, recommendedScoreMultiplier));
 
   // 标定后随机玩家（默认操作）的期望点券
   const projectedRandomCoupons = projectedClicks * scorePerDig * recommendedScoreMultiplier;

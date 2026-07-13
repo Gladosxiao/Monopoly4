@@ -141,9 +141,9 @@ export const LUCKY_DROP_CONFIG = {
 
   /**
    * 难度曲线：持续时间占比对速度倍率的影响。
-   * 已较之前下调 30%（原 1.2 → 0.84），避免后期过快。
+   * 进一步下调至 0.6，避免末端速度仍然过快。
    */
-  speedCurveMultiplier: 0.84,
+  speedCurveMultiplier: 0.6,
 
   /** 生成频率随时间提升系数 */
   spawnCurveRate: 22,
@@ -172,8 +172,8 @@ export const LUCKY_DROP_CONFIG = {
 
 /** 企鹅挖宝平衡参数 */
 export const PENGUIN_DIG_CONFIG = {
-  /** 游戏时长（毫秒） */
-  duration: 30000,
+  /** 游戏时长（毫秒）：由 30s 缩短至 25s，节奏更紧凑 */
+  duration: 25000,
 
   /** 记忆阶段时长（毫秒） */
   memorizeDuration: 3000,
@@ -197,14 +197,14 @@ export const PENGUIN_DIG_CONFIG = {
 
   /**
    * 埋藏物类型定义（分值、生成权重）。
-   * 分值已按均值 100+ 目标重新标定。
+   * 分值已随时长缩短而上调，保持均值 100+。
    */
   items: [
-    { type: 'diamond' as const, score: 13, weight: 5 },
-    { type: 'gold' as const, score: 6, weight: 10 },
-    { type: 'sapphire' as const, score: 4, weight: 15 },
-    { type: 'ruby' as const, score: 4, weight: 15 },
+    { type: 'diamond' as const, score: 15, weight: 5 },
+    { type: 'gold' as const, score: 7, weight: 10 },
+    { type: 'sapphire' as const, score: 5, weight: 15 },
+    { type: 'ruby' as const, score: 5, weight: 15 },
     { type: 'ice' as const, score: 2, weight: 30 },
-    { type: 'bomb' as const, score: -10, weight: 12 },
+    { type: 'bomb' as const, score: -11, weight: 12 },
   ],
 } as const;
