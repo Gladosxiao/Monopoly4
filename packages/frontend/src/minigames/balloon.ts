@@ -58,12 +58,27 @@ interface FloatingText {
 
 const GAME_TYPE: MiniGameType = 'balloon';
 
-/** 普通气球颜色池 */
-const NORMAL_COLORS = BALLOON_CONFIG.normalColors;
 /** ×2 气球颜色 */
 const DOUBLE_COLOR = BALLOON_CONFIG.doubleColor;
-/** 问号气球颜色 */
+/** 问号气球默认颜色 */
 const MYSTERY_COLOR = BALLOON_CONFIG.mysteryColor;
+
+/**
+ * 普通气球按分值（即尺寸）着色：
+ * 分值越高 = 气球越小 = 速度越快，使用暖色/警示色；
+ * 分值越低 = 气球越大 = 速度越慢，使用冷色/安全色。
+ */
+function getScoreColor(score: number): string {
+  switch (score) {
+    case 5:
+      return '#f5222d'; // 红：最小、最快、最高分
+    case 4:
+      return '#fa8c16'; // 橙：中等
+    case 3:
+    default:
+      return '#52c41a'; // 绿：最大、最慢、最低分
+  }
+}
 
 /** 问号气球效果池（生成时即确定，并在气球上预显示） */
 const MYSTERY_EFFECTS: MysteryEffect[] = BALLOON_CONFIG.mysteryEffects.map((e) => ({
@@ -376,20 +391,22 @@ export class BalloonMiniGame implements IMiniGame {
     } else if (kindRoll < BALLOON_CONFIG.kindWeights.double + BALLOON_CONFIG.kindWeights.mystery) {
       kind = 'mystery';
       effect = this.randomMysteryEffect();
-      // 加速/减速气球使用醒目颜色，其余保持紫色
+      // 加速/减速/时间效果使用各自醒目颜色，其余保持紫色
       if (effect.label === '▲') {
         color = BALLOON_CONFIG.speedUpColor;
       } else if (effect.label === '▼') {
         color = BALLOON_CONFIG.slowDownColor;
+      } else if (effect.label === '⏳') {
+        color = effect.color; // 琥珀色时间效果
       } else {
         color = MYSTERY_COLOR;
       }
       speed = BALLOON_CONFIG.mysterySpeed.min + Math.random() * (BALLOON_CONFIG.mysterySpeed.max - BALLOON_CONFIG.mysterySpeed.min);
     } else {
       kind = 'normal';
-      color = NORMAL_COLORS[Math.floor(Math.random() * NORMAL_COLORS.length)];
-      // 越小分值越高、速度越快
+      // 越小分值越高、速度越快；颜色也按分值区分
       score = Math.max(BALLOON_CONFIG.minBalloonScore, Math.round((BALLOON_CONFIG.radiusScoreOffset - radius) / BALLOON_CONFIG.radiusScoreStep));
+      color = getScoreColor(score);
       speed = BALLOON_CONFIG.normalBaseSpeed + score * BALLOON_CONFIG.normalScoreSpeedFactor + Math.random() * BALLOON_CONFIG.normalRandomSpeedRange;
     }
 
@@ -548,7 +565,7 @@ export class BalloonMiniGame implements IMiniGame {
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     if (b.kind === 'double') {
-      ctx.fillText('×2', x, b.y);
+      ctx.fillText(`+${b.score * 2}`, x, b.y);
     } else if (b.kind === 'mystery') {
       // 问号气球直接显示其预定义效果标签
       ctx.fillText(b.effect?.label ?? '?', x, b.y);

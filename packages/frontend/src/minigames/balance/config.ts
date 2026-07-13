@@ -33,9 +33,6 @@ export const BALLOON_CONFIG = {
   radiusScoreStep: 6,
   minBalloonScore: 3,
 
-  /** 普通气球颜色池 */
-  normalColors: ['#ff6b6b', '#4ecdc4', '#2ecc71', '#f1c40f'],
-
   /** 双倍气球颜色 */
   doubleColor: '#ffd700',
 
@@ -84,7 +81,7 @@ export const BALLOON_CONFIG = {
     { label: '-5', color: '#e74c3c', weight: 22, scoreDelta: -5, clearScore: false, timeScaleDelta: 0, timeDelta: 0 },
     { label: '▲', color: '#ff5722', weight: 22, scoreDelta: 0, clearScore: false, timeScaleDelta: 0.5, timeDelta: 0 },
     { label: '▼', color: '#00bcd4', weight: 16, scoreDelta: 0, clearScore: false, timeScaleDelta: -0.3, timeDelta: 0 },
-    { label: '⏳', color: '#e67e22', weight: 12, scoreDelta: 0, clearScore: false, timeScaleDelta: 0, timeDelta: 5000 },
+    { label: '⏳', color: '#ff9800', weight: 12, scoreDelta: 0, clearScore: false, timeScaleDelta: 0, timeDelta: 5000 }, // 琥珀色时间效果，与紫色问号区分
   ],
 
   /** 时间缩放上下限 */
