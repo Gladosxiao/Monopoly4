@@ -14,15 +14,20 @@ export class MiniGameManager {
   private cleanupFns: Array<() => void> = [];
 
   /** 根据类型创建小游戏实例 */
-  createGame(type: MiniGameType): IMiniGame {
+  createGame(type: MiniGameType, calibration?: { cooldownMs?: number; scoreMultiplier?: number }): IMiniGame {
     const config = this.getDefaultConfig(type);
     switch (type) {
       case 'balloon':
         return new BalloonMiniGame();
       case 'luckyDrop':
         return new LuckyDropGame(config);
-      case 'penguinDig':
-        return new PenguinDigGame();
+      case 'penguinDig': {
+        const game = new PenguinDigGame();
+        if (calibration) {
+          game.applyCalibration(calibration.cooldownMs ?? 500, calibration.scoreMultiplier ?? 1);
+        }
+        return game;
+      }
       default:
         throw new Error(`未实现的小游戏类型: ${type}`);
     }
@@ -63,11 +68,12 @@ export class MiniGameManager {
     callbacks?: {
       onUpdate?: (score: number) => void;
       onEnd?: (result: MiniGameResult) => void;
-    }
+    },
+    calibration?: { cooldownMs?: number; scoreMultiplier?: number }
   ): () => MiniGameResult | null {
     this.reset();
 
-    const game = this.createGame(type);
+    const game = this.createGame(type, calibration);
     this.currentGame = game;
 
     this.container = this.createOverlay();

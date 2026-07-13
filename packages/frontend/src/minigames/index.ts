@@ -2,6 +2,9 @@ export { BalloonMiniGame } from './balloon.js';
 export { LuckyDropGame } from './luckyDrop.js';
 export { PenguinDigGame } from './penguinDig.js';
 export { MiniGameManager, miniGameManager } from './manager.js';
+export { runAllSimulations, printSimulationResults } from './balance/simulator.js';
+export { calibratePenguinDig, printCalibrationReport } from './balance/calibrator.js';
+export { BALLOON_CONFIG, LUCKY_DROP_CONFIG, PENGUIN_DIG_CONFIG, TARGET_RANDOM_COUPONS } from './balance/config.js';
 
 import type { MiniGameResult, MiniGameType } from '@monopoly4/shared';
 import { miniGameManager } from './manager.js';
@@ -10,6 +13,8 @@ import { miniGameManager } from './manager.js';
 export interface LaunchMiniGameOptions {
   onUpdate?: (score: number) => void;
   onEnd?: (result: MiniGameResult) => void;
+  /** 仅对企鹅挖宝生效：标定参数 */
+  calibration?: { cooldownMs?: number; scoreMultiplier?: number };
 }
 
 /**
@@ -24,5 +29,5 @@ export function launchMiniGame(
   type: MiniGameType,
   options: LaunchMiniGameOptions = {}
 ): () => MiniGameResult | null {
-  return miniGameManager.start(type, options);
+  return miniGameManager.start(type, options, options.calibration);
 }

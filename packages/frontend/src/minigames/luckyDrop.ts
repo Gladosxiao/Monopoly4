@@ -3,6 +3,7 @@ import {
   type MiniGameConfig,
   type MiniGameResult,
 } from '@monopoly4/shared';
+import { LUCKY_DROP_CONFIG } from './balance/config.js';
 
 /**
  * 掉落物种类
@@ -418,41 +419,20 @@ export class LuckyDropGame implements IMiniGame {
     let value: number;
     let baseSpeed: number;
 
-    if (rand < 0.008) {
-      kind = 'chest';
-      radius = 18;
-      value = 20;
-      baseSpeed = 140;
-    } else if (rand < 0.10) {
-      kind = 'gold';
-      radius = 17;
-      value = 10;
-      baseSpeed = 150;
-    } else if (rand < 0.28) {
-      kind = 'silver';
-      radius = 14;
-      value = 5;
-      baseSpeed = 160;
-    } else if (rand < 0.48) {
-      kind = 'coin';
-      radius = 10;
-      value = 1;
-      baseSpeed = 170;
-    } else if (rand < 0.58) {
-      kind = 'clock';
-      radius = 15;
-      value = 0;
-      baseSpeed = 165;
-    } else if (rand < 0.76) {
-      kind = 'spike';
-      radius = 13;
-      value = -5;
-      baseSpeed = 180;
+    // 分值已按随机玩家基准标定，使三游戏期望点券收益一致
+    const itemDef = LUCKY_DROP_CONFIG.items.find((d) => rand < d.probability);
+    if (!itemDef) {
+      // 兜底：最后一个 item 的概率为 1.0，正常情况下不会走到这里
+      const last = LUCKY_DROP_CONFIG.items[LUCKY_DROP_CONFIG.items.length - 1];
+      kind = last.kind;
+      radius = last.radius;
+      value = last.value;
+      baseSpeed = last.baseSpeed;
     } else {
-      kind = 'bomb';
-      radius = 13;
-      value = -10;
-      baseSpeed = 175;
+      kind = itemDef.kind;
+      radius = itemDef.radius;
+      value = itemDef.value;
+      baseSpeed = itemDef.baseSpeed;
     }
 
     const item: DropItem = {
@@ -470,7 +450,8 @@ export class LuckyDropGame implements IMiniGame {
 
   private applyItemEffect(item: DropItem, now: number): void {
     if (item.kind === 'clock') {
-      this.slowMotionUntil = now + 5000; // 5 秒时间减缓
+      const clockDef = LUCKY_DROP_CONFIG.items.find((d) => d.kind === 'clock');
+      this.slowMotionUntil = now + (clockDef?.slowMotionMs ?? 5000);
       this.addFloatingText(item.x, item.y, '⏳ 慢动作', '#2196f3');
       this.onUpdate?.(this.score);
       return;

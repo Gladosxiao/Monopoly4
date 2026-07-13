@@ -4,6 +4,7 @@ import type {
   MiniGameResult,
   MiniGameType,
 } from '@monopoly4/shared';
+import { BALLOON_CONFIG } from './balance/config.js';
 
 /** 气球类型 */
 type BalloonKind = 'normal' | 'double' | 'mystery';
@@ -56,21 +57,17 @@ interface FloatingText {
 const GAME_TYPE: MiniGameType = 'balloon';
 
 /** 普通气球颜色池 */
-const NORMAL_COLORS = ['#ff6b6b', '#4ecdc4', '#2ecc71', '#f1c40f'];
+const NORMAL_COLORS = BALLOON_CONFIG.normalColors;
 /** ×2 气球颜色 */
-const DOUBLE_COLOR = '#ffd700';
+const DOUBLE_COLOR = BALLOON_CONFIG.doubleColor;
 /** 问号气球颜色 */
-const MYSTERY_COLOR = '#9b59b6';
+const MYSTERY_COLOR = BALLOON_CONFIG.mysteryColor;
 
 /** 问号气球效果池（生成时即确定，并在气球上预显示） */
-const MYSTERY_EFFECTS: MysteryEffect[] = [
-  { label: '+10', color: '#2ecc71' },
-  { label: '-5', color: '#e74c3c' },
-  { label: '0', color: '#c0392b' },
-  { label: '▲', color: '#f1c40f' },
-  { label: '▼', color: '#3498db' },
-  { label: '⏳', color: '#e67e22' },
-];
+const MYSTERY_EFFECTS: MysteryEffect[] = BALLOON_CONFIG.mysteryEffects.map((e) => ({
+  label: e.label,
+  color: e.color,
+}));
 
 /** 七彩气球小游戏 */
 export class BalloonMiniGame implements IMiniGame {
@@ -207,33 +204,23 @@ export class BalloonMiniGame implements IMiniGame {
   /** 问号气球的随机效果（生成时已预显示在气球上） */
   private applyMysteryEffect(balloon: Balloon): void {
     const effect = balloon.effect ?? this.randomMysteryEffect();
+    const cfg = BALLOON_CONFIG.mysteryEffects.find((e) => e.label === effect.label);
     let text = effect.label;
 
-    switch (effect.label) {
-      case '+10':
-        this.score += 10;
-        text = '+10';
-        break;
-      case '-5':
-        this.score -= 5;
-        text = '-5';
-        break;
-      case '0':
-        this.score = 0;
-        text = '清零';
-        break;
-      case '▲':
-        this.timeScale = Math.min(this.timeScale + 0.5, 2.5);
-        text = '加速';
-        break;
-      case '▼':
-        this.timeScale = Math.max(this.timeScale - 0.3, 0.5);
-        text = '减速';
-        break;
-      case '⏳':
-        this.endTime -= 5000;
-        text = '-5s';
-        break;
+    if (cfg) {
+      this.score += cfg.scoreDelta;
+      if (cfg.clearScore) this.score = 0;
+      this.timeScale = Math.max(0.5, Math.min(2.5, this.timeScale + cfg.timeScaleDelta));
+      this.endTime -= cfg.timeDelta;
+
+      switch (cfg.label) {
+        case '+10': text = '+10'; break;
+        case '-5': text = '-5'; break;
+        case '0': text = '清零'; break;
+        case '▲': text = '加速'; break;
+        case '▼': text = '减速'; break;
+        case '⏳': text = '-5s'; break;
+      }
     }
 
     if (this.score < 0) this.score = 0;
@@ -241,14 +228,13 @@ export class BalloonMiniGame implements IMiniGame {
   }
 
   private randomMysteryEffect(): MysteryEffect {
-    const weights = [25, 20, 10, 20, 15, 10];
-    const total = weights.reduce((a, b) => a + b, 0);
+    const total = BALLOON_CONFIG.mysteryEffects.reduce((a, e) => a + e.weight, 0);
     let r = Math.random() * total;
-    for (let i = 0; i < MYSTERY_EFFECTS.length; i++) {
-      r -= weights[i];
-      if (r <= 0) return MYSTERY_EFFECTS[i];
+    for (const effect of BALLOON_CONFIG.mysteryEffects) {
+      r -= effect.weight;
+      if (r <= 0) return { label: effect.label, color: effect.color };
     }
-    return MYSTERY_EFFECTS[0];
+    return { label: BALLOON_CONFIG.mysteryEffects[0].label, color: BALLOON_CONFIG.mysteryEffects[0].color };
   }
 
   private spawnParticles(x: number, y: number, color: string): void {
@@ -293,26 +279,26 @@ export class BalloonMiniGame implements IMiniGame {
     let score = 0;
     let speed: number;
 
-    if (kindRoll < 0.12) {
+    if (kindRoll < BALLOON_CONFIG.kindWeights.double) {
       kind = 'double';
       color = DOUBLE_COLOR;
-      score = Math.max(1, Math.round(radius / 6));
-      speed = 2.5 + Math.random() * 0.8;
-    } else if (kindRoll < 0.28) {
+      score = Math.max(1, Math.round(radius / BALLOON_CONFIG.radiusScoreDivider));
+      speed = BALLOON_CONFIG.doubleSpeed.min + Math.random() * (BALLOON_CONFIG.doubleSpeed.max - BALLOON_CONFIG.doubleSpeed.min);
+    } else if (kindRoll < BALLOON_CONFIG.kindWeights.double + BALLOON_CONFIG.kindWeights.mystery) {
       kind = 'mystery';
       color = MYSTERY_COLOR;
       effect = this.randomMysteryEffect();
-      speed = 2.2 + Math.random() * 0.8;
+      speed = BALLOON_CONFIG.mysterySpeed.min + Math.random() * (BALLOON_CONFIG.mysterySpeed.max - BALLOON_CONFIG.mysterySpeed.min);
     } else {
       kind = 'normal';
       color = NORMAL_COLORS[Math.floor(Math.random() * NORMAL_COLORS.length)];
-      score = Math.max(1, Math.round(radius / 6));
+      score = Math.max(1, Math.round(radius / BALLOON_CONFIG.radiusScoreDivider));
       // 分值越高速度越快，高分气球更难命中
-      speed = 1.5 + score * 0.3 + Math.random() * 0.8;
+      speed = BALLOON_CONFIG.normalBaseSpeed + score * BALLOON_CONFIG.normalScoreSpeedFactor + Math.random() * BALLOON_CONFIG.normalRandomSpeedRange;
     }
 
     // 初始生成位置在屏幕中间区域，而非全部从底部冒出
-    const y = this.config.canvasHeight * (0.4 + Math.random() * 0.3);
+    const y = this.config.canvasHeight * (BALLOON_CONFIG.spawnHeightRatio.min + Math.random() * (BALLOON_CONFIG.spawnHeightRatio.max - BALLOON_CONFIG.spawnHeightRatio.min));
 
     this.balloons.push({
       x,

@@ -7,7 +7,7 @@
  * - 历史记录使用 localStorage 持久化（最近 5 条）
  */
 
-import { launchMiniGame } from './minigames/index.js';
+import { launchMiniGame, calibratePenguinDig } from './minigames/index.js';
 import type { MiniGameType, MiniGameResult } from '@monopoly4/shared';
 
 /** 单条历史记录 */
@@ -196,6 +196,125 @@ function bindButtons(): void {
     if (!type || !(type in GAME_META)) return;
     btn.addEventListener('click', () => startGame(type));
   });
+
+  const calibBtn = document.getElementById('calibration-btn');
+  calibBtn?.addEventListener('click', () => startCalibrationFlow());
+}
+
+/* ---------- 标定测试流程 ---------- */
+
+interface CalibrationStep {
+  type: MiniGameType;
+  result: MiniGameResult;
+  clicks: number;
+}
+
+let calibrationState: {
+  steps: CalibrationStep[];
+  inProgress: boolean;
+} = { steps: [], inProgress: false };
+
+function startCalibrationFlow(): void {
+  if (calibrationState.inProgress || activeGame) return;
+  calibrationState = { steps: [], inProgress: true };
+  setButtonsDisabled(true);
+
+  const reportEl = document.getElementById('calibration-report');
+  if (reportEl) {
+    reportEl.style.display = 'block';
+    reportEl.innerHTML = '<p>🧪 标定流程开始，请先玩 <strong>七彩气球</strong>…</p>';
+  }
+
+  runCalibrationStep('balloon', 0);
+}
+
+function runCalibrationStep(
+  type: MiniGameType,
+  stepIndex: number,
+  calibration?: { cooldownMs: number; scoreMultiplier: number }
+): void {
+  activeGame = type;
+
+  const estimatedClicks: Record<MiniGameType, number> = {
+    balloon: 60,
+    luckyDrop: 40,
+    penguinDig: 60,
+  };
+
+  const stopFn = launchMiniGame(type, {
+    onEnd: (result) => {
+      calibrationState.steps.push({ type, result, clicks: estimatedClicks[type] });
+      handleEnd(type, result);
+
+      if (stepIndex === 0) {
+        updateCalibrationReport('step1');
+        setTimeout(() => runCalibrationStep('luckyDrop', 1), 800);
+      } else if (stepIndex === 1) {
+        updateCalibrationReport('step2');
+        const baseline = {
+          balloonAvgCoupons: calibrationState.steps[0].result.coupons,
+          luckyDropAvgCoupons: calibrationState.steps[1].result.coupons,
+          balloonAvgClicks: calibrationState.steps[0].clicks,
+          luckyDropAvgClicks: calibrationState.steps[1].clicks,
+          durationMs: 30000,
+        };
+        const cal = calibratePenguinDig(baseline);
+        updateCalibrationReport('calibrated', cal);
+        setTimeout(
+          () =>
+            runCalibrationStep('penguinDig', 2, {
+              cooldownMs: cal.recommendedCooldownMs,
+              scoreMultiplier: cal.recommendedScoreMultiplier,
+            }),
+          1200
+        );
+      } else {
+        updateCalibrationReport('done');
+        calibrationState.inProgress = false;
+        setButtonsDisabled(false);
+      }
+    },
+    calibration,
+  });
+
+  (window as unknown as { __stopMiniGame?: () => unknown }).__stopMiniGame = stopFn;
+}
+
+function updateCalibrationReport(
+  phase: 'step1' | 'step2' | 'calibrated' | 'done',
+  calibration?: { baselineCoupons: number; recommendedCooldownMs: number; recommendedScoreMultiplier: number; projectedRandomCoupons: number }
+): void {
+  const reportEl = document.getElementById('calibration-report');
+  if (!reportEl) return;
+
+  switch (phase) {
+    case 'step1':
+      reportEl.innerHTML = '<p>✅ 七彩气球完成，接下来玩 <strong>喜从天降</strong>…</p>';
+      break;
+    case 'step2':
+      reportEl.innerHTML = '<p>✅ 喜从天降完成，正在计算企鹅挖宝标定参数…</p>';
+      break;
+    case 'calibrated':
+      if (calibration) {
+        reportEl.innerHTML = `
+          <p>📊 用户基准点券：<strong>${calibration.baselineCoupons}</strong></p>
+          <p>🐧 推荐企鹅挖宝冷却：<strong>${calibration.recommendedCooldownMs}ms</strong></p>
+          <p>🐧 推荐宝藏分值倍率：<strong>×${calibration.recommendedScoreMultiplier}</strong></p>
+          <p>🎯 标定后随机玩家期望：<strong>${calibration.projectedRandomCoupons}</strong> 点券</p>
+          <p>请继续玩 <strong>企鹅挖宝</strong> 验证效果…</p>
+        `;
+      }
+      break;
+    case 'done': {
+      const penguinResult = calibrationState.steps.find((s) => s.type === 'penguinDig')?.result;
+      reportEl.innerHTML = `
+        <p>✅ 标定测试完成！</p>
+        ${penguinResult ? `<p>🐧 企鹅挖宝获得点券：<strong>${penguinResult.coupons}</strong></p>` : ''}
+        <p>如果三个游戏的点券收益接近，说明标定成功。</p>
+      `;
+      break;
+    }
+  }
 }
 
 /* ---------- 启动 ---------- */

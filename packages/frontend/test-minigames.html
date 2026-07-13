@@ -565,6 +565,29 @@
       </article>
     </section>
 
+    <section class="calibration-section" style="margin-bottom: 40px; text-align: center;">
+      <button
+        id="calibration-btn"
+        style="
+          padding: 16px 32px;
+          font-size: 16px;
+          border-radius: 12px;
+          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+          color: #fff;
+          border: none;
+          cursor: pointer;
+          font-weight: 700;
+          box-shadow: 0 8px 24px rgba(102, 126, 234, 0.35);
+          transition: transform 0.15s ease, box-shadow 0.15s ease;
+        "
+        onmouseover="this.style.transform='translateY(-2px)';this.style.boxShadow='0 12px 32px rgba(102, 126, 234, 0.45)'"
+        onmouseout="this.style.transform='translateY(0)';this.style.boxShadow='0 8px 24px rgba(102, 126, 234, 0.35)'"
+      >
+        🧪 开始标定测试（依次玩三个游戏）
+      </button>
+      <div id="calibration-report" style="margin-top: 20px; display: none;"></div>
+    </section>
+
     <section class="history-section">
       <div class="latest-result" id="latest-result" hidden>
         <div class="latest-eyebrow">最近一次</div>

@@ -4,6 +4,7 @@ import type {
   IMiniGame,
   MiniGameType,
 } from '@monopoly4/shared';
+import { PENGUIN_DIG_CONFIG } from './balance/config.js';
 
 /**
  * 企鹅挖宝小游戏
@@ -35,20 +36,14 @@ interface ItemDef {
   weight: number; // 生成权重
 }
 
-const ITEM_DEFS: ItemDef[] = [
-  { type: 'diamond', score: 25, weight: 5 },
-  { type: 'gold', score: 15, weight: 10 },
-  { type: 'sapphire', score: 10, weight: 15 },
-  { type: 'ruby', score: 10, weight: 15 },
-  { type: 'ice', score: 1, weight: 30 },
-  { type: 'bomb', score: -15, weight: 12 },
-];
+// 分值已按随机玩家基准标定，使三游戏期望点券收益一致
+const ITEM_DEFS: ItemDef[] = [...PENGUIN_DIG_CONFIG.items];
 
-const GAME_DURATION = 30000; // 游戏时长（毫秒）
-const MEMORIZE_DURATION = 3000; // 记忆阶段时长（毫秒）
-const GRID_COLS = 8;
-const GRID_ROWS = 12;
-const MAX_COUPONS = 500; // 最高可获得点券
+const GAME_DURATION = PENGUIN_DIG_CONFIG.duration; // 游戏时长（毫秒）
+const MEMORIZE_DURATION = PENGUIN_DIG_CONFIG.memorizeDuration; // 记忆阶段时长（毫秒）
+const GRID_COLS = PENGUIN_DIG_CONFIG.cols;
+const GRID_ROWS = PENGUIN_DIG_CONFIG.rows;
+const MAX_COUPONS = PENGUIN_DIG_CONFIG.maxCoupons; // 最高可获得点券
 
 // 浮动文字提示
 interface FloatingText {
@@ -76,6 +71,10 @@ export class PenguinDigGame implements IMiniGame {
   private gameEnded = false;
   private phase: 'memorize' | 'digging' = 'memorize';
   private memorizeEndTime = 0;
+  private lastDigTime = 0;
+  private digCooldownMs: number = PENGUIN_DIG_CONFIG.digCooldownMs; // 每次挖掘冷却
+  private digCount = 0;
+  private scoreMultiplier = 1; // 标定后的宝藏分值倍率
 
   constructor() {
     this.config = {
@@ -84,6 +83,14 @@ export class PenguinDigGame implements IMiniGame {
       canvasWidth: 800,
       canvasHeight: 600,
     };
+  }
+
+  /**
+   * 应用标定参数（由测试流程根据用户前两个游戏表现计算）。
+   */
+  public applyCalibration(cooldownMs: number, scoreMultiplier: number): void {
+    this.digCooldownMs = Math.max(200, Math.min(1200, cooldownMs));
+    this.scoreMultiplier = Math.max(0.5, Math.min(3.0, scoreMultiplier));
   }
 
   /**
@@ -110,6 +117,8 @@ export class PenguinDigGame implements IMiniGame {
     this.floatingTexts = [];
     this.gameEnded = false;
     this.phase = 'memorize';
+    this.lastDigTime = 0;
+    this.digCount = 0;
     this.startTime = performance.now();
     this.memorizeEndTime = this.startTime + MEMORIZE_DURATION;
     this.lastTime = this.startTime;
@@ -176,9 +185,9 @@ export class PenguinDigGame implements IMiniGame {
 
   private generateGrid(): Cell[] {
     const cells: Cell[] = [];
-    const paddingX = 48;
-    const paddingY = 100;
-    const gap = 6;
+    const paddingX = PENGUIN_DIG_CONFIG.paddingX;
+    const paddingY = PENGUIN_DIG_CONFIG.paddingY;
+    const gap = PENGUIN_DIG_CONFIG.gap;
     const cellW = (this.config.canvasWidth - paddingX * 2 - gap * (GRID_COLS - 1)) / GRID_COLS;
     const cellH = (this.config.canvasHeight - paddingY * 2 - gap * (GRID_ROWS - 1)) / GRID_ROWS;
 
@@ -215,6 +224,9 @@ export class PenguinDigGame implements IMiniGame {
   private handlePointerDown = (e: PointerEvent): void => {
     if (!this.canvas || this.phase !== 'digging' || this.gameEnded) return;
 
+    const now = performance.now();
+    if (now - this.lastDigTime < this.digCooldownMs) return;
+
     const rect = this.canvas.getBoundingClientRect();
     const scaleX = this.canvas.width / rect.width;
     const scaleY = this.canvas.height / rect.height;
@@ -226,6 +238,8 @@ export class PenguinDigGame implements IMiniGame {
     );
 
     if (cell) {
+      this.lastDigTime = now;
+      this.digCount++;
       this.digCell(cell);
     }
   };
@@ -234,7 +248,8 @@ export class PenguinDigGame implements IMiniGame {
     cell.revealed = true;
 
     const def = ITEM_DEFS.find((d) => d.type === cell.type);
-    const scoreChange = def ? def.score : 0;
+    const rawScore = def ? def.score : 0;
+    const scoreChange = Math.round(rawScore * this.scoreMultiplier);
     this.score += scoreChange;
 
     const cx = cell.x + cell.width / 2;
@@ -509,6 +524,14 @@ export class PenguinDigGame implements IMiniGame {
       ctx.fillStyle = '#546e7a';
       ctx.font = 'bold 18px sans-serif';
       ctx.fillText('点击格子挖掘宝藏', this.canvas!.width / 2, 80);
+
+      // 挖掘冷却提示
+      const cdRemaining = Math.max(0, this.digCooldownMs - (performance.now() - this.lastDigTime));
+      if (cdRemaining > 0) {
+        ctx.fillStyle = '#e67e22';
+        ctx.font = 'bold 14px sans-serif';
+        ctx.fillText(`冷却中 ${(cdRemaining / 1000).toFixed(1)}s`, this.canvas!.width / 2, 105);
+      }
     }
   }
 
