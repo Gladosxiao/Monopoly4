@@ -5,6 +5,8 @@
  * 在三个小游戏中的表现，用于标定点券收益期望。
  */
 
+import type { MiniGameMetrics } from '@monopoly4/shared';
+import type { CalibrationBaseline } from './calibrator.js';
 import {
   BALLOON_CONFIG,
   LUCKY_DROP_CONFIG,
@@ -64,7 +66,7 @@ interface SimBalloon {
   mysteryScoreDelta: number;
 }
 
-function simulateBalloonGame(): SimulationResult {
+function simulateBalloonGame(metrics?: MiniGameMetrics): SimulationResult {
   const duration = BALLOON_CONFIG.duration;
   const width = 800;
   const height = 600;
@@ -77,9 +79,11 @@ function simulateBalloonGame(): SimulationResult {
   let timeScale = 1;
   let endTime = duration;
 
-  // 随机玩家平均每 400ms 点击一次，倾向于点击气球附近位置
-  const clickInterval = 400;
-  const hitChance = 0.7;
+  // 若提供了用户标定指标，则按真实数据驱动模拟；否则使用默认经验值
+  const rawClickInterval = metrics?.avgTimeBetweenClicks ?? 400;
+  const clickInterval = rawClickInterval > 50 && rawClickInterval < 2000 ? rawClickInterval : 400;
+  const rawAccuracy = metrics?.accuracy ?? 0.7;
+  const hitChance = rawAccuracy > 0 && rawAccuracy <= 1 ? rawAccuracy : 0.7;
   const aimRadiusMultiplier = 1.2;
 
   for (let t = 0; t < duration; t += 16.67) {
@@ -198,7 +202,7 @@ interface SimDropItem {
   kind: string;
 }
 
-function simulateLuckyDropGame(): SimulationResult {
+function simulateLuckyDropGame(metrics?: MiniGameMetrics): SimulationResult {
   const duration = LUCKY_DROP_CONFIG.duration;
   const width = 800;
   const height = 600;
@@ -212,6 +216,17 @@ function simulateLuckyDropGame(): SimulationResult {
   let hits = 0;
   let nextSpawn = 0;
   let playerX = width / 2;
+
+  // 使用用户标定指标：接取率决定追踪注意力，平台速度决定移动上限，方向变化决定抖动幅度
+  const rawCatchRate = metrics?.catchRate ?? 0.7;
+  const attentionProbability = rawCatchRate > 0 && rawCatchRate <= 1 ? rawCatchRate : 0.7;
+  const rawPlatformSpeed = metrics?.avgPlatformSpeed ?? 0;
+  const speedFactor =
+    rawPlatformSpeed > 0
+      ? Math.max(0.2, Math.min(1.0, (rawPlatformSpeed * 1000) / LUCKY_DROP_CONFIG.playerMaxSpeed))
+      : 0.85;
+  const directionChanges = metrics?.directionChangesPerSec ?? 2.5;
+  const jitterAmplitude = Math.max(10, directionChanges * 16); // px/s，默认 2.5 -> 40
 
   for (let t = 0; t < duration; t += 16.67) {
     const elapsedSec = t / 1000;
@@ -235,9 +250,9 @@ function simulateLuckyDropGame(): SimulationResult {
       }
     }
 
-    // 玩家平台向最近的掉落物水平移动（70% 注意力，带反应延迟与随机抖动）
+    // 玩家平台向最近的掉落物水平移动（注意力由用户接取率决定，带反应延迟与随机抖动）
     let targetX = playerX;
-    if (Math.random() < 0.7 && items.length > 0) {
+    if (Math.random() < attentionProbability && items.length > 0) {
       let nearestDist = Infinity;
       for (const item of items) {
         const d = Math.abs(item.y - playerY);
@@ -250,9 +265,9 @@ function simulateLuckyDropGame(): SimulationResult {
       targetX = rand(0, width - playerW);
     }
     const dx = targetX - playerX;
-    const maxStep = LUCKY_DROP_CONFIG.playerMaxSpeed * 0.016 * 0.85;
+    const maxStep = LUCKY_DROP_CONFIG.playerMaxSpeed * 0.016 * speedFactor;
     const move = Math.sign(dx) * Math.min(Math.abs(dx), maxStep);
-    playerX += move + rand(-40, 40) * 0.016;
+    playerX += move + rand(-jitterAmplitude, jitterAmplitude) * 0.016;
     playerX = Math.max(0, Math.min(width - playerW, playerX));
 
     // 更新掉落物并检测碰撞
@@ -360,7 +375,8 @@ function aggregateStats(type: SimulationResult['type'], results: SimulationResul
 /** 运行所有小游戏的模拟 */
 export function runAllSimulations(
   runs = 1000,
-  penguinCalibration?: { cooldownMs: number; scoreMultiplier: number }
+  penguinCalibration?: { cooldownMs: number; scoreMultiplier: number },
+  userBaseline?: CalibrationBaseline
 ): {
   balloon: SimulationStats;
   luckyDrop: SimulationStats;
@@ -371,8 +387,8 @@ export function runAllSimulations(
   const penguinDigResults: SimulationResult[] = [];
 
   for (let i = 0; i < runs; i++) {
-    balloonResults.push(simulateBalloonGame());
-    luckyDropResults.push(simulateLuckyDropGame());
+    balloonResults.push(simulateBalloonGame(userBaseline?.balloonMetrics));
+    luckyDropResults.push(simulateLuckyDropGame(userBaseline?.luckyDropMetrics));
     penguinDigResults.push(
       simulatePenguinDigGame(penguinCalibration?.cooldownMs, penguinCalibration?.scoreMultiplier)
     );

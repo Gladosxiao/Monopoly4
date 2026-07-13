@@ -82,10 +82,20 @@
 - 喜从天降：平台 70% 注意力追踪最近掉落物，30% 随机移动，最大速度为上限的 85%。
 - 企鹅挖宝：在 70 格中随机挖掘，受 500ms 冷却限制。
 
+如果通过 `--calibration` 传入用户标定 JSON，模拟器会**使用用户的真实过程指标**来驱动气球和喜从天降：
+
+- 气球：用 `avgTimeBetweenClicks` 作为点击间隔，`accuracy` 作为命中概率。
+- 喜从天降：用 `catchRate` 作为追踪注意力比例，`avgPlatformSpeed` 作为平台移动速度上限，`directionChangesPerSec` 作为随机抖动幅度。
+- 企鹅挖宝：用标定结果中的 `recommendedCooldownMs` 和 `recommendedScoreMultiplier`。
+
 运行命令：
 
 ```bash
+# 默认随机玩家模拟
 npx tsx packages/frontend/src/minigames/balance/run-simulator.ts
+
+# 使用用户真实标定数据复现
+npx tsx packages/frontend/src/minigames/balance/run-simulator.ts --calibration ./calibration-xxx.json
 ```
 
 ### 5.2 玩家过程指标

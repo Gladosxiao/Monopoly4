@@ -67,7 +67,7 @@ if (calibrationPath) {
   };
 }
 
-const stats = runAllSimulations(RUNS, penguinCalibration);
+const stats = runAllSimulations(RUNS, penguinCalibration, storedCalibration?.baseline);
 printSimulationResults(stats);
 
 if (storedCalibration) {
