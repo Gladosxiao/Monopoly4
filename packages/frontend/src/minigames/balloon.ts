@@ -26,10 +26,12 @@ interface Balloon {
   wobbleOffset: number;
   wobbleSpeed: number;
   popped: boolean;
-  /** 普通/双倍气球上显示的分值（尺寸越大分值越高） */
+  /** 普通/双倍气球上显示的分值（尺寸越小分值越高） */
   score: number;
   /** 问号气球预显示的具体效果 */
   effect?: MysteryEffect;
+  /** 生成时间，用于计算反应时间 */
+  spawnTime: number;
 }
 
 /** 粒子对象，用于气球爆炸效果 */
@@ -88,6 +90,14 @@ export class BalloonMiniGame implements IMiniGame {
   private ended = false;
   private rafId = 0;
   private lastFrameTime = 0;
+
+  // 过程指标采集
+  private clickTimes: number[] = [];
+  private hitTimes: number[] = [];
+  private mouseMoves: { x: number; y: number; time: number }[] = [];
+  private lastPointerPos: { x: number; y: number; time: number } | null = null;
+  private hitBalloonSpawnTimes: number[] = [];
+
   onUpdate?: (score: number) => void;
   onEnd?: (result: MiniGameResult) => void;
 
@@ -116,12 +126,18 @@ export class BalloonMiniGame implements IMiniGame {
     this.balloons = [];
     this.particles = [];
     this.floatingTexts = [];
+    this.clickTimes = [];
+    this.hitTimes = [];
+    this.mouseMoves = [];
+    this.lastPointerPos = null;
+    this.hitBalloonSpawnTimes = [];
     this.startTime = performance.now();
     this.endTime = this.startTime + this.config.duration;
     this.lastSpawnTime = this.startTime;
     this.isRunning = true;
 
     canvas.addEventListener('pointerdown', this.handlePointerDown);
+    canvas.addEventListener('pointermove', this.handlePointerMove);
     this.rafId = requestAnimationFrame(this.loop);
   }
 
@@ -133,6 +149,7 @@ export class BalloonMiniGame implements IMiniGame {
         score: this.score,
         coupons: Math.min(this.score, 500),
         duration: Math.round(performance.now() - this.startTime),
+        metrics: this.computeMetrics(),
       };
     }
     this.ended = true;
@@ -144,19 +161,80 @@ export class BalloonMiniGame implements IMiniGame {
       score: this.score,
       coupons,
       duration,
+      metrics: this.computeMetrics(),
     };
     this.onEnd?.(result);
     return result;
+  }
+
+  /** 计算并返回过程指标 */
+  private computeMetrics() {
+    const clickCount = this.clickTimes.length;
+    const hitCount = this.hitTimes.length;
+
+    // 平均鼠标移动速度（像素/毫秒）
+    let totalMoveDist = 0;
+    let totalMoveTime = 0;
+    for (let i = 1; i < this.mouseMoves.length; i++) {
+      const prev = this.mouseMoves[i - 1]!;
+      const curr = this.mouseMoves[i]!;
+      const dt = curr.time - prev.time;
+      if (dt > 0 && dt < 100) {
+        totalMoveDist += Math.hypot(curr.x - prev.x, curr.y - prev.y);
+        totalMoveTime += dt;
+      }
+    }
+    const avgMouseSpeed = totalMoveTime > 0 ? totalMoveDist / totalMoveTime : 0;
+
+    // 平均点击间隔
+    let avgTimeBetweenClicks = 0;
+    if (this.clickTimes.length >= 2) {
+      let total = 0;
+      for (let i = 1; i < this.clickTimes.length; i++) {
+        total += this.clickTimes[i]! - this.clickTimes[i - 1]!;
+      }
+      avgTimeBetweenClicks = total / (this.clickTimes.length - 1);
+    }
+
+    // 连续命中切换时间
+    let avgBalloonSwitchTime = 0;
+    if (this.hitTimes.length >= 2) {
+      let total = 0;
+      for (let i = 1; i < this.hitTimes.length; i++) {
+        total += this.hitTimes[i]! - this.hitTimes[i - 1]!;
+      }
+      avgBalloonSwitchTime = total / (this.hitTimes.length - 1);
+    }
+
+    // 反应时间：从生成到被命中
+    const avgReactionTime =
+      this.hitBalloonSpawnTimes.length > 0
+        ? this.hitBalloonSpawnTimes.reduce((a, b) => a + b, 0) / this.hitBalloonSpawnTimes.length
+        : 0;
+
+    return {
+      clickCount,
+      hitCount,
+      accuracy: clickCount > 0 ? hitCount / clickCount : 0,
+      avgMouseSpeed,
+      avgTimeBetweenClicks,
+      avgBalloonSwitchTime,
+      avgReactionTime,
+    };
   }
 
   private cleanup(): void {
     this.isRunning = false;
     if (this.rafId) cancelAnimationFrame(this.rafId);
     this.canvas?.removeEventListener('pointerdown', this.handlePointerDown);
+    this.canvas?.removeEventListener('pointermove', this.handlePointerMove);
   }
 
   private handlePointerDown = (e: PointerEvent): void => {
     if (!this.canvas || !this.isRunning) return;
+    const now = performance.now();
+    this.clickTimes.push(now);
+
     const rect = this.canvas.getBoundingClientRect();
     const scaleX = this.canvas.width / rect.width;
     const scaleY = this.canvas.height / rect.height;
@@ -170,15 +248,27 @@ export class BalloonMiniGame implements IMiniGame {
       const dx = x - b.x;
       const dy = y - b.y;
       if (dx * dx + dy * dy <= b.radius * b.radius) {
-        this.popBalloon(b, i);
+        this.popBalloon(b, i, now);
         break;
       }
     }
   };
 
-  private popBalloon(balloon: Balloon, index: number): void {
+  private handlePointerMove = (e: PointerEvent): void => {
+    if (!this.canvas || !this.isRunning) return;
+    const rect = this.canvas.getBoundingClientRect();
+    const scaleX = this.canvas.width / rect.width;
+    const scaleY = this.canvas.height / rect.height;
+    const x = (e.clientX - rect.left) * scaleX;
+    const y = (e.clientY - rect.top) * scaleY;
+    this.mouseMoves.push({ x, y, time: performance.now() });
+  };
+
+  private popBalloon(balloon: Balloon, index: number, clickTime: number): void {
     balloon.popped = true;
     this.balloons.splice(index, 1);
+    this.hitTimes.push(clickTime);
+    this.hitBalloonSpawnTimes.push(clickTime - balloon.spawnTime);
     this.spawnParticles(balloon.x, balloon.y, balloon.color);
 
     switch (balloon.kind) {
@@ -311,6 +401,7 @@ export class BalloonMiniGame implements IMiniGame {
       popped: false,
       score,
       effect,
+      spawnTime: now,
     });
   }
 

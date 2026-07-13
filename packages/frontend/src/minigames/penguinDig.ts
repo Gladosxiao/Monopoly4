@@ -76,6 +76,10 @@ export class PenguinDigGame implements IMiniGame {
   private digCount = 0;
   private scoreMultiplier = 1; // 标定后的宝藏分值倍率
 
+  // 过程指标采集
+  private clickTimes: number[] = [];
+  private hitCount = 0;
+
   constructor() {
     this.config = {
       type: 'penguinDig' as MiniGameType,
@@ -119,6 +123,8 @@ export class PenguinDigGame implements IMiniGame {
     this.phase = 'memorize';
     this.lastDigTime = 0;
     this.digCount = 0;
+    this.clickTimes = [];
+    this.hitCount = 0;
     this.startTime = performance.now();
     this.memorizeEndTime = this.startTime + MEMORIZE_DURATION;
     this.lastTime = this.startTime;
@@ -240,6 +246,7 @@ export class PenguinDigGame implements IMiniGame {
     if (cell) {
       this.lastDigTime = now;
       this.digCount++;
+      this.clickTimes.push(now);
       this.digCell(cell);
     }
   };
@@ -256,8 +263,10 @@ export class PenguinDigGame implements IMiniGame {
     const cy = cell.y + cell.height / 2;
 
     if (scoreChange > 0) {
+      this.hitCount++;
       this.addFloatingText(cx, cy, `+${scoreChange}`, '#2ecc71');
     } else if (scoreChange < 0) {
+      this.hitCount++;
       this.addFloatingText(cx, cy, `${scoreChange}`, '#e74c3c');
     } else {
       this.addFloatingText(cx, cy, '0', '#95a5a6');
@@ -562,11 +571,28 @@ export class PenguinDigGame implements IMiniGame {
     const now = performance.now();
     const duration = Math.min(now - this.startTime, this.config.duration);
     const coupons = Math.max(0, Math.min(this.score, MAX_COUPONS));
+
+    // 计算平均点击间隔
+    let avgTimeBetweenClicks = 0;
+    if (this.clickTimes.length >= 2) {
+      let total = 0;
+      for (let i = 1; i < this.clickTimes.length; i++) {
+        total += this.clickTimes[i]! - this.clickTimes[i - 1]!;
+      }
+      avgTimeBetweenClicks = total / (this.clickTimes.length - 1);
+    }
+
     return {
       type: this.config.type,
       score: this.score,
       coupons,
       duration: Math.round(duration),
+      metrics: {
+        clickCount: this.digCount,
+        hitCount: this.hitCount,
+        accuracy: this.digCount > 0 ? this.hitCount / this.digCount : 0,
+        avgTimeBetweenClicks,
+      },
     };
   }
 }

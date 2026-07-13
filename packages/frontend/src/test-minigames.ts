@@ -73,6 +73,11 @@ function formatDuration(ms: number): string {
   return `${(ms / 1000).toFixed(1)}s`;
 }
 
+function formatPct(value: number | undefined): string {
+  if (value === undefined) return '—';
+  return `${(value * 100).toFixed(0)}%`;
+}
+
 /* ---------- 渲染 ---------- */
 
 function renderLatest(entry: HistoryEntry | null): void {
@@ -243,23 +248,25 @@ function runCalibrationStep(
 
   const stopFn = launchMiniGame(type, {
     onEnd: (result) => {
-      calibrationState.steps.push({ type, result, clicks: estimatedClicks[type] });
+      calibrationState.steps.push({ type, result, clicks: result.metrics?.clickCount ?? estimatedClicks[type] });
       handleEnd(type, result);
 
       if (stepIndex === 0) {
-        updateCalibrationReport('step1');
+        updateCalibrationReport('step1', undefined, result);
         setTimeout(() => runCalibrationStep('luckyDrop', 1), 800);
       } else if (stepIndex === 1) {
-        updateCalibrationReport('step2');
+        updateCalibrationReport('step2', undefined, result);
         const baseline = {
           balloonAvgCoupons: calibrationState.steps[0].result.coupons,
           luckyDropAvgCoupons: calibrationState.steps[1].result.coupons,
-          balloonAvgClicks: calibrationState.steps[0].clicks,
-          luckyDropAvgClicks: calibrationState.steps[1].clicks,
+          balloonAvgClicks: calibrationState.steps[0].result.metrics?.clickCount ?? estimatedClicks.balloon,
+          luckyDropAvgClicks: calibrationState.steps[1].result.metrics?.clickCount ?? estimatedClicks.luckyDrop,
           durationMs: 30000,
+          balloonMetrics: calibrationState.steps[0].result.metrics,
+          luckyDropMetrics: calibrationState.steps[1].result.metrics,
         };
         const cal = calibratePenguinDig(baseline);
-        updateCalibrationReport('calibrated', cal);
+        updateCalibrationReport('calibrated', cal, result);
         setTimeout(
           () =>
             runCalibrationStep('penguinDig', 2, {
@@ -269,7 +276,7 @@ function runCalibrationStep(
           1200
         );
       } else {
-        updateCalibrationReport('done');
+        updateCalibrationReport('done', undefined, result);
         calibrationState.inProgress = false;
         setButtonsDisabled(false);
       }
@@ -282,23 +289,52 @@ function runCalibrationStep(
 
 function updateCalibrationReport(
   phase: 'step1' | 'step2' | 'calibrated' | 'done',
-  calibration?: { baselineCoupons: number; recommendedCooldownMs: number; recommendedScoreMultiplier: number; projectedRandomCoupons: number }
+  calibration?: {
+    baselineCoupons: number;
+    recommendedCooldownMs: number;
+    recommendedScoreMultiplier: number;
+    projectedRandomCoupons: number;
+    projectedClicks: number;
+    usedMetrics: { avgTimeBetweenClicks: number; balloonAccuracy: number; luckyDropCatchRate: number };
+  },
+  latestResult?: MiniGameResult
 ): void {
   const reportEl = document.getElementById('calibration-report');
   if (!reportEl) return;
 
   switch (phase) {
-    case 'step1':
-      reportEl.innerHTML = '<p>✅ 七彩气球完成，接下来玩 <strong>喜从天降</strong>…</p>';
+    case 'step1': {
+      const m = latestResult?.metrics;
+      reportEl.innerHTML = `
+        <p>✅ 七彩气球完成，接下来玩 <strong>喜从天降</strong>…</p>
+        ${m ? `
+          <div style="margin-top:10px;font-size:13px;color:#94a3b8;">
+            点击 ${m.clickCount} 次 / 命中 ${m.hitCount} 次 / 命中率 ${formatPct(m.accuracy)} /
+            平均鼠标速度 ${m.avgMouseSpeed?.toFixed(2)} px/ms / 平均点击间隔 ${m.avgTimeBetweenClicks?.toFixed(0)}ms
+          </div>
+        ` : ''}
+      `;
       break;
-    case 'step2':
-      reportEl.innerHTML = '<p>✅ 喜从天降完成，正在计算企鹅挖宝标定参数…</p>';
+    }
+    case 'step2': {
+      const m = latestResult?.metrics;
+      reportEl.innerHTML = `
+        <p>✅ 喜从天降完成，正在计算企鹅挖宝标定参数…</p>
+        ${m ? `
+          <div style="margin-top:10px;font-size:13px;color:#94a3b8;">
+            接住 ${m.hitCount} 个 / 生成 ${m.clickCount} 个 / 接取率 ${formatPct(m.catchRate)} /
+            平台速度 ${m.avgPlatformSpeed?.toFixed(2)} px/ms / 方向改变 ${m.directionChangesPerSec?.toFixed(1)} 次/秒
+          </div>
+        ` : ''}
+      `;
       break;
+    }
     case 'calibrated':
       if (calibration) {
         reportEl.innerHTML = `
           <p>📊 用户基准点券：<strong>${calibration.baselineCoupons}</strong></p>
-          <p>🐧 推荐企鹅挖宝冷却：<strong>${calibration.recommendedCooldownMs}ms</strong></p>
+          <p>🐭 参考指标：气球点击间隔 ${calibration.usedMetrics.avgTimeBetweenClicks}ms，命中率 ${formatPct(calibration.usedMetrics.balloonAccuracy)}，喜从天降接取率 ${formatPct(calibration.usedMetrics.luckyDropCatchRate)}</p>
+          <p>🐧 推荐企鹅挖宝冷却：<strong>${calibration.recommendedCooldownMs}ms</strong>（预计可点击 ${calibration.projectedClicks} 次）</p>
           <p>🐧 推荐宝藏分值倍率：<strong>×${calibration.recommendedScoreMultiplier}</strong></p>
           <p>🎯 标定后随机玩家期望：<strong>${calibration.projectedRandomCoupons}</strong> 点券</p>
           <p>请继续玩 <strong>企鹅挖宝</strong> 验证效果…</p>
@@ -307,9 +343,11 @@ function updateCalibrationReport(
       break;
     case 'done': {
       const penguinResult = calibrationState.steps.find((s) => s.type === 'penguinDig')?.result;
+      const m = penguinResult?.metrics;
       reportEl.innerHTML = `
         <p>✅ 标定测试完成！</p>
         ${penguinResult ? `<p>🐧 企鹅挖宝获得点券：<strong>${penguinResult.coupons}</strong></p>` : ''}
+        ${m ? `<p style="font-size:13px;color:#94a3b8;">挖掘 ${m.clickCount} 次 / 命中 ${m.hitCount} 次 / 命中率 ${formatPct(m.accuracy)}</p>` : ''}
         <p>如果三个游戏的点券收益接近，说明标定成功。</p>
       `;
       break;

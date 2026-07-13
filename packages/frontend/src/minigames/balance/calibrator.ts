@@ -1,10 +1,11 @@
 /**
  * 小游戏用户表现标定器
  * --------------------------------
- * 根据用户在前两个小游戏（七彩气球、喜从天降）中的实际点券收益，
+ * 根据用户在前两个小游戏（七彩气球、喜从天降）中的实际点券收益与过程指标，
  * 反推企鹅挖宝的推荐点击冷却与宝藏分值倍率，使三游戏收益期望一致。
  */
 
+import type { MiniGameMetrics } from '@monopoly4/shared';
 import { PENGUIN_DIG_CONFIG, TARGET_RANDOM_COUPONS } from './config.js';
 
 /** 用户前两局表现输入 */
@@ -14,6 +15,10 @@ export interface CalibrationBaseline {
   balloonAvgClicks: number;
   luckyDropAvgClicks: number;
   durationMs: number;
+  /** 七彩气球过程指标 */
+  balloonMetrics?: MiniGameMetrics;
+  /** 喜从天降过程指标 */
+  luckyDropMetrics?: MiniGameMetrics;
 }
 
 /** 标定结果 */
@@ -22,6 +27,14 @@ export interface CalibrationResult {
   recommendedCooldownMs: number;
   recommendedScoreMultiplier: number;
   projectedRandomCoupons: number;
+  /** 标定后预计玩家可点击次数 */
+  projectedClicks: number;
+  /** 使用的关键指标摘要 */
+  usedMetrics: {
+    avgTimeBetweenClicks: number;
+    balloonAccuracy: number;
+    luckyDropCatchRate: number;
+  };
 }
 
 /** 计算企鹅挖宝埋藏物的期望分值 */
@@ -36,52 +49,57 @@ function expectedScorePerDig(): number {
  *
  * 思路：
  * 1. 以气球与喜从天降的平均点券作为用户基准期望。
- * 2. 计算企鹅挖宝每格的期望分值。
- * 3. 反推宝藏分值倍率与点击冷却，使随机玩家在标定参数下的期望点券接近基准。
+ * 2. 利用气球的平均点击间隔与命中率，估算该玩家在企鹅挖宝中的真实点击频率。
+ * 3. 反推点击冷却，使玩家总点击次数与其操作速度匹配。
+ * 4. 再反推宝藏分值倍率，使期望点券接近基准。
  */
 export function calibratePenguinDig(baseline: CalibrationBaseline): CalibrationResult {
   const baselineCoupons = (baseline.balloonAvgCoupons + baseline.luckyDropAvgCoupons) / 2;
   const scorePerDig = expectedScorePerDig();
   const digDuration = baseline.durationMs - PENGUIN_DIG_CONFIG.memorizeDuration;
 
-  // 默认情况下的可点击次数
-  const defaultClicks = digDuration / PENGUIN_DIG_CONFIG.digCooldownMs;
+  // 从气球指标推断玩家的点击节奏
+  let estimatedClickInterval: number = PENGUIN_DIG_CONFIG.digCooldownMs;
+  const balloonAccuracy = baseline.balloonMetrics?.accuracy ?? 0.5;
+  const avgTimeBetweenClicks = baseline.balloonMetrics?.avgTimeBetweenClicks ?? 400;
 
-  // 为使期望点券等于基准，需要的综合收益系数
-  // 综合收益 = 次数 × 单次期望分值 × 倍率
-  const requiredMultiplier =
-    scorePerDig === 0 ? 1 : baselineCoupons / (defaultClicks * scorePerDig);
+  if (avgTimeBetweenClicks > 50 && avgTimeBetweenClicks < 2000) {
+    estimatedClickInterval = avgTimeBetweenClicks;
+  }
 
-  // 限制倍率在合理范围，超出部分通过调整冷却补偿
-  const clampedMultiplier = Math.max(0.5, Math.min(3.0, requiredMultiplier));
+  // 命中率低说明玩家偏休闲，额外增加冷却以避免误触过多
+  estimatedClickInterval *= 1 + (1 - Math.min(1, balloonAccuracy)) * 0.5;
 
-  // 在限定倍率后，反推需要的点击次数
-  const targetClicks =
-    scorePerDig === 0 || clampedMultiplier === 0
-      ? defaultClicks
-      : baselineCoupons / (scorePerDig * clampedMultiplier);
+  // 喜从天降接取率高说明玩家追踪能力强，可适当降低冷却
+  const catchRate = baseline.luckyDropMetrics?.catchRate ?? 0.5;
+  estimatedClickInterval *= 1 - (Math.min(1, catchRate) - 0.5) * 0.2;
 
-  // 反推冷却时间
-  let recommendedCooldownMs = digDuration / targetClicks;
+  // 限制冷却在合理范围
+  const recommendedCooldownMs = Math.max(200, Math.min(1200, estimatedClickInterval));
 
-  // 限制冷却在合理范围（太快无法操作，太慢影响体验）
-  recommendedCooldownMs = Math.max(200, Math.min(1200, recommendedCooldownMs));
+  // 根据冷却反推预计点击次数
+  const projectedClicks = digDuration / recommendedCooldownMs;
 
-  // 重新根据冷却反推倍率，确保期望匹配
-  const actualClicks = digDuration / recommendedCooldownMs;
+  // 反推分值倍率，使期望点券等于基准
   const recommendedScoreMultiplier =
-    scorePerDig === 0 || actualClicks === 0
+    scorePerDig === 0 || projectedClicks === 0
       ? 1
-      : baselineCoupons / (actualClicks * scorePerDig);
+      : baselineCoupons / (projectedClicks * scorePerDig);
 
   // 标定后随机玩家（默认操作）的期望点券
-  const projectedRandomCoupons = actualClicks * scorePerDig * recommendedScoreMultiplier;
+  const projectedRandomCoupons = projectedClicks * scorePerDig * recommendedScoreMultiplier;
 
   return {
     baselineCoupons: Math.round(baselineCoupons),
     recommendedCooldownMs: Math.round(recommendedCooldownMs),
     recommendedScoreMultiplier: Math.round(recommendedScoreMultiplier * 100) / 100,
     projectedRandomCoupons: Math.round(projectedRandomCoupons),
+    projectedClicks: Math.round(projectedClicks),
+    usedMetrics: {
+      avgTimeBetweenClicks: Math.round(avgTimeBetweenClicks),
+      balloonAccuracy: Math.round(balloonAccuracy * 100) / 100,
+      luckyDropCatchRate: Math.round(catchRate * 100) / 100,
+    },
   };
 }
 

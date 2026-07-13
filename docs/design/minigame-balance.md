@@ -85,7 +85,25 @@
 npx tsx packages/frontend/src/minigames/balance/run-simulator.ts
 ```
 
-### 5.2 当前模拟结果
+### 5.2 玩家过程指标
+
+为让标定更贴近真实玩家操作，三个小游戏在结算时都会返回 `MiniGameMetrics`：
+
+| 指标 | 来源 | 用途 |
+|------|------|------|
+| `clickCount` / `hitCount` / `accuracy` | 三游戏通用 | 统计操作次数与命中率 |
+| `avgMouseSpeed` | 七彩气球 | 鼠标移动速度（px/ms），反映操作活跃程度 |
+| `avgTimeBetweenClicks` | 七彩气球 / 企鹅挖宝 | 平均点击间隔，推断玩家连点频率 |
+| `avgBalloonSwitchTime` | 七彩气球 | 连续命中两个气球的切换时间 |
+| `avgReactionTime` | 七彩气球 | 气球生成到被命中的反应时间 |
+| `avgPlatformSpeed` | 喜从天降 | 接物平台平均移动速度 |
+| `directionChangesPerSec` | 喜从天降 | 每秒改变移动方向次数 |
+| `screenCoverageRatio` | 喜从天降 | 平台覆盖屏幕宽度比例 |
+| `catchRate` | 喜从天降 | 接住数 / 总生成数 |
+
+标定器 `calibratePenguinDig` 会读取气球的 `avgTimeBetweenClicks` 与 `accuracy`、喜从天降的 `catchRate`，推算企鹅挖宝的推荐点击冷却。命中率低或接取率低的玩家会得到更宽松的冷却，避免误触过多；高频精准玩家则冷却更短、挑战性更高。
+
+### 5.4 当前模拟结果
 
 ```
 balloon:    平均点券=58.2, 标准差=13.4, 范围=[14, 110], 平均操作=74.0, 平均命中=26.4
@@ -95,7 +113,7 @@ penguinDig: 平均点券=59.5, 标准差=25.2, 范围=[0, 129], 平均操作=54.
 
 三个游戏的随机玩家期望点券均在 **60 左右**（三游戏平均 60.1），达到设计目标。
 
-### 5.3 标定参数文件
+### 5.5 标定参数文件
 
 所有游戏的得分/概率参数集中在：
 
@@ -143,28 +161,32 @@ PENGUIN_DIG_CONFIG.items = [
 
 测试页增加了「🧪 开始标定测试」按钮，流程如下：
 
-1. 用户先玩 **七彩气球**。
-2. 用户再玩 **喜从天降**。
-3. 系统根据前两局的点券收益计算用户基准期望。
+1. 用户先玩 **七彩气球**，结算时返回鼠标速度、点击间隔、命中率等指标。
+2. 用户再玩 **喜从天降**，结算时返回平台速度、接取率、方向变化频率等指标。
+3. 系统根据前两局的点券收益与过程指标计算用户基准期望。
 4. 调用 `calibratePenguinDig()` 反推企鹅挖宝的推荐冷却与宝藏分值倍率。
 5. 用户玩 **企鹅挖宝**，游戏自动应用标定参数。
-6. 页面显示标定报告，验证三局点券是否接近。
+6. 页面显示完整标定报告与过程指标，验证三局点券是否接近。
 
 标定公式：
 
 ```ts
 baselineCoupons = (balloonCoupons + luckyDropCoupons) / 2;
 
-// 反推企鹅挖宝参数，使随机玩家在该参数下的期望点券 ≈ baselineCoupons
-recommendedCooldownMs = durationMs / (baselineCoupons / expectedScorePerDig / multiplier);
-recommendedScoreMultiplier = baselineCoupons / (realisticClicks * expectedScorePerDig);
+// 根据气球点击间隔与命中率推断玩家真实点击频率
+estimatedClickInterval = balloonAvgTimeBetweenClicks * (1 + (1 - balloonAccuracy) * 0.5) * (1 - (catchRate - 0.5) * 0.2);
+recommendedCooldownMs = clamp(estimatedClickInterval, 200, 1200);
+
+// 反推宝藏分值倍率，使期望点券 ≈ baselineCoupons
+recommendedScoreMultiplier = baselineCoupons / ((durationMs - memorizeMs) / recommendedCooldownMs * expectedScorePerDig);
 ```
 
 示例输出（目标基准 60 点券）：
 
 ```
 用户基准期望点券: 60
-推荐企鹅挖宝点击冷却: 500ms
+参考指标：气球点击间隔 380ms，命中率 65%，喜从天降接取率 55%
+推荐企鹅挖宝点击冷却: 500ms（预计可点击 54 次）
 推荐企鹅挖宝宝藏分值倍率: ×1.02
 标定后随机玩家期望点券: 60
 ```

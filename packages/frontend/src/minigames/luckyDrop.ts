@@ -98,6 +98,15 @@ export class LuckyDropGame implements IMiniGame {
   // 视觉反馈
   private floatingTexts: FloatingText[] = [];
 
+  // 过程指标采集
+  private playerXHistory: { x: number; time: number }[] = [];
+  private directionChanges = 0;
+  private lastDirection = 0;
+  private itemsSpawned = 0;
+  private itemsCaught = 0;
+  private minPlayerX = 0;
+  private maxPlayerX = 0;
+
   constructor(config: MiniGameConfig) {
     this.config = { ...config };
     this.remainingMs = config.duration;
@@ -135,6 +144,13 @@ export class LuckyDropGame implements IMiniGame {
 
     this.playerX = (this.config.canvasWidth - this.playerWidth) / 2;
     this.pointerTargetX = this.playerX;
+    this.playerXHistory = [];
+    this.directionChanges = 0;
+    this.lastDirection = 0;
+    this.itemsSpawned = 0;
+    this.itemsCaught = 0;
+    this.minPlayerX = this.playerX;
+    this.maxPlayerX = this.playerX;
 
     const now = performance.now();
     this.startTime = now;
@@ -167,9 +183,48 @@ export class LuckyDropGame implements IMiniGame {
       score: this.score,
       coupons: Math.min(this.score, 500),
       duration,
+      metrics: this.computeMetrics(duration),
     };
 
     return result;
+  }
+
+  /** 计算并返回过程指标 */
+  private computeMetrics(duration: number) {
+    // 平均平台移动速度
+    let totalDist = 0;
+    let totalTime = 0;
+    for (let i = 1; i < this.playerXHistory.length; i++) {
+      const prev = this.playerXHistory[i - 1]!;
+      const curr = this.playerXHistory[i]!;
+      const dt = curr.time - prev.time;
+      if (dt > 0 && dt < 100) {
+        totalDist += Math.abs(curr.x - prev.x);
+        totalTime += dt;
+      }
+    }
+    const avgPlatformSpeed = totalTime > 0 ? totalDist / totalTime : 0;
+
+    // 屏幕覆盖率
+    const screenCoverageRatio = this.config.canvasWidth > 0
+      ? (this.maxPlayerX - this.minPlayerX + this.playerWidth) / this.config.canvasWidth
+      : 0;
+
+    // 每秒方向改变次数
+    const directionChangesPerSec = duration > 0 ? (this.directionChanges / duration) * 1000 : 0;
+
+    // 接取率
+    const catchRate = this.itemsSpawned > 0 ? this.itemsCaught / this.itemsSpawned : 0;
+
+    return {
+      clickCount: this.itemsCaught,
+      hitCount: this.itemsCaught,
+      accuracy: catchRate,
+      avgPlatformSpeed,
+      directionChangesPerSec,
+      screenCoverageRatio,
+      catchRate,
+    };
   }
 
   /**
@@ -245,10 +300,21 @@ export class LuckyDropGame implements IMiniGame {
       this.playerX = this.clampPlayerX(this.playerX + this.playerVelX * dt);
     }
 
+    // 记录平台位置与方向变化
+    this.playerXHistory.push({ x: this.playerX, time: now });
+    this.minPlayerX = Math.min(this.minPlayerX, this.playerX);
+    this.maxPlayerX = Math.max(this.maxPlayerX, this.playerX);
+    const dir = this.playerVelX !== 0 ? Math.sign(this.playerVelX) : this.lastDirection;
+    if (dir !== 0 && this.lastDirection !== 0 && dir !== this.lastDirection) {
+      this.directionChanges++;
+    }
+    if (dir !== 0) this.lastDirection = dir;
+
     // 生成掉落物（生成间隔也受 timeScale 影响，避免慢动作时物品过于密集）
     const effectiveSpawnInterval = this.spawnInterval / this.timeScale;
     if (now >= this.nextSpawnTime) {
       this.spawnItem(width, speedMultiplier);
+      this.itemsSpawned++;
       this.nextSpawnTime = now + effectiveSpawnInterval;
     }
 
@@ -449,6 +515,8 @@ export class LuckyDropGame implements IMiniGame {
   }
 
   private applyItemEffect(item: DropItem, now: number): void {
+    this.itemsCaught++;
+
     if (item.kind === 'clock') {
       const clockDef = LUCKY_DROP_CONFIG.items.find((d) => d.kind === 'clock');
       this.slowMotionUntil = now + (clockDef?.slowMotionMs ?? 5000);
