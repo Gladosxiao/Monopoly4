@@ -57,11 +57,41 @@ export function clearCalibration(): void {
   }
 }
 
-/** 将标定参数格式化为易读字符串 */
+/** 将当前保存的标定数据导出为 JSON 字符串（便于在 CLI 中复现/分析） */
+export function exportCalibration(): string | null {
+  const data = loadCalibration();
+  return data ? JSON.stringify(data, null, 2) : null;
+}
+
+/** 从 JSON 字符串导入并覆盖当前保存的标定数据 */
+export function importCalibration(json: string): boolean {
+  try {
+    const parsed = JSON.parse(json) as unknown;
+    if (!parsed || typeof parsed !== 'object') return false;
+    const data = parsed as StoredCalibration;
+    if (
+      !data.baseline ||
+      !data.result ||
+      typeof data.calibratedAt !== 'number' ||
+      typeof data.result.recommendedCooldownMs !== 'number' ||
+      typeof data.result.recommendedScoreMultiplier !== 'number'
+    ) {
+      return false;
+    }
+    saveCalibration(data);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** 将标定参数格式化为易读字符串（含用户过程指标） */
 export function formatCalibrationSummary(data: StoredCalibration): string {
   const { baseline, result } = data;
   const date = new Date(data.calibratedAt).toLocaleString('zh-CN');
-  return [
+  const bm = baseline.balloonMetrics;
+  const lm = baseline.luckyDropMetrics;
+  const parts = [
     `标定时间: ${date}`,
     `气球点券: ${baseline.balloonAvgCoupons}`,
     `喜从天降点券: ${baseline.luckyDropAvgCoupons}`,
@@ -69,5 +99,20 @@ export function formatCalibrationSummary(data: StoredCalibration): string {
     `企鹅冷却: ${result.recommendedCooldownMs}ms`,
     `企鹅倍率: ×${result.recommendedScoreMultiplier}`,
     `预计企鹅点券: ${result.projectedRandomCoupons}`,
-  ].join(' | ');
+  ];
+  if (bm) {
+    parts.push(
+      `气球命中率: ${((bm.accuracy ?? 0) * 100).toFixed(0)}%`,
+      `鼠标速度: ${(bm.avgMouseSpeed ?? 0).toFixed(2)} px/ms`,
+      `点击间隔: ${(bm.avgTimeBetweenClicks ?? 0).toFixed(0)}ms`
+    );
+  }
+  if (lm) {
+    parts.push(
+      `喜从天降接取率: ${((lm.catchRate ?? 0) * 100).toFixed(0)}%`,
+      `平台速度: ${(lm.avgPlatformSpeed ?? 0).toFixed(2)} px/ms`,
+      `方向变化: ${(lm.directionChangesPerSec ?? 0).toFixed(1)} 次/秒`
+    );
+  }
+  return parts.join(' | ');
 }

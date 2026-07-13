@@ -103,7 +103,7 @@ npx tsx packages/frontend/src/minigames/balance/run-simulator.ts
 | `screenCoverageRatio` | 喜从天降 | 平台覆盖屏幕宽度比例 |
 | `catchRate` | 喜从天降 | 接住数 / 总生成数 |
 
-标定器 `calibratePenguinDig` 会读取气球的 `avgTimeBetweenClicks` 与 `accuracy`、喜从天降的 `catchRate`，推算企鹅挖宝的推荐点击冷却。命中率低或接取率低的玩家会得到更宽松的冷却，避免误触过多；高频精准玩家则冷却更短、挑战性更高。
+标定器 `calibratePenguinDig` 会读取气球的 `avgTimeBetweenClicks` 与 `accuracy`、喜从天降的 `catchRate`，推算企鹅挖宝的推荐点击冷却。命中率低或接取率低的玩家会得到更宽松的冷却，避免误触过多；高频精准玩家则冷却更短、挑战性更高。用户完成标定流程后，这些指标会随 `baseline` 一起存入 `localStorage`，供后续读取、导出与命令行复现。
 
 ### 5.4 当前模拟结果
 
@@ -185,7 +185,12 @@ PENGUIN_DIG_CONFIG.items = [
 4. 调用 `calibratePenguinDig()` 反推企鹅挖宝的推荐冷却与宝藏分值倍率。
 5. 用户玩 **企鹅挖宝**，游戏自动应用标定参数。
 6. 标定结果通过 `saveCalibration()` 写入 `localStorage`，刷新页面后仍可通过 `loadCalibration()` 读取并自动应用到手动启动的企鹅挖宝。
-7. 页面显示完整标定报告与过程指标，验证三局点券是否接近。
+7. 页面显示完整标定报告与过程指标，并可点击「导出标定 JSON」将完整记录（含用户点券、命中率、鼠标速度、接取率等）下载为文件。
+8. 导出的 JSON 可通过命令行模拟器读取，复现该用户的标定结果并影响仿真结果：
+
+   ```bash
+   npx tsx packages/frontend/src/minigames/balance/run-simulator.ts --calibration ./calibration-xxx.json
+   ```
 
 标定公式（与 `calibrator.ts` 一致）：
 

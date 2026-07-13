@@ -13,6 +13,7 @@ import {
   saveCalibration,
   loadCalibration,
   clearCalibration,
+  exportCalibration,
   formatCalibrationSummary,
 } from './minigames/index.js';
 import type { MiniGameType, MiniGameResult } from '@monopoly4/shared';
@@ -83,6 +84,18 @@ function formatDuration(ms: number): string {
 function formatPct(value: number | undefined): string {
   if (value === undefined) return '—';
   return `${(value * 100).toFixed(0)}%`;
+}
+
+function downloadText(filename: string, text: string): void {
+  const blob = new Blob([text], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
 }
 
 /* ---------- 渲染 ---------- */
@@ -225,17 +238,44 @@ function renderSavedCalibration(): void {
     return;
   }
 
+  const bm = stored.baseline.balloonMetrics;
+  const lm = stored.baseline.luckyDropMetrics;
+
   reportEl.innerHTML = `
     <div style="margin-bottom:12px;">
       <p>📦 已加载最近一次标定数据</p>
       <p style="font-size:13px;color:#94a3b8;">${formatCalibrationSummary(stored)}</p>
+      ${bm ? `
+        <div style="margin-top:8px;font-size:12px;color:#94a3b8;">
+          🎈 气球指标：点击 ${bm.clickCount} / 命中 ${bm.hitCount} / 命中率 ${formatPct(bm.accuracy)} /
+          鼠标速度 ${(bm.avgMouseSpeed ?? 0).toFixed(2)} px/ms / 平均点击间隔 ${(bm.avgTimeBetweenClicks ?? 0).toFixed(0)}ms /
+          切换气球耗时 ${(bm.avgBalloonSwitchTime ?? 0).toFixed(0)}ms / 反应时间 ${(bm.avgReactionTime ?? 0).toFixed(0)}ms
+        </div>
+      ` : ''}
+      ${lm ? `
+        <div style="margin-top:4px;font-size:12px;color:#94a3b8;">
+          🎁 喜从天降指标：生成 ${lm.clickCount} / 接住 ${lm.hitCount} / 接取率 ${formatPct(lm.catchRate)} /
+          平台速度 ${(lm.avgPlatformSpeed ?? 0).toFixed(2)} px/ms / 方向变化 ${(lm.directionChangesPerSec ?? 0).toFixed(1)} 次/秒 /
+          屏幕覆盖 ${(lm.screenCoverageRatio ?? 0).toFixed(2)}
+        </div>
+      ` : ''}
     </div>
-    <button id="clear-calibration-btn" style="padding:8px 16px;font-size:13px;border-radius:8px;background:#334155;color:#fff;border:none;cursor:pointer;">清除标定数据</button>
+    <div style="display:flex;gap:8px;">
+      <button id="export-calibration-btn" style="padding:8px 16px;font-size:13px;border-radius:8px;background:#2563eb;color:#fff;border:none;cursor:pointer;">导出标定 JSON</button>
+      <button id="clear-calibration-btn" style="padding:8px 16px;font-size:13px;border-radius:8px;background:#334155;color:#fff;border:none;cursor:pointer;">清除标定数据</button>
+    </div>
   `;
 
   document.getElementById('clear-calibration-btn')?.addEventListener('click', () => {
     clearCalibration();
     renderSavedCalibration();
+  });
+
+  document.getElementById('export-calibration-btn')?.addEventListener('click', () => {
+    const json = exportCalibration();
+    if (json) {
+      downloadText(`minigame-calibration-${stored.calibratedAt}.json`, json);
+    }
   });
 }
 
