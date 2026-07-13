@@ -33,6 +33,9 @@ export const BALLOON_CONFIG = {
   radiusScoreStep: 6,
   minBalloonScore: 3,
 
+  /** 普通气球颜色池（按分值从高到低：红=+5 最小最快、橙=+4、绿=+3 最大最慢） */
+  normalColors: ['#e74c3c', '#ff9800', '#2ecc71'],
+
   /** 双倍气球颜色 */
   doubleColor: '#ffd700',
 
