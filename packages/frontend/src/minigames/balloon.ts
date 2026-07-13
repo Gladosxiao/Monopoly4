@@ -19,6 +19,8 @@ interface Balloon {
   wobbleOffset: number;
   wobbleSpeed: number;
   popped: boolean;
+  /** 普通/双倍气球上显示的分值（尺寸越大分值越高） */
+  score: number;
 }
 
 /** 粒子对象，用于气球爆炸效果 */
@@ -165,13 +167,13 @@ export class BalloonMiniGame implements IMiniGame {
 
     switch (balloon.kind) {
       case 'normal': {
-        this.score += 1;
-        this.addFloatingText(balloon.x, balloon.y, '+1', '#fff');
+        this.score += balloon.score;
+        this.addFloatingText(balloon.x, balloon.y, `+${balloon.score}`, '#fff');
         break;
       }
       case 'double': {
-        this.score *= 2;
-        this.addFloatingText(balloon.x, balloon.y, '×2', '#ffd700');
+        this.score += balloon.score * 2;
+        this.addFloatingText(balloon.x, balloon.y, `×2 +${balloon.score * 2}`, '#ffd700');
         break;
       }
       case 'mystery': {
@@ -258,6 +260,8 @@ export class BalloonMiniGame implements IMiniGame {
     }
 
     const baseSpeed = 1.2 + Math.random() * 1.3;
+    // 尺寸越大分值越高：半径 24~36 对应 4~6 分
+    const baseScore = Math.max(1, Math.round(radius / 6));
     this.balloons.push({
       x,
       y: this.config.canvasHeight + radius,
@@ -268,6 +272,7 @@ export class BalloonMiniGame implements IMiniGame {
       wobbleOffset: Math.random() * Math.PI * 2,
       wobbleSpeed: 0.02 + Math.random() * 0.02,
       popped: false,
+      score: baseScore,
     });
   }
 
@@ -395,15 +400,17 @@ export class BalloonMiniGame implements IMiniGame {
     ctx.ellipse(x - b.radius * 0.25, b.y - b.radius * 0.25, b.radius * 0.22, b.radius * 0.32, -0.4, 0, Math.PI * 2);
     ctx.fill();
 
-    // 特殊标识
+    // 特殊标识 / 分值
     ctx.fillStyle = '#fff';
-    ctx.font = `bold ${Math.max(14, b.radius * 0.6)}px sans-serif`;
+    ctx.font = `bold ${Math.max(14, b.radius * 0.55)}px sans-serif`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     if (b.kind === 'double') {
       ctx.fillText('×2', x, b.y);
     } else if (b.kind === 'mystery') {
       ctx.fillText('?', x, b.y);
+    } else {
+      ctx.fillText(`+${b.score}`, x, b.y);
     }
   }
 }
