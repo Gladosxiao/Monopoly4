@@ -202,3 +202,11 @@ function bindButtons(): void {
 
 bindButtons();
 renderAll();
+
+// 支持 URL 参数自动启动小游戏，便于无头浏览器/自动化截图验证
+// 示例：http://localhost:5173/test-minigames.html?autostart=balloon
+const autoStart = new URLSearchParams(window.location.search).get('autostart') as MiniGameType | null;
+if (autoStart && autoStart in GAME_META) {
+  // 等待字体与样式稳定后再启动，避免渲染抖动
+  window.addEventListener('load', () => startGame(autoStart));
+}
