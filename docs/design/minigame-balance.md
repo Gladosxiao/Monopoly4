@@ -186,10 +186,17 @@ PENGUIN_DIG_CONFIG.items = [
 5. 用户玩 **企鹅挖宝**，游戏自动应用标定参数。
 6. 标定结果通过 `saveCalibration()` 写入 `localStorage`，刷新页面后仍可通过 `loadCalibration()` 读取并自动应用到手动启动的企鹅挖宝。
 7. 页面显示完整标定报告与过程指标，并可点击「导出标定 JSON」将完整记录（含用户点券、命中率、鼠标速度、接取率等）下载为文件。
-8. 导出的 JSON 可通过命令行模拟器读取，复现该用户的标定结果并影响仿真结果：
+8. 导出的 JSON 可通过命令行模拟器读取，复现该用户的标定结果并影响仿真结果。确保在项目根目录执行：
 
    ```bash
-   npx tsx packages/frontend/src/minigames/balance/run-simulator.ts --calibration ./calibration-xxx.json
+   # 默认随机玩家模拟
+   npm run sim:minigame
+
+   # 使用用户真实标定记录复现
+   npm run sim:minigame -- --calibration ./calibration-xxx.json
+
+   # 基于默认模拟结果做一次示例标定
+   npm run calibrate:minigame
    ```
 
 标定公式（与 `calibrator.ts` 一致）：
