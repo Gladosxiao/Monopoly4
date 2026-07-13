@@ -94,7 +94,7 @@ export const BALLOON_CONFIG = {
 /** 喜从天降平衡参数 */
 export const LUCKY_DROP_CONFIG = {
   /** 游戏时长（毫秒）：因有时钟减速，总时长缩短 */
-  duration: 24000,
+  duration: 20000,
 
   /** 玩家平台尺寸 */
   playerWidth: 70,
@@ -127,10 +127,10 @@ export const LUCKY_DROP_CONFIG = {
    * 分值已按均值 100+ 目标重新标定。
    */
   items: [
-    { kind: 'chest' as const, probability: 0.008, radius: 18, value: 150, baseSpeed: 140 },
-    { kind: 'gold' as const, probability: 0.10, radius: 17, value: 75, baseSpeed: 150 },
-    { kind: 'silver' as const, probability: 0.28, radius: 14, value: 35, baseSpeed: 160 },
-    { kind: 'coin' as const, probability: 0.48, radius: 10, value: 8, baseSpeed: 170 },
+    { kind: 'chest' as const, probability: 0.008, radius: 18, value: 165, baseSpeed: 140 },
+    { kind: 'gold' as const, probability: 0.10, radius: 17, value: 83, baseSpeed: 150 },
+    { kind: 'silver' as const, probability: 0.28, radius: 14, value: 39, baseSpeed: 160 },
+    { kind: 'coin' as const, probability: 0.48, radius: 10, value: 9, baseSpeed: 170 },
     { kind: 'clock' as const, probability: 0.58, radius: 15, value: 0, baseSpeed: 165, slowMotionMs: 5000 },
     { kind: 'spike' as const, probability: 0.76, radius: 13, value: -35, baseSpeed: 180 },
     { kind: 'bomb' as const, probability: 1.0, radius: 13, value: -70, baseSpeed: 175 },

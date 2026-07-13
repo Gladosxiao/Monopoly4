@@ -55,8 +55,8 @@
 
 ### 4.2 喜从天降
 
-- **24 秒内**控制底部平台接住掉落物（因存在时钟减速，总时长缩短）。
-- 宝箱/金/银/玉币：加分（宝箱 150、金 75、银 35、玉币 8），**得分道具均不使用红色/黑色**。
+- **20 秒内**控制底部平台接住掉落物（因存在时钟减速，总时长缩短）。
+- 宝箱/金/银/玉币：加分（宝箱 165、金 83、银 39、玉币 9），**得分道具均不使用红色/黑色**。
 - 时钟：白底蓝色时钟，触发 5 秒慢动作，掉落物减速、倒计时减半，平台移动不受影响。
 - 红色刺球 / 黑色炸弹：**红黑配色扣分道具**（刺球 -35、炸弹 -70）。
 - 难度曲线倍率由 1.2 下调至 **0.84**，后期速度降低约 30%。
@@ -67,7 +67,7 @@
 - 开局显示宝藏与炸弹位置 3 秒，随后隐藏。
 - 玩家凭记忆点击格子挖掘。
 - 每次挖掘有 500ms 冷却，限制总点击次数。
-- 钻石/金块/宝石加分（钻石 13、金块 6、蓝宝石 4、黄玉 4、冰块 2），**红宝石已改为橙色黄玉以避免与黑红炸弹混淆**；炸弹扣分（-10），空挖不加分。
+- 钻石/金块/宝石加分（钻石 13、金块 6、蓝宝石 4、翡翠 4、冰块 2），**原红宝石已改为绿色翡翠以与黑红炸弹彻底区分**；炸弹扣分（-10），空挖不加分。
 
 ## 5. 平衡标定方法
 
@@ -108,12 +108,12 @@ npx tsx packages/frontend/src/minigames/balance/run-simulator.ts
 ### 5.4 当前模拟结果
 
 ```
-balloon:    平均点券=103.3, 标准差=18.7, 范围=[38, 164], 平均操作=74.0, 平均命中=27.3
-luckyDrop:  平均点券=107.4, 标准差=107.0, 范围=[0, 500], 平均操作=18.0, 平均命中=16.1
-penguinDig: 平均点券=115.1, 标准差=51.0, 范围=[0, 268], 平均操作=54.0, 平均命中=54.0
+balloon:    平均点券=104.2, 标准差=18.5, 范围=[51, 168], 平均操作=74.0, 平均命中=27.5
+luckyDrop:  平均点券=115.6, 标准差=111.9, 范围=[0, 500], 平均操作=14.2, 平均命中=12.7
+penguinDig: 平均点券=116.6, 标准差=50.9, 范围=[0, 297], 平均操作=54.0, 平均命中=54.0
 ```
 
-三个游戏的随机玩家期望点券均在 **100+**（三游戏平均 108.6），达到设计目标。若使用 `run-calibrator.ts` 基于默认模拟结果做一次示例标定，再用标定参数仿真验证，三游戏平均点券可收敛到约 **111**。
+三个游戏的随机玩家期望点券均在 **100+**（三游戏平均 112.1），达到设计目标。若使用 `run-calibrator.ts` 基于默认模拟结果做一次示例标定，再用标定参数仿真验证，三游戏平均点券可收敛到约 **113**。
 
 ### 5.5 标定参数文件
 
@@ -140,19 +140,19 @@ BALLOON_CONFIG.speedUpColor = '#ff5722';       // 红橙：加速
 BALLOON_CONFIG.slowDownColor = '#00bcd4';      // 蓝青：减速
 
 // 喜从天降：得分道具非红黑，扣分道具红黑；总时长缩短、速度曲线降 30%
-LUCKY_DROP_CONFIG.duration = 24000;
+LUCKY_DROP_CONFIG.duration = 20000;
 LUCKY_DROP_CONFIG.speedCurveMultiplier = 0.84; // 原 1.2 下调 30%
 LUCKY_DROP_CONFIG.items = [
-  { kind: 'chest',  probability: 0.008, value: 150 },
-  { kind: 'gold',   probability: 0.10,  value: 75 },
-  { kind: 'silver', probability: 0.28,  value: 35 },
-  { kind: 'coin',   probability: 0.48,  value: 8 },    // 青色玉币
+  { kind: 'chest',  probability: 0.008, value: 165 },
+  { kind: 'gold',   probability: 0.10,  value: 83 },
+  { kind: 'silver', probability: 0.28,  value: 39 },
+  { kind: 'coin',   probability: 0.48,  value: 9 },    // 青色玉币
   { kind: 'clock',  probability: 0.58,  value: 0, slowMotionMs: 5000 },
   { kind: 'spike',  probability: 0.76,  value: -35 },  // 红色刺球
   { kind: 'bomb',   probability: 1.0,   value: -70 },  // 黑色炸弹
 ];
 
-// 企鹅挖宝：7×10 = 70 格；红宝石改为橙色黄玉，避免与黑红炸弹混淆
+// 企鹅挖宝：7×10 = 70 格；原红宝石改为绿色翡翠，与黑红炸弹彻底区分
 PENGUIN_DIG_CONFIG.cols = 7;
 PENGUIN_DIG_CONFIG.rows = 10;
 PENGUIN_DIG_CONFIG.digCooldownMs = 500;
@@ -160,7 +160,7 @@ PENGUIN_DIG_CONFIG.items = [
   { type: 'diamond',  score: 13, weight: 5 },
   { type: 'gold',     score: 6,  weight: 10 },
   { type: 'sapphire', score: 4,  weight: 15 },
-  { type: 'ruby',     score: 4,  weight: 15 }, // 实际绘制为橙色黄玉
+  { type: 'ruby',     score: 4,  weight: 15 }, // 实际绘制为绿色翡翠
   { type: 'ice',      score: 2,  weight: 30 },
   { type: 'bomb',     score: -10, weight: 12 },
 ];

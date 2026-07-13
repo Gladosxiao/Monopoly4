@@ -438,12 +438,12 @@ export class PenguinDigGame implements IMiniGame {
         break;
       }
       case 'ruby': {
-        // 橙色黄玉（避免与黑色红芯炸弹混淆）
-        ctx.fillStyle = '#f57c00';
+        // 绿色翡翠（与黑色红芯炸弹、红色刺球彻底区分）
+        ctx.fillStyle = '#2ecc71';
         ctx.beginPath();
         ctx.arc(0, 0, half, 0, Math.PI * 2);
         ctx.fill();
-        ctx.strokeStyle = '#e65100';
+        ctx.strokeStyle = '#1b5e20';
         ctx.lineWidth = 2;
         ctx.stroke();
         ctx.fillStyle = 'rgba(255,255,255,0.35)';
