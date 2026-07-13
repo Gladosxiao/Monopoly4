@@ -17,14 +17,13 @@ interface MysteryEffect {
 
 /** 单个气球对象 */
 interface Balloon {
+  /** 基础位置：用于碰撞判定 / 浮出屏外检测，游戏规则完全依赖此值 */
   x: number;
   y: number;
   radius: number;
   speed: number;
   kind: BalloonKind;
   color: string;
-  wobbleOffset: number;
-  wobbleSpeed: number;
   popped: boolean;
   /** 普通/双倍气球上显示的分值（尺寸越小分值越高） */
   score: number;
@@ -32,6 +31,31 @@ interface Balloon {
   effect?: MysteryEffect;
   /** 生成时间，用于计算反应时间 */
   spawnTime: number;
+
+  /* ---------- 飘动动画参数（纯视觉） ---------- */
+  /** 横向主漂移：双层正弦中的"慢大"分量 */
+  driftAmpX: number;
+  driftFreqX: number;
+  driftPhaseX: number;
+  /** 横向次漂移："快小"分量，叠加产生非周期感 */
+  driftAmpX2: number;
+  driftFreqX2: number;
+  driftPhaseX2: number;
+  /** 上下起伏 */
+  bobAmp: number;
+  bobFreq: number;
+  bobPhase: number;
+  /** 倾斜（弧度） */
+  tiltAmp: number;
+  tiltFreq: number;
+  tiltPhase: number;
+  /** 缩放呼吸感 */
+  scaleAmp: number;
+  scaleFreq: number;
+  scalePhase: number;
+  /** 绳子滞后控制点频率（比气球漂移更慢，模拟物理惯性） */
+  stringControlFreq: number;
+  stringControlPhase: number;
 }
 
 /** 粒子对象，用于气球爆炸效果 */
@@ -401,6 +425,10 @@ export class BalloonMiniGame implements IMiniGame {
         : BALLOON_CONFIG.mainSpawnHeightRatio;
     const y = this.config.canvasHeight * (spawnRatio.min + Math.random() * (spawnRatio.max - spawnRatio.min));
 
+    const anim = BALLOON_CONFIG.animation;
+    const randIn = (range: { min: number; max: number }) =>
+      range.min + Math.random() * (range.max - range.min);
+
     this.balloons.push({
       x,
       y,
@@ -408,12 +436,28 @@ export class BalloonMiniGame implements IMiniGame {
       speed,
       kind,
       color,
-      wobbleOffset: Math.random() * Math.PI * 2,
-      wobbleSpeed: 0.02 + Math.random() * 0.02,
       popped: false,
       score,
       effect,
       spawnTime: now,
+      // 飘动动画：每个气球随机一组相位 / 频率 / 振幅，整体节奏错开
+      driftAmpX: randIn(anim.driftAmpX),
+      driftFreqX: randIn(anim.driftFreqX),
+      driftPhaseX: Math.random() * Math.PI * 2,
+      driftAmpX2: randIn(anim.driftAmpX2),
+      driftFreqX2: randIn(anim.driftFreqX2),
+      driftPhaseX2: Math.random() * Math.PI * 2,
+      bobAmp: randIn(anim.bobAmp),
+      bobFreq: randIn(anim.bobFreq),
+      bobPhase: Math.random() * Math.PI * 2,
+      tiltAmp: randIn(anim.tiltAmp),
+      tiltFreq: randIn(anim.tiltFreq),
+      tiltPhase: Math.random() * Math.PI * 2,
+      scaleAmp: anim.scaleAmp,
+      scaleFreq: randIn(anim.scaleFreq),
+      scalePhase: Math.random() * Math.PI * 2,
+      stringControlFreq: randIn(anim.stringControlFreq),
+      stringControlPhase: Math.random() * Math.PI * 2,
     });
   }
 
@@ -430,11 +474,12 @@ export class BalloonMiniGame implements IMiniGame {
 
     this.spawnBalloon(now);
 
-    // 更新气球位置
+    // 更新气球位置：仅推进基础 y，x 永远保持在 spawn 时的水平基线。
+    // 视觉上的左右飘动、上下起伏、倾斜、缩放全部交给 drawBalloon 在渲染时
+    // 基于 now 实时计算，避免对 b.x / b.y 的累加污染碰撞 / 越界判定。
     for (let i = this.balloons.length - 1; i >= 0; i--) {
       const b = this.balloons[i];
       b.y -= b.speed * this.timeScale * dt;
-      b.x += Math.sin(now * b.wobbleSpeed + b.wobbleOffset) * 0.5;
       if (b.y + b.radius < 0) {
         this.balloons.splice(i, 1);
       }
@@ -511,35 +556,76 @@ export class BalloonMiniGame implements IMiniGame {
   }
 
   private drawBalloon(ctx: CanvasRenderingContext2D, b: Balloon, now: number): void {
-    const wobbleX = Math.sin(now * b.wobbleSpeed + b.wobbleOffset) * 4;
-    const x = b.x + wobbleX;
+    // ----- 计算视觉偏移 / 姿态（纯视觉，不修改 b.x / b.y）-----
+    // 1. 横向漂移：双层正弦叠加（慢大幅 + 快小幅），破坏周期性
+    const driftX =
+      Math.sin(now * b.driftFreqX + b.driftPhaseX) * b.driftAmpX +
+      Math.sin(now * b.driftFreqX2 + b.driftPhaseX2) * b.driftAmpX2;
+    // 2. 上下起伏：模拟空气浮力 / 阻力的微小上下浮动
+    const bobY = Math.sin(now * b.bobFreq + b.bobPhase) * b.bobAmp;
+    // 3. 倾斜：气球随气流摆动，视觉上像被风吹歪
+    const tilt = Math.sin(now * b.tiltFreq + b.tiltPhase) * b.tiltAmp;
+    // 4. 缩放：轻微呼吸感（远近 / 形变）
+    const scale = 1 + Math.sin(now * b.scaleFreq + b.scalePhase) * b.scaleAmp;
 
-    // 绳子
+    // 视觉中心 = 基础位置 + 视觉偏移
+    const vx = b.x + driftX;
+    const vy = b.y + bobY;
+    // 气球底部三角下端（绳子锚点）
+    const tipY = b.y + b.radius * 1.1 + 8;
+
+    // 绳子摆动信号：使用比气球主漂移更慢的频率，模拟物理滞后；
+    // 越接近绳子底端，振幅衰减越大。
+    const stringT = now * b.stringControlFreq + b.stringControlPhase;
+    const stringSignal =
+      Math.sin(stringT) * b.driftAmpX * 0.5 +
+      Math.sin(stringT * 1.35 + 1.2) * b.driftAmpX2 * 0.4;
+
+    // ----- 绳子（在变换外绘制，气球倾斜时绳子不会硬跟着转）-----
+    const stringLen = BALLOON_CONFIG.animation.stringBaseLen;
     ctx.strokeStyle = '#555';
     ctx.lineWidth = 1.5;
     ctx.beginPath();
-    ctx.moveTo(x, b.y + b.radius);
-    ctx.quadraticCurveTo(x + Math.sin(now * 0.01) * 6, b.y + b.radius + 20, x, b.y + b.radius + 36);
+    ctx.moveTo(vx, tipY);
+    ctx.bezierCurveTo(
+      vx + stringSignal * 0.55, tipY + stringLen * 0.30,
+      vx + stringSignal * 0.30, tipY + stringLen * 0.70,
+      vx + stringSignal * 0.10, tipY + stringLen
+    );
     ctx.stroke();
 
-    // 气球本体（带高光）
+    // ----- 气球本体（应用倾斜 + 缩放）-----
+    ctx.save();
+    ctx.translate(vx, vy);
+    ctx.rotate(tilt);
+    ctx.scale(scale, scale);
+
+    // 气球本体
     ctx.fillStyle = b.color;
     ctx.beginPath();
-    ctx.ellipse(x, b.y, b.radius, b.radius * 1.15, 0, 0, Math.PI * 2);
+    ctx.ellipse(0, 0, b.radius, b.radius * 1.15, 0, 0, Math.PI * 2);
     ctx.fill();
 
     // 气球底部小三角
     ctx.beginPath();
-    ctx.moveTo(x - 6, b.y + b.radius * 1.1);
-    ctx.lineTo(x + 6, b.y + b.radius * 1.1);
-    ctx.lineTo(x, b.y + b.radius * 1.1 + 8);
+    ctx.moveTo(-6, b.radius * 1.1);
+    ctx.lineTo(6, b.radius * 1.1);
+    ctx.lineTo(0, b.radius * 1.1 + 8);
     ctx.closePath();
     ctx.fill();
 
     // 高光
     ctx.fillStyle = 'rgba(255, 255, 255, 0.35)';
     ctx.beginPath();
-    ctx.ellipse(x - b.radius * 0.25, b.y - b.radius * 0.25, b.radius * 0.22, b.radius * 0.32, -0.4, 0, Math.PI * 2);
+    ctx.ellipse(
+      -b.radius * 0.25,
+      -b.radius * 0.25,
+      b.radius * 0.22,
+      b.radius * 0.32,
+      -0.4,
+      0,
+      Math.PI * 2
+    );
     ctx.fill();
 
     // 特殊标识 / 分值 / 问号效果
@@ -548,12 +634,14 @@ export class BalloonMiniGame implements IMiniGame {
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     if (b.kind === 'double') {
-      ctx.fillText('×2', x, b.y);
+      ctx.fillText('×2', 0, 0);
     } else if (b.kind === 'mystery') {
       // 问号气球直接显示其预定义效果标签
-      ctx.fillText(b.effect?.label ?? '?', x, b.y);
+      ctx.fillText(b.effect?.label ?? '?', 0, 0);
     } else {
-      ctx.fillText(`+${b.score}`, x, b.y);
+      ctx.fillText(`+${b.score}`, 0, 0);
     }
+
+    ctx.restore();
   }
 }
