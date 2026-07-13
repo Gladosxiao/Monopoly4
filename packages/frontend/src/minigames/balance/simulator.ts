@@ -101,17 +101,16 @@ function simulateBalloonGame(): SimulationResult {
 
       if (roll < BALLOON_CONFIG.kindWeights.double) {
         kind = 'double';
-        balloonScore = Math.max(1, Math.round(radius / BALLOON_CONFIG.radiusScoreDivider));
+        balloonScore = Math.max(BALLOON_CONFIG.minBalloonScore, Math.round((BALLOON_CONFIG.radiusScoreOffset - radius) / BALLOON_CONFIG.radiusScoreStep));
         speed = rand(BALLOON_CONFIG.doubleSpeed.min, BALLOON_CONFIG.doubleSpeed.max);
       } else if (roll < BALLOON_CONFIG.kindWeights.double + BALLOON_CONFIG.kindWeights.mystery) {
         kind = 'mystery';
         const effect = BALLOON_CONFIG.mysteryEffects[weightedRandom(BALLOON_CONFIG.mysteryEffects.map((e) => e.weight))];
         mysteryScoreDelta = effect.scoreDelta;
-        if (effect.clearScore) mysteryScoreDelta = -score; // 简化：清零即扣光当前分
         speed = rand(BALLOON_CONFIG.mysterySpeed.min, BALLOON_CONFIG.mysterySpeed.max);
       } else {
         kind = 'normal';
-        balloonScore = Math.max(1, Math.round(radius / BALLOON_CONFIG.radiusScoreDivider));
+        balloonScore = Math.max(BALLOON_CONFIG.minBalloonScore, Math.round((BALLOON_CONFIG.radiusScoreOffset - radius) / BALLOON_CONFIG.radiusScoreStep));
         speed = BALLOON_CONFIG.normalBaseSpeed + balloonScore * BALLOON_CONFIG.normalScoreSpeedFactor + Math.random() * BALLOON_CONFIG.normalRandomSpeedRange;
       }
 

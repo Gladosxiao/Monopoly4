@@ -46,18 +46,18 @@
 ### 4.1 七彩气球
 
 - 30 秒内点击气球得分。
-- 普通气球：半径越大分值越高（+2 ~ +4），速度越快。
+- 普通气球：**半径越小分值越高、速度越快**（+2 ~ +3），增加挑战性。
 - 双倍气球：×2，按基础分加分。
-- 问号气球：预显示具体效果（+10 / -5 / 清零 / 加速 / 减速 / -5s）。
+- 问号气球：预显示具体效果（+10 / -5 / 加速 / 减速 / -5s），**已移除清零效果**。
 - 气球从屏幕中间区域生成，向上飘动。
-- 生成间隔 750ms，普通气球基础速度 2.0 像素/帧，让气球停留时间适中。
+- 生成间隔 750ms，普通气球基础速度 1.8 像素/帧。
 
 ### 4.2 喜从天降
 
 - 30 秒内控制底部平台接住掉落物。
-- 宝箱/金/银/铜：加分（已按随机玩家基准放大，宝箱 80、金 40、银 20、铜 4）。
-- 时钟：白底时钟，触发 5 秒慢动作，掉落物减速、倒计时减半，平台移动不受影响。
-- 红色刺球 / 炸弹：红黑配色扣分道具（刺球 -20、炸弹 -40）。
+- 宝箱/金/银/玉币：加分（宝箱 80、金 40、银 20、玉币 4），**得分道具均不使用红色/黑色**。
+- 时钟：白底蓝色时钟，触发 5 秒慢动作，掉落物减速、倒计时减半，平台移动不受影响。
+- 红色刺球 / 黑色炸弹：**红黑配色扣分道具**（刺球 -20、炸弹 -40）。
 
 ### 4.3 企鹅挖宝
 
@@ -65,7 +65,7 @@
 - 开局显示宝藏与炸弹位置 3 秒，随后隐藏。
 - 玩家凭记忆点击格子挖掘。
 - 每次挖掘有 500ms 冷却，限制总点击次数。
-- 钻石/金块/宝石加分（钻石 7、金块 3、蓝宝石/红宝石 2、冰块 1），炸弹扣分（-5），空挖不加分。
+- 钻石/金块/宝石加分（钻石 7、金块 3、蓝宝石 2、黄玉 2、冰块 1），**红宝石已改为橙色黄玉以避免与黑红炸弹混淆**；炸弹扣分（-5），空挖不加分。
 
 ## 5. 平衡标定方法
 
@@ -88,12 +88,12 @@ npx tsx packages/frontend/src/minigames/balance/run-simulator.ts
 ### 5.2 当前模拟结果
 
 ```
-balloon:    平均点券=66.6, 标准差=29.8, 范围=[0, 128], 平均操作=74.0, 平均命中=26.4
-luckyDrop:  平均点券=64.6, 标准差=66.1, 范围=[0, 408], 平均操作=24.7, 平均命中=22.1
-penguinDig: 平均点券=59.3, 标准差=25.1, 范围=[0, 133], 平均操作=54.0, 平均命中=54.0
+balloon:    平均点券=58.2, 标准差=13.4, 范围=[14, 110], 平均操作=74.0, 平均命中=26.4
+luckyDrop:  平均点券=62.5, 标准差=65.6, 范围=[0, 328], 平均操作=24.7, 平均命中=22.2
+penguinDig: 平均点券=59.5, 标准差=25.2, 范围=[0, 129], 平均操作=54.0, 平均命中=54.0
 ```
 
-三个游戏的随机玩家期望点券均在 **60 左右**（三游戏平均 63.5），达到设计目标。
+三个游戏的随机玩家期望点券均在 **60 左右**（三游戏平均 60.1），达到设计目标。
 
 ### 5.3 标定参数文件
 
@@ -108,29 +108,30 @@ packages/frontend/src/minigames/balance/config.ts
 ```ts
 TARGET_RANDOM_COUPONS = 60;
 
-// 气球
-BALLOON_CONFIG.radiusScoreDivider = 10;        // 普通气球 +2~+4
-BALLOON_CONFIG.normalBaseSpeed = 2.0;          // 基础速度，高分气球更快
+// 气球：越小分越高、越快；已移除清零效果
+BALLOON_CONFIG.radiusScoreOffset = 44;         // score = round((offset - radius) / step)
+BALLOON_CONFIG.radiusScoreStep = 8;            // 普通气球 +2~+3
+BALLOON_CONFIG.normalBaseSpeed = 1.8;          // 基础速度，高分气球更快
 BALLOON_CONFIG.spawnIntervalMs = 750;          // 生成间隔
 
-// 喜从天降
+// 喜从天降：得分道具非红黑，扣分道具红黑
 LUCKY_DROP_CONFIG.items = [
   { kind: 'chest',  probability: 0.008, value: 80 },
   { kind: 'gold',   probability: 0.10,  value: 40 },
   { kind: 'silver', probability: 0.28,  value: 20 },
-  { kind: 'coin',   probability: 0.48,  value: 4 },
+  { kind: 'coin',   probability: 0.48,  value: 4 },   // 青色玉币
   { kind: 'clock',  probability: 0.58,  value: 0, slowMotionMs: 5000 },
-  { kind: 'spike',  probability: 0.76,  value: -20 },
-  { kind: 'bomb',   probability: 1.0,   value: -40 },
+  { kind: 'spike',  probability: 0.76,  value: -20 }, // 红色刺球
+  { kind: 'bomb',   probability: 1.0,   value: -40 }, // 黑色炸弹
 ];
 
-// 企鹅挖宝
+// 企鹅挖宝：红宝石改为橙色黄玉，避免与黑红炸弹混淆
 PENGUIN_DIG_CONFIG.digCooldownMs = 500;
 PENGUIN_DIG_CONFIG.items = [
   { type: 'diamond', score: 7, weight: 5 },
   { type: 'gold',    score: 3, weight: 10 },
   { type: 'sapphire',score: 2, weight: 15 },
-  { type: 'ruby',    score: 2, weight: 15 },
+  { type: 'ruby',    score: 2, weight: 15 }, // 实际绘制为橙色黄玉
   { type: 'ice',     score: 1, weight: 30 },
   { type: 'bomb',    score: -5, weight: 12 },
 ];

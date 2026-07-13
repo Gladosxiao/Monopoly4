@@ -209,14 +209,12 @@ export class BalloonMiniGame implements IMiniGame {
 
     if (cfg) {
       this.score += cfg.scoreDelta;
-      if (cfg.clearScore) this.score = 0;
       this.timeScale = Math.max(0.5, Math.min(2.5, this.timeScale + cfg.timeScaleDelta));
       this.endTime -= cfg.timeDelta;
 
       switch (cfg.label) {
         case '+10': text = '+10'; break;
         case '-5': text = '-5'; break;
-        case '0': text = '清零'; break;
         case '▲': text = '加速'; break;
         case '▼': text = '减速'; break;
         case '⏳': text = '-5s'; break;
@@ -282,7 +280,8 @@ export class BalloonMiniGame implements IMiniGame {
     if (kindRoll < BALLOON_CONFIG.kindWeights.double) {
       kind = 'double';
       color = DOUBLE_COLOR;
-      score = Math.max(1, Math.round(radius / BALLOON_CONFIG.radiusScoreDivider));
+      // 双倍气球也遵循越小分越高
+      score = Math.max(BALLOON_CONFIG.minBalloonScore, Math.round((BALLOON_CONFIG.radiusScoreOffset - radius) / BALLOON_CONFIG.radiusScoreStep));
       speed = BALLOON_CONFIG.doubleSpeed.min + Math.random() * (BALLOON_CONFIG.doubleSpeed.max - BALLOON_CONFIG.doubleSpeed.min);
     } else if (kindRoll < BALLOON_CONFIG.kindWeights.double + BALLOON_CONFIG.kindWeights.mystery) {
       kind = 'mystery';
@@ -292,8 +291,8 @@ export class BalloonMiniGame implements IMiniGame {
     } else {
       kind = 'normal';
       color = NORMAL_COLORS[Math.floor(Math.random() * NORMAL_COLORS.length)];
-      score = Math.max(1, Math.round(radius / BALLOON_CONFIG.radiusScoreDivider));
-      // 分值越高速度越快，高分气球更难命中
+      // 越小分值越高、速度越快
+      score = Math.max(BALLOON_CONFIG.minBalloonScore, Math.round((BALLOON_CONFIG.radiusScoreOffset - radius) / BALLOON_CONFIG.radiusScoreStep));
       speed = BALLOON_CONFIG.normalBaseSpeed + score * BALLOON_CONFIG.normalScoreSpeedFactor + Math.random() * BALLOON_CONFIG.normalRandomSpeedRange;
     }
 

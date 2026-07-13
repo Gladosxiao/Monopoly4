@@ -618,27 +618,27 @@ export class LuckyDropGame implements IMiniGame {
   }
 
   /**
-   * 铜钱：圆形铜币，带铜绿外圈
+   * 铜钱：青色玉币，避免与红黑扣分道具混淆
    */
   private drawCoin(ctx: CanvasRenderingContext2D, radius: number): void {
-    // 外圈铜绿
-    ctx.fillStyle = '#8d6e63';
+    // 外圈青玉边
+    ctx.fillStyle = '#26a69a';
     ctx.beginPath();
     ctx.arc(0, 0, radius, 0, Math.PI * 2);
     ctx.fill();
 
-    ctx.strokeStyle = '#5d4037';
+    ctx.strokeStyle = '#00695c';
     ctx.lineWidth = 2;
     ctx.stroke();
 
-    // 内铜钱
-    ctx.fillStyle = '#d35400';
+    // 内玉币
+    ctx.fillStyle = '#4db6ac';
     ctx.beginPath();
     ctx.arc(0, 0, radius * 0.78, 0, Math.PI * 2);
     ctx.fill();
 
     // 方孔
-    ctx.fillStyle = '#5d2e0c';
+    ctx.fillStyle = '#004d40';
     ctx.beginPath();
     ctx.roundRect(-radius * 0.22, -radius * 0.22, radius * 0.44, radius * 0.44, 2);
     ctx.fill();

@@ -29,10 +29,13 @@ export const BALLOON_CONFIG = {
   radius: { min: 24, max: 36 },
 
   /**
-   * 普通/双倍气球分值 = max(1, round(radius / radiusScoreDivider))
-   * 半径越大分值越高，鼓励玩家优先点击大气球。
+   * 普通/双倍气球分值。
+   * 规则：气球越小分值越高、速度越快，增加挑战性。
+   * score = max(minScore, round((radiusScoreOffset - radius) / radiusScoreStep))
    */
-  radiusScoreDivider: 10,
+  radiusScoreOffset: 44,
+  radiusScoreStep: 8,
+  minBalloonScore: 2,
 
   /** 普通气球颜色池 */
   normalColors: ['#ff6b6b', '#4ecdc4', '#2ecc71', '#f1c40f'],
@@ -50,13 +53,13 @@ export const BALLOON_CONFIG = {
   },
 
   /** 普通气球基础速度（像素/帧，按 60fps 估算） */
-  normalBaseSpeed: 2.0,
+  normalBaseSpeed: 1.8,
 
   /** 分值对速度的加成系数：分值越高飞得越快 */
-  normalScoreSpeedFactor: 0.25,
+  normalScoreSpeedFactor: 0.5,
 
   /** 普通气球速度随机扰动范围 */
-  normalRandomSpeedRange: 0.8,
+  normalRandomSpeedRange: 0.6,
 
   /** 双倍气球速度范围 */
   doubleSpeed: { min: 2.0, max: 2.8 },
@@ -69,12 +72,11 @@ export const BALLOON_CONFIG = {
 
   /** 问号气球效果配置（生成时即确定并显示在气球上） */
   mysteryEffects: [
-    { label: '+10', color: '#2ecc71', weight: 25, scoreDelta: 10, clearScore: false, timeScaleDelta: 0, timeDelta: 0 },
-    { label: '-5', color: '#e74c3c', weight: 20, scoreDelta: -5, clearScore: false, timeScaleDelta: 0, timeDelta: 0 },
-    { label: '0', color: '#c0392b', weight: 10, scoreDelta: 0, clearScore: true, timeScaleDelta: 0, timeDelta: 0 },
-    { label: '▲', color: '#f1c40f', weight: 20, scoreDelta: 0, clearScore: false, timeScaleDelta: 0.5, timeDelta: 0 },
-    { label: '▼', color: '#3498db', weight: 15, scoreDelta: 0, clearScore: false, timeScaleDelta: -0.3, timeDelta: 0 },
-    { label: '⏳', color: '#e67e22', weight: 10, scoreDelta: 0, clearScore: false, timeScaleDelta: 0, timeDelta: 5000 },
+    { label: '+10', color: '#2ecc71', weight: 28, scoreDelta: 10, clearScore: false, timeScaleDelta: 0, timeDelta: 0 },
+    { label: '-5', color: '#e74c3c', weight: 22, scoreDelta: -5, clearScore: false, timeScaleDelta: 0, timeDelta: 0 },
+    { label: '▲', color: '#f1c40f', weight: 22, scoreDelta: 0, clearScore: false, timeScaleDelta: 0.5, timeDelta: 0 },
+    { label: '▼', color: '#3498db', weight: 16, scoreDelta: 0, clearScore: false, timeScaleDelta: -0.3, timeDelta: 0 },
+    { label: '⏳', color: '#e67e22', weight: 12, scoreDelta: 0, clearScore: false, timeScaleDelta: 0, timeDelta: 5000 },
   ],
 
   /** 时间缩放上下限 */
