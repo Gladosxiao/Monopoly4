@@ -13,7 +13,8 @@ type DropItemKind =
   | 'coin' // 铜钱
   | 'chest' // 宝箱
   | 'rock' // 石头
-  | 'bomb'; // 炸弹
+  | 'bomb' // 炸弹
+  | 'clock'; // 时钟：触发时间减缓
 
 /**
  * 单个掉落物状态
@@ -29,11 +30,23 @@ interface DropItem {
   rotSpeed: number;
 }
 
+/** 浮动文字提示 */
+interface FloatingText {
+  x: number;
+  y: number;
+  text: string;
+  color: string;
+  life: number;
+  maxLife: number;
+}
+
 /**
  * 喜从天降小游戏
  *
  * 玩家控制底部角色左右移动，接住从天而降的元宝、铜钱与宝箱，
  * 避开石头与炸弹，在限定时间内尽可能获得高分。
+ * 新增时钟道具：白底时钟，接住后进入时间减缓，掉落物速度与倒计时流逝减半，
+ * 但平台移动速度不受影响。
  */
 export class LuckyDropGame implements IMiniGame {
   readonly config: MiniGameConfig;
@@ -52,6 +65,7 @@ export class LuckyDropGame implements IMiniGame {
   private startTime = 0;
   private lastFrameTime = 0;
   private remainingMs = 0;
+  private totalElapsedMs = 0; // 受 timeScale 影响的累计流逝时间
 
   // 玩家（接物角色）状态
   private playerX = 0;
@@ -75,6 +89,13 @@ export class LuckyDropGame implements IMiniGame {
 
   // 眩晕效果（炸弹命中）
   private stunnedUntil = 0;
+
+  // 时间减缓 buff
+  private slowMotionUntil = 0;
+  private timeScale = 1;
+
+  // 视觉反馈
+  private floatingTexts: FloatingText[] = [];
 
   constructor(config: MiniGameConfig) {
     this.config = { ...config };
@@ -103,8 +124,12 @@ export class LuckyDropGame implements IMiniGame {
 
     this.score = 0;
     this.items = [];
+    this.floatingTexts = [];
     this.playerVelX = 0;
     this.stunnedUntil = 0;
+    this.slowMotionUntil = 0;
+    this.timeScale = 1;
+    this.totalElapsedMs = 0;
     this.hasEnded = false;
 
     this.playerX = (this.config.canvasWidth - this.playerWidth) / 2;
@@ -159,7 +184,12 @@ export class LuckyDropGame implements IMiniGame {
     const dt = Math.min(rawDt, 0.05); // 防止切页后 dt 过大
     this.lastFrameTime = now;
 
-    this.remainingMs = Math.max(0, this.config.duration - (now - this.startTime));
+    // 更新时间减缓状态
+    this.timeScale = now < this.slowMotionUntil ? 0.5 : 1;
+
+    // 累计受 timeScale 影响的流逝时间，倒计时随之减缓
+    this.totalElapsedMs += dt * 1000 * this.timeScale;
+    this.remainingMs = Math.max(0, this.config.duration - this.totalElapsedMs);
 
     if (this.remainingMs <= 0) {
       this.endGame();
@@ -178,13 +208,13 @@ export class LuckyDropGame implements IMiniGame {
   private update(dt: number, now: number): void {
     const width = this.config.canvasWidth;
     const height = this.config.canvasHeight;
-    const elapsedSec = (now - this.startTime) / 1000;
+    const realElapsedSec = (now - this.startTime) / 1000;
 
-    // 难度曲线：掉落速度、生成频率随时间提升
-    const speedMultiplier = 1 + (elapsedSec / (this.config.duration / 1000)) * 1.2;
-    this.spawnInterval = Math.max(260, 900 - elapsedSec * 22);
+    // 难度曲线：掉落速度、生成频率随时间提升（基于真实时间，避免慢动作让难度也下降）
+    const speedMultiplier = 1 + (realElapsedSec / (this.config.duration / 1000)) * 1.2;
+    this.spawnInterval = Math.max(260, 900 - realElapsedSec * 22);
 
-    // 玩家移动
+    // 玩家移动：不受 timeScale 影响，保持操作手感
     const stunned = now < this.stunnedUntil;
     if (stunned) {
       this.playerVelX = 0;
@@ -214,10 +244,11 @@ export class LuckyDropGame implements IMiniGame {
       this.playerX = this.clampPlayerX(this.playerX + this.playerVelX * dt);
     }
 
-    // 生成掉落物
+    // 生成掉落物（生成间隔也受 timeScale 影响，避免慢动作时物品过于密集）
+    const effectiveSpawnInterval = this.spawnInterval / this.timeScale;
     if (now >= this.nextSpawnTime) {
       this.spawnItem(width, speedMultiplier);
-      this.nextSpawnTime = now + this.spawnInterval;
+      this.nextSpawnTime = now + effectiveSpawnInterval;
     }
 
     // 更新掉落物位置与碰撞
@@ -231,7 +262,8 @@ export class LuckyDropGame implements IMiniGame {
 
     for (let i = this.items.length - 1; i >= 0; i--) {
       const item = this.items[i]!;
-      item.y += item.speed * speedMultiplier * dt;
+      // 掉落物下落受 timeScale 影响
+      item.y += item.speed * speedMultiplier * this.timeScale * dt;
       item.rotation += item.rotSpeed * dt;
 
       // 碰撞检测（AABB）
@@ -245,6 +277,14 @@ export class LuckyDropGame implements IMiniGame {
       if (item.y - item.radius > height) {
         this.items.splice(i, 1);
       }
+    }
+
+    // 更新浮动文字
+    for (let i = this.floatingTexts.length - 1; i >= 0; i--) {
+      const t = this.floatingTexts[i]!;
+      t.y -= 30 * dt;
+      t.life -= dt * 60;
+      if (t.life <= 0) this.floatingTexts.splice(i, 1);
     }
   }
 
@@ -263,6 +303,12 @@ export class LuckyDropGame implements IMiniGame {
     ctx.fillStyle = gradient;
     ctx.fillRect(0, 0, width, height);
 
+    // 慢动作时绘制轻微蓝色遮罩提示
+    if (this.timeScale < 1) {
+      ctx.fillStyle = 'rgba(33, 150, 243, 0.08)';
+      ctx.fillRect(0, 0, width, height);
+    }
+
     // 掉落物
     for (const item of this.items) {
       this.drawItem(ctx, item);
@@ -270,6 +316,19 @@ export class LuckyDropGame implements IMiniGame {
 
     // 玩家
     this.drawPlayer(ctx);
+
+    // 浮动文字
+    for (const t of this.floatingTexts) {
+      ctx.globalAlpha = Math.max(0, t.life / t.maxLife);
+      ctx.fillStyle = t.color;
+      ctx.font = 'bold 22px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.strokeStyle = '#fff';
+      ctx.lineWidth = 4;
+      ctx.strokeText(t.text, t.x, t.y);
+      ctx.fillText(t.text, t.x, t.y);
+      ctx.globalAlpha = 1;
+    }
 
     // HUD
     this.drawHud(ctx);
@@ -359,27 +418,32 @@ export class LuckyDropGame implements IMiniGame {
     let value: number;
     let baseSpeed: number;
 
-    if (rand < 0.01) {
+    if (rand < 0.008) {
       kind = 'chest';
       radius = 18;
       value = 20;
       baseSpeed = 140;
-    } else if (rand < 0.12) {
+    } else if (rand < 0.10) {
       kind = 'gold';
       radius = 17;
       value = 10;
       baseSpeed = 150;
-    } else if (rand < 0.32) {
+    } else if (rand < 0.28) {
       kind = 'silver';
       radius = 14;
       value = 5;
       baseSpeed = 160;
-    } else if (rand < 0.55) {
+    } else if (rand < 0.48) {
       kind = 'coin';
       radius = 10;
       value = 1;
       baseSpeed = 170;
-    } else if (rand < 0.85) {
+    } else if (rand < 0.58) {
+      kind = 'clock';
+      radius = 15;
+      value = 0;
+      baseSpeed = 165;
+    } else if (rand < 0.82) {
       kind = 'rock';
       radius = 13;
       value = -5;
@@ -405,14 +469,37 @@ export class LuckyDropGame implements IMiniGame {
   }
 
   private applyItemEffect(item: DropItem, now: number): void {
+    if (item.kind === 'clock') {
+      this.slowMotionUntil = now + 5000; // 5 秒时间减缓
+      this.addFloatingText(item.x, item.y, '⏳ 慢动作', '#2196f3');
+      this.onUpdate?.(this.score);
+      return;
+    }
+
     this.score = Math.max(0, this.score + item.value);
 
     if (item.kind === 'bomb') {
       this.stunnedUntil = now + 1200;
       this.playerVelX = 0;
+      this.addFloatingText(item.x, item.y, `${item.value}`, '#e74c3c');
+    } else if (item.value > 0) {
+      this.addFloatingText(item.x, item.y, `+${item.value}`, '#2ecc71');
+    } else if (item.value < 0) {
+      this.addFloatingText(item.x, item.y, `${item.value}`, '#e67e22');
     }
 
     this.onUpdate?.(this.score);
+  }
+
+  private addFloatingText(x: number, y: number, text: string, color: string): void {
+    this.floatingTexts.push({
+      x,
+      y: y - 10,
+      text,
+      color,
+      life: 40,
+      maxLife: 40,
+    });
   }
 
   // ==================== 碰撞与边界工具 ====================
@@ -440,17 +527,18 @@ export class LuckyDropGame implements IMiniGame {
     const h = this.playerHeight;
 
     const stunned = performance.now() < this.stunnedUntil;
+    const slow = performance.now() < this.slowMotionUntil;
 
     ctx.save();
 
-    // 身体
-    ctx.fillStyle = stunned ? '#ff9f43' : '#4ecdc4';
+    // 身体：慢动作时带蓝色光晕
+    ctx.fillStyle = stunned ? '#ff9f43' : slow ? '#64b5f6' : '#4ecdc4';
     ctx.beginPath();
     ctx.roundRect(x, y, w, h, 8);
     ctx.fill();
 
     // 边框
-    ctx.strokeStyle = stunned ? '#e67e22' : '#1a535c';
+    ctx.strokeStyle = stunned ? '#e67e22' : slow ? '#1976d2' : '#1a535c';
     ctx.lineWidth = 2;
     ctx.stroke();
 
@@ -481,10 +569,10 @@ export class LuckyDropGame implements IMiniGame {
 
     switch (item.kind) {
       case 'gold':
-        this.drawIngot(ctx, item.radius, '#ffd700', '#b8860b');
+        this.drawIngot(ctx, item.radius, '#ffd700', '#b8860b', true);
         break;
       case 'silver':
-        this.drawIngot(ctx, item.radius, '#e0e0e0', '#9e9e9e');
+        this.drawIngot(ctx, item.radius, '#e0e0e0', '#9e9e9e', true);
         break;
       case 'coin':
         this.drawCoin(ctx, item.radius);
@@ -498,22 +586,32 @@ export class LuckyDropGame implements IMiniGame {
       case 'bomb':
         this.drawBomb(ctx, item.radius);
         break;
+      case 'clock':
+        this.drawClock(ctx, item.radius);
+        break;
     }
 
     ctx.restore();
   }
 
   /**
-   * 元宝：金色/银色椭圆
+   * 元宝：金色/银色椭圆，带高光与阴影更有立体感
    */
   private drawIngot(
     ctx: CanvasRenderingContext2D,
     radius: number,
     fill: string,
-    shadow: string
+    shadow: string,
+    glossy: boolean
   ): void {
     const w = radius * 2;
     const h = radius * 1.4;
+
+    // 底部阴影
+    ctx.fillStyle = 'rgba(0,0,0,0.12)';
+    ctx.beginPath();
+    ctx.ellipse(0, 4, w / 2, h / 2, 0, 0, Math.PI * 2);
+    ctx.fill();
 
     ctx.fillStyle = fill;
     ctx.beginPath();
@@ -524,50 +622,70 @@ export class LuckyDropGame implements IMiniGame {
     ctx.lineWidth = 2;
     ctx.stroke();
 
-    // 高光
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
-    ctx.beginPath();
-    ctx.ellipse(0, -h * 0.15, w * 0.35, h * 0.25, 0, 0, Math.PI * 2);
-    ctx.fill();
+    if (glossy) {
+      // 主高光
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.55)';
+      ctx.beginPath();
+      ctx.ellipse(-w * 0.15, -h * 0.25, w * 0.25, h * 0.2, -0.3, 0, Math.PI * 2);
+      ctx.fill();
+      // 边缘反光
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.25)';
+      ctx.beginPath();
+      ctx.ellipse(w * 0.1, h * 0.15, w * 0.18, h * 0.12, 0.3, 0, Math.PI * 2);
+      ctx.fill();
+    }
   }
 
   /**
-   * 铜钱：圆形铜币
+   * 铜钱：圆形铜币，带铜绿外圈
    */
   private drawCoin(ctx: CanvasRenderingContext2D, radius: number): void {
-    ctx.fillStyle = '#d35400';
+    // 外圈铜绿
+    ctx.fillStyle = '#8d6e63';
     ctx.beginPath();
     ctx.arc(0, 0, radius, 0, Math.PI * 2);
     ctx.fill();
 
-    ctx.strokeStyle = '#a04000';
+    ctx.strokeStyle = '#5d4037';
     ctx.lineWidth = 2;
     ctx.stroke();
 
+    // 内铜钱
+    ctx.fillStyle = '#d35400';
+    ctx.beginPath();
+    ctx.arc(0, 0, radius * 0.78, 0, Math.PI * 2);
+    ctx.fill();
+
+    // 方孔
     ctx.fillStyle = '#5d2e0c';
     ctx.beginPath();
-    ctx.arc(0, 0, radius * 0.35, 0, Math.PI * 2);
+    ctx.roundRect(-radius * 0.22, -radius * 0.22, radius * 0.44, radius * 0.44, 2);
     ctx.fill();
 
     // 高光
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.25)';
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.35)';
     ctx.beginPath();
-    ctx.arc(-radius * 0.25, -radius * 0.25, radius * 0.25, 0, Math.PI * 2);
+    ctx.arc(-radius * 0.25, -radius * 0.25, radius * 0.22, 0, Math.PI * 2);
     ctx.fill();
   }
 
   /**
-   * 宝箱：棕色矩形
+   * 宝箱：多彩宝箱，带金色镶边
    */
   private drawChest(ctx: CanvasRenderingContext2D, radius: number): void {
     const size = radius * 1.8;
     const half = size / 2;
 
-    ctx.fillStyle = '#8d6e63';
+    // 箱体渐变
+    const grad = ctx.createLinearGradient(-half, -half, half, half);
+    grad.addColorStop(0, '#a1887f');
+    grad.addColorStop(0.5, '#8d6e63');
+    grad.addColorStop(1, '#6d4c41');
+    ctx.fillStyle = grad;
     ctx.fillRect(-half, -half, size, size);
 
-    ctx.strokeStyle = '#5d4037';
-    ctx.lineWidth = 2;
+    ctx.strokeStyle = '#ffd700';
+    ctx.lineWidth = 3;
     ctx.strokeRect(-half, -half, size, size);
 
     // 金色镶边与锁
@@ -576,41 +694,60 @@ export class LuckyDropGame implements IMiniGame {
     ctx.beginPath();
     ctx.arc(0, 0, 5, 0, Math.PI * 2);
     ctx.fill();
+
+    // 顶部装饰
+    ctx.fillStyle = '#ffecb3';
+    ctx.beginPath();
+    ctx.moveTo(-half + 4, -half + 4);
+    ctx.lineTo(0, -half - 6);
+    ctx.lineTo(half - 4, -half + 4);
+    ctx.closePath();
+    ctx.fill();
   }
 
   /**
-   * 石头：灰色圆
+   * 石头：灰色圆，带裂纹与阴影
    */
   private drawRock(ctx: CanvasRenderingContext2D, radius: number): void {
-    ctx.fillStyle = '#7f8c8d';
+    ctx.fillStyle = '#95a5a6';
     ctx.beginPath();
     ctx.arc(0, 0, radius, 0, Math.PI * 2);
     ctx.fill();
 
-    ctx.strokeStyle = '#566573';
+    ctx.strokeStyle = '#546e7a';
     ctx.lineWidth = 2;
     ctx.stroke();
 
     // 裂纹
-    ctx.strokeStyle = '#566573';
+    ctx.strokeStyle = '#455a64';
     ctx.lineWidth = 1.5;
     ctx.beginPath();
     ctx.moveTo(-radius * 0.3, -radius * 0.3);
     ctx.lineTo(radius * 0.2, radius * 0.1);
     ctx.lineTo(radius * 0.1, radius * 0.4);
     ctx.stroke();
+
+    // 阴影
+    ctx.fillStyle = 'rgba(0,0,0,0.1)';
+    ctx.beginPath();
+    ctx.arc(radius * 0.25, radius * 0.25, radius * 0.35, 0, Math.PI * 2);
+    ctx.fill();
   }
 
   /**
-   * 炸弹：黑色圆 + 引线
+   * 炸弹：黑色圆 + 红色引线火花
    */
   private drawBomb(ctx: CanvasRenderingContext2D, radius: number): void {
-    ctx.fillStyle = '#2d3436';
+    // 炸弹体
+    const grad = ctx.createRadialGradient(-radius * 0.3, -radius * 0.3, radius * 0.2, 0, 0, radius);
+    grad.addColorStop(0, '#636e72');
+    grad.addColorStop(1, '#2d3436');
+    ctx.fillStyle = grad;
     ctx.beginPath();
     ctx.arc(0, 0, radius, 0, Math.PI * 2);
     ctx.fill();
 
-    ctx.strokeStyle = '#636e72';
+    ctx.strokeStyle = '#b2bec3';
     ctx.lineWidth = 2;
     ctx.stroke();
 
@@ -622,10 +759,67 @@ export class LuckyDropGame implements IMiniGame {
     ctx.quadraticCurveTo(4, -radius - 6, 8, -radius - 4);
     ctx.stroke();
 
-    // 火花
-    ctx.fillStyle = '#e74c3c';
+    // 火花闪烁
+    ctx.fillStyle = Math.random() > 0.5 ? '#ff5722' : '#ffeb3b';
     ctx.beginPath();
     ctx.arc(8, -radius - 4, 3, 0, Math.PI * 2);
+    ctx.fill();
+
+    // 骷髅标识
+    ctx.fillStyle = '#b2bec3';
+    ctx.beginPath();
+    ctx.arc(0, -radius * 0.1, radius * 0.25, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillRect(-radius * 0.12, radius * 0.15, radius * 0.08, radius * 0.2);
+    ctx.fillRect(radius * 0.04, radius * 0.15, radius * 0.08, radius * 0.2);
+  }
+
+  /**
+   * 时钟：白底圆形时钟，带蓝色指针与刻度
+   */
+  private drawClock(ctx: CanvasRenderingContext2D, radius: number): void {
+    // 白底表盘
+    ctx.fillStyle = '#ffffff';
+    ctx.beginPath();
+    ctx.arc(0, 0, radius, 0, Math.PI * 2);
+    ctx.fill();
+
+    // 蓝色外圈
+    ctx.strokeStyle = '#2196f3';
+    ctx.lineWidth = 3;
+    ctx.stroke();
+
+    // 刻度
+    ctx.strokeStyle = '#90caf9';
+    ctx.lineWidth = 1.5;
+    for (let i = 0; i < 12; i++) {
+      const angle = (i * Math.PI) / 6;
+      ctx.beginPath();
+      ctx.moveTo(Math.cos(angle) * radius * 0.75, Math.sin(angle) * radius * 0.75);
+      ctx.lineTo(Math.cos(angle) * radius * 0.9, Math.sin(angle) * radius * 0.9);
+      ctx.stroke();
+    }
+
+    // 指针
+    ctx.strokeStyle = '#1976d2';
+    ctx.lineWidth = 2;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.lineTo(0, -radius * 0.55);
+    ctx.stroke();
+
+    ctx.strokeStyle = '#2196f3';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.lineTo(radius * 0.4, 0);
+    ctx.stroke();
+
+    // 中心点
+    ctx.fillStyle = '#1976d2';
+    ctx.beginPath();
+    ctx.arc(0, 0, radius * 0.12, 0, Math.PI * 2);
     ctx.fill();
   }
 
@@ -645,9 +839,17 @@ export class LuckyDropGame implements IMiniGame {
     ctx.fillText(scoreText, 13, 13);
     ctx.fillText(timeText, 13, 38);
 
-    ctx.fillStyle = '#2d3436';
+    // 慢动作时时间数字变蓝
+    ctx.fillStyle = this.timeScale < 1 ? '#1976d2' : '#2d3436';
     ctx.fillText(scoreText, 12, 12);
     ctx.fillText(timeText, 12, 37);
+
+    // 慢动作状态提示
+    if (this.timeScale < 1) {
+      ctx.font = 'bold 14px sans-serif';
+      ctx.fillStyle = '#2196f3';
+      ctx.fillText('⏳ 慢动作中', 12, 62);
+    }
 
     ctx.restore();
   }

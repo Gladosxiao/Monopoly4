@@ -72,6 +72,7 @@ export class BalloonMiniGame implements IMiniGame {
   private isRunning = false;
   private ended = false;
   private rafId = 0;
+  private lastFrameTime = 0;
   onUpdate?: (score: number) => void;
   onEnd?: (result: MiniGameResult) => void;
 
@@ -279,7 +280,8 @@ export class BalloonMiniGame implements IMiniGame {
   private loop = (now: number): void => {
     if (!this.ctx || !this.canvas || !this.isRunning) return;
 
-    const dt = 1;
+    const dt = Math.min((now - (this.lastFrameTime ?? now)) / 16.67, 2);
+    this.lastFrameTime = now;
     const remaining = Math.max(0, this.endTime - now);
     if (remaining <= 0) {
       this.stop();
@@ -311,8 +313,8 @@ export class BalloonMiniGame implements IMiniGame {
     // 更新浮动文字
     for (let i = this.floatingTexts.length - 1; i >= 0; i--) {
       const t = this.floatingTexts[i];
-      t.y -= 1;
-      t.life -= 1;
+      t.y -= 30 * dt;
+      t.life -= dt * 60;
       if (t.life <= 0) this.floatingTexts.splice(i, 1);
     }
 
@@ -349,12 +351,12 @@ export class BalloonMiniGame implements IMiniGame {
 
     // 绘制浮动文字
     this.floatingTexts.forEach((t) => {
-      ctx.globalAlpha = t.life / t.maxLife;
+      ctx.globalAlpha = Math.max(0, t.life / t.maxLife);
       ctx.fillStyle = t.color;
       ctx.font = 'bold 22px sans-serif';
       ctx.textAlign = 'center';
-      ctx.strokeStyle = '#000';
-      ctx.lineWidth = 3;
+      ctx.strokeStyle = '#fff';
+      ctx.lineWidth = 4;
       ctx.strokeText(t.text, t.x, t.y);
       ctx.fillText(t.text, t.x, t.y);
       ctx.globalAlpha = 1;
