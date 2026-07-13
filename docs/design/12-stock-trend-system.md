@@ -10,9 +10,15 @@
 - **20 个交易点**：每条走势由 20 个连续的价格点（OHLC 四价）组成，转化为价格通道的上下限
 - **可视化 K 线图**：前端显示当前走势的历史 K 线，鼠标悬停查看过去 20 天详情
 
-## 不开发声明
+## 实现状态
 
-本文档为设计输入文档，**暂不进行具体代码开发**。当前有 Agent 正在执行测试任务，本设计待测试完成后再实施。
+> 已实施完成。
+
+- 后端走势模板与切换逻辑：`packages/shared/src/data/stockTrends.ts`（9 种模板）、`packages/backend/src/game/financialSystem/stocks.ts`（走势切换）。
+- 前端 K 线图组件：`packages/frontend/src/stockChart.ts`（Canvas 自绘，573 行）。
+- 数据流：走势状态通过 `game:state` 中的 `stockTrends` 字段同步到前端渲染。
+
+本文档保留作为设计说明，具体实现细节以代码为准。
 
 ---
 
@@ -241,7 +247,7 @@ basePrice = 启动价 × (1 + rates[n])
 
 ### 技术方案
 
-推荐使用 **轻量 Canvas 自绘**（与现有 `board.ts` 风格一致），或使用 **uPlot**（< 40KB，高性能时序图表库）。
+采用 **Canvas 自绘**（与现有 `board.ts` 风格一致），实现位于 `packages/frontend/src/stockChart.ts`。
 
 **交互细节**：
 1. 默认显示最近 20 天 K 线

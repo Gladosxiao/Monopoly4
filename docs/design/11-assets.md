@@ -18,7 +18,7 @@
 | `spirit` | `smallWealthGod`, `bigWealthGod`, `smallPovertyGod`, `bigPovertyGod`, `earthGod`, `angel`, `devil` | 神明/穷富神形象 | 64×64 | 128×128 |
 | `card` | `roadRoller`, `robbery`, `taxCard`, `stayCard`, `redirection`, `avertDisaster`, `revenge`, `redeploy`, `upgradeCard`, `diceControl`, `timeBomb`, `barrier`, `remoteDice`, `swapLocation`, `buyOneGetOne`, `landSwap`, `merge`, `reduceTax`, `rebirth` | 卡片插画 | 96×128 | 192×256 |
 | `item` | `dice`, `remoteDice`, `redDice`, `missile`, `machineDice`, `turtleCard`, `roadblock`, `timeBomb` 等 | 道具图标 | 48×48 | 96×96 |
-| `character` | `sunWukong`, `monopolyKid`, `ayumi`, `miku`, `sanzang` | 角色头像/立绘 | 头像 64×64，立绘 256×320 | 头像 128×128，立绘 512×640 |
+| `character` | `john`, `atu`, `qian`, `gongben`, `salon`, `nin`, `sara`, `tang`, `wumi`, `sun`, `danny`, `beibei` | 角色头像/立绘 | 头像 64×64，立绘 256×320 | 头像 128×128，立绘 512×640 |
 | `token` | `sun`, `atu`, `qian`, `gongben`, `john`, `salon`, `nin`, `sara`, `tang`, `wumi`, `danny`, `beibei` | 玩家棋子（角色 emoji） | 64×64 | 64×64 |
 | `ui` | `logo`, `bg-lobby`, `bg-board`, `button-primary`, `panel-frame` | UI 背景与装饰 | 按需 | 2048×2048 |
 
@@ -40,9 +40,11 @@ packages/frontend/public/assets/
 
 ## 4. 接口预留
 
+> 以下资源管理器、清单与 `board.ts` 接入代码为**设计预留**，尚未实现。当前项目仅在 `packages/frontend/public/assets/tokens/` 放置了 12 张角色棋子 PNG，其余视觉元素由 Canvas/DOM 矢量绘制。
+
 ### 4.1 资源管理器
 
-文件位置：`packages/frontend/src/assets/manager.ts`
+文件位置：`packages/frontend/src/assets/manager.ts`（预留，尚未实现）
 
 ```ts
 export type AssetCategory =
@@ -77,7 +79,7 @@ export interface AssetManager {
 
 ### 4.2 资源清单
 
-文件位置：`packages/frontend/public/assets/manifest.json`
+文件位置：`packages/frontend/public/assets/manifest.json`（预留，尚未实现）
 
 ```json
 {
@@ -92,9 +94,11 @@ export interface AssetManager {
 
 > 清单不存在或某类别为空数组时，按“无资源”处理。
 
-### 4.3 渲染层使用入口
+### 4.3 渲染层使用入口（预留）
 
 文件位置：`packages/frontend/src/board.ts`
+
+> 当前 `board.ts` 直接通过 Canvas 矢量绘制地块/建筑/卡片/道具/神明等视觉元素，未使用 `assetManager`。预留接入方式如下：
 
 ```ts
 import { assetManager } from './assets/manager.js';

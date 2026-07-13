@@ -121,40 +121,35 @@ packages/frontend/
 
 ## 状态管理
 
-采用轻量级事件驱动方案，不引入 Redux/Pinia 等重型库：
+采用轻量级模块级状态方案，不引入 Redux/Pinia 等重型库：
 
 ### 全局认证状态
-- `main.ts` 管理 token 与当前用户，提供 `AuthManager` 单例。
-- 登录/登出时通过事件广播 `auth:changed`，各页面监听后更新 UI。
+- `state/user.ts` 通过简单模块变量管理当前用户（`getCurrentUser` / `setCurrentUser` / `clearCurrentUser`）。
+- 页面切换由 `router.ts` 的 `navigateToLogin()` / `navigateToLobby()` 直接驱动，不依赖事件广播。
 
 ### Socket.IO 事件
 - `socket.ts`：Socket.IO 客户端封装，监听服务端 `game:state` 事件更新本地状态。
-- 核心事件：`game:state`、`room:updated`、`error`。
+- 核心事件：`game:state`、`room:updated`、`error`、`ai:thinking`、`ai:decided`。
 
 ### 游戏状态
-- `main.ts` 中通过 `GameState` 持有当前游戏状态，UI 组件从该状态读取并渲染。
+- `state/game.ts` 持有当前房间/游戏状态，UI 组件从该状态读取并渲染。
 
 ## 与后端交互
 
-- HTTP：登录、注册、房间 CRUD、地图列表。
+- HTTP：登录、注册、房间 CRUD、地图列表、健康检查、Debug 接口。
 - WebSocket：加入房间后切换到 socket 通信，接收实时状态；卡片/道具/股票/贷款/乐透/魔法屋等操作通过 socket 事件处理。
 
 ### 共享模块引用
 
-- 前端通过 Vite 的 `tsconfig paths` 直接引用 `shared` 源码：
+- 前端通过 npm workspace 依赖 `@monopoly4/shared` 包：
   ```json
-  // packages/frontend/tsconfig.json
+  // packages/frontend/package.json
   {
-    "compilerOptions": {
-      "paths": {
-        "@monopoly4/shared": ["../shared/src"]
-      }
+    "dependencies": {
+      "@monopoly4/shared": "^0.1.0",
+      "@monopoly4/map-generator": "^0.1.0"
     }
   }
-  ```
-- `vite.config.ts` 配置 alias：
-  ```typescript
-  resolve: { alias: { '@monopoly4/shared': path.resolve(__dirname, '../shared/src') } }
   ```
 - 引用示例：`import { GameState, Tile } from '@monopoly4/shared'`。
 

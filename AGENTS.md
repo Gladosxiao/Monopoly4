@@ -4,7 +4,7 @@
 >
 > **沟通语言**：与本仓库交互时，AI 代理必须使用**中文**回复用户，并在思考过程中尽量使用中文。
 >
-> **最近更新**：2026-06-20 — 棋盘与地图生成二次改造：圆形功能格居中显示名称且缩小；棋盘新增缩放按钮；地图生成强制同组小地产连续、大地产占 2 格并处理转角；重写 `SIMPLE_MAP`；股票测试数据修复。
+> **最近更新**：2026-07-14 — 文档与代码一致性核对：补全仓库结构树（ai/playtest/minigames/testMode 等缺失目录）、修正构建顺序与测试文件清单、补充小游戏/AI 玩家/自动化对局测试/部署相关文档说明。
 
 ## 工作流程铁律
 
@@ -25,59 +25,101 @@
 ```
 .
 ├── AGENTS.md                                    # 本文件
+├── README.md                                    # 面向用户的项目说明
 ├── LICENSE                                      # MIT 许可证
 ├── package.json                                 # 根 monorepo 配置
+├── .env.example                                 # 环境变量模板
+├── docker-compose.yml                           # 开发用 Docker Compose
+├── docker-compose.production.yml                # 生产部署 Docker Compose
+├── .github/workflows/                           # CI/CD 流水线
+│   ├── ci.yml                                   # 持续集成（构建+测试）
+│   ├── deploy.yml                               # 自动部署到服务器
+│   └── pages.yml                                # 前端 GitHub Pages 部署
+├── docs/                                        # 设计文档与指南（已追踪）
+│   ├── test-mode-guide.md                       # 测试模式完整说明
+│   ├── design/                                  # 架构与子系统设计文档
+│   │   ├── 01-overview.md … 13-numerical-design.md
+│   │   ├── 11-automated-playtesting.md          # 自动化对局测试方案
+│   │   ├── 11-assets.md                         # 美术资源规范
+│   │   └── minigame-balance.md                  # 小游戏平衡标定
+│   └── design-inputs/                           # 原始输入材料（规则书/截图等）
+├── scripts/                                     # 顶层辅助脚本
+│   └── verify-minigame-test-page.mjs            # 小游戏测试页自动验证
 ├── packages/
-│   ├── shared/                                  # 共享类型、数据配置（卡片/道具/神明等）
+│   ├── shared/                                  # 共享类型、数据配置
 │   │   └── src/
 │   │       ├── index.ts                         # 核心 TypeScript 类型
-│   │       └── data/                            # 卡片、道具、神明、公司等配置
+│   │       └── data/                            # 卡片/道具/神明/公司/NPC/小游戏/股票趋势等配置
+│   │           ├── cards.ts / items.ts / spirits.ts / companies.ts
+│   │           ├── npcs.ts / minigames.ts / stockTrends.ts / assets.ts
 │   ├── backend/                                 # Node.js + Express + Socket.IO 服务端
 │   │   └── src/
 │   │       ├── game/                            # 核心游戏逻辑
 │   │       │   ├── engine.ts                    # 主引擎（掷骰/移动/买地/过路费/破产等）
 │   │       │   ├── spiritEffects.ts             # 神明效果（福神/衰神/天使/恶魔/土地公）
+│   │       │   ├── spiritSystem/                # 神明系统（地图生成/移动/拾取）
+│   │       │   ├── mapLoader.ts                 # 地图加载器
 │   │       │   ├── cardSystem/                  # 卡片系统（30 张效果）
-│   │       │   ├── itemSystem/                  # 道具系统（13 种效果）
+│   │       │   ├── itemSystem/                  # 道具系统（13 种效果，含陷阱）
 │   │       │   ├── eventSystem/                 # 命运/新闻事件系统
 │   │       │   ├── financialSystem/             # 股票/公司/保险系统
 │   │       │   ├── npcSystem/                   # NPC 系统
-│   │       │   ├── testMode/                    # 测试模式
-│   │       │   └── __tests__/                   # 单元测试
+│   │       │   ├── testMode/                    # 测试模式（AI 玩家/状态编辑）
+│   │       │   └── __tests__/                   # 单元测试（37 个文件）
+│   │       ├── ai/                              # AI 玩家客户端
+│   │       │   └── aiClient.ts                  # 启发式/LLM AI 回合执行
+│   │       ├── playtest/                        # 自动化对局测试框架
+│   │       │   ├── index.ts                     # 对局入口
+│   │       │   ├── agents/ engine/ minigames/ scenarios/ reports/ testUtils/
+│   │       │   └── run1heuristic.ts / run5heuristic.ts / runChunked.ts
 │   │       ├── socket/                          # Socket.IO 事件处理
+│   │       │   └── game.ts                      # 游戏 socket 事件
 │   │       ├── auth/                            # 用户认证
 │   │       ├── routes/                          # REST API 路由
-│   │       │   └── health.ts                    # 健康检查 /api/health
+│   │       │   ├── health.ts                    # 健康检查 /api/health
+│   │       │   ├── auth.ts                      # 登录/注册/会话
+│   │       │   ├── rooms.ts                     # 房间列表/创建
+│   │       │   ├── maps.ts                      # 地图模板接口
+│   │       │   └── debug.ts                     # Debug 状态接口
 │   │       ├── migrations/                      # 数据库迁移
-│   │       │   ├── runner.ts                    # 迁移执行器
+│   │       │   ├── index.ts / runner.ts          # 迁移执行器
 │   │       │   └── sql/                         # 迁移 SQL 文件
 │   │       └── scripts/                         # 初始化/管理脚本
 │   ├── frontend/                                # Vite + TypeScript 前端
 │   │   └── src/
 │   │       ├── main.ts                          # 入口（路由初始化）
 │   │       ├── router.ts                        # 页面导航与清理
+│   │       ├── api.ts                           # REST API 客户端
+│   │       ├── socket.ts                        # 客户端 Socket 通信
+│   │       ├── board.ts                         # Canvas 棋盘渲染（地块/建筑/棋子/神明/陷阱）
+│   │       ├── moveAnimation.ts                 # 棋子逐格移动动画
+│   │       ├── stockChart.ts                    # 股票 K 线图渲染
 │   │       ├── state/                           # 全局状态
 │   │       │   ├── user.ts                      # 当前用户状态
 │   │       │   └── game.ts                      # 当前房间/游戏状态
 │   │       ├── pages/                           # 页面组件
-│   │       │   ├── login.ts                     # 登录页
-│   │       │   ├── lobby.ts                     # 大厅页
-│   │       │   ├── room.ts                      # 房间页
-│   │       │   └── game.ts                      # 游戏页
+│   │       │   ├── login.ts / lobby.ts / room.ts / game.ts
 │   │       ├── ui/                              # 公共 UI 辅助
 │   │       │   └── common.ts                    # Toast / Banner / Prompt / escapeHtml
-│   │       ├── board.ts                         # Canvas 棋盘渲染（地块/建筑/棋子/神明/陷阱）
-│   │       ├── socket.ts                        # 客户端 Socket 通信
+│   │       ├── minigames/                       # 小游戏前端（气球/喜从天降/企鹅挖宝）
+│   │       ├── testMode/                        # 测试模式前端面板
 │   │       ├── style.css                        # 样式
+│   │       ├── test-board.ts / test-minigames.ts / test-stock-chart.ts  # 独立测试页
 │   │       └── public/assets/tokens/            # 12 个角色 emoji 棋子 PNG（由 tools/generate_tokens.py 生成）
 │   └── map-generator/                           # 地图生成器
 │       └── src/
 │           ├── generator.ts                     # 多模板地图生成
 │           ├── loader.ts                        # 地图加载器
 │           ├── coords.ts                        # 2.5D 坐标工具
-│           └── visualizer.ts                    # SVG/HTML 渲染
+│           ├── visualizer.ts                    # SVG/HTML 渲染
+│           ├── index.ts / types.ts / simulator.ts
+│           ├── scripts/                         # 生成脚本
+│           └── tests/                           # 生成器单元测试
 ├── tools/                                       # 辅助脚本与工具
-│   └── generate_tokens.py                       # 生成角色 emoji 棋子 PNG
+│   ├── generate_tokens.py                       # 生成角色 emoji 棋子 PNG
+│   ├── deploy/                                  # 手动部署脚本
+│   ├── test_kimi_key.py / test_kimi_key.mjs     # Kimi API key 验证
+│   └── video_processing/                        # 视频处理工具
 └── doc/                                         # 原始规则文档（未追踪）
 ```
 
@@ -85,7 +127,7 @@
 
 - 安装依赖：`npm install`
 - 初始化数据库：`npm run db:init`（等价于 `npm run db:migrate -w packages/backend`）
-- 根目录构建：`npm run build`（依次构建 shared、frontend、backend）
+- 根目录构建：`npm run build`（依次构建 shared → map-generator → frontend → backend）
 - 开发模式：`npm run dev`（同时启动 backend 与 frontend）
 - 生产启动：`npm run start`（启动已构建的后端）
 - 后端测试：`npm run test -w packages/backend`（Vitest，测试文件位于 `packages/backend/src/game/__tests__/*.test.ts`）
@@ -212,12 +254,13 @@ docker compose up -d --build
 
 - **测试运行器**：Vitest
 - **测试文件位置**：`packages/backend/src/game/__tests__/`
-- **已覆盖的测试文件**（400+ 用例，35 个测试文件）：
+- **已覆盖的测试文件**（400+ 用例，37 个测试文件）：
   - `engine.test.ts` / `engineDay.test.ts`：核心引擎规则与日期推进
   - `hospitalize.test.ts`：住院传送
-  - `spirits.test.ts`：神明系统（福神/衰神/天使/恶魔/土地公完整效果）
+  - `spirits.test.ts` / `spiritsMap.test.ts`：神明系统与神明地图生成
   - `cardSystem/` + `cards.test.ts`：卡片系统（30+ 张卡片效果）
-  - `itemSystem/` + `items.test.ts`：道具系统（13+ 种道具效果）
+  - `itemSystem/` + `items.test.ts` / `itemQuantity.test.ts`：道具系统（13+ 种道具效果）
+  - `events.test.ts`：命运/新闻事件
   - `minigames.test.ts`：小游戏系统（七彩气球/喜从天降/企鹅挖宝）
   - `bankruptcy.test.ts`：破产法拍（股票清算+土地法拍）
   - `financial.test.ts`：股票交易、加权成本、董事长、分红、公司特效、保险理赔
@@ -227,14 +270,16 @@ docker compose up -d --build
   - `turn.test.ts` / `victory.test.ts` / `characters.test.ts`：回合、胜利条件、角色
   - `landLease.test.ts` / `mapLoading.test.ts`：土地租约与地图加载
   - `e2e.test.ts`：端到端集成测试
-  - `socket.test.ts` / `socketIntegration.test.ts`：Socket 事件与集成测试
-  - `setup.ts`：测试辅助工具与工厂函数
+  - `socket.test.ts` / `socketIntegration.test.ts` / `socketIntegrationTestMode.test.ts`：Socket 事件与集成测试
+  - `authCore.test.ts` / `userConfig.test.ts` / `configSwitches.test.ts`：认证、用户配置、功能开关
+  - `rollValidation.test.ts`：掷骰结果校验
+  - `globalSetup.ts` / `setup.ts`：测试辅助工具与工厂函数
 
 ## 代码组织
 
-- `packages/shared/`：前后端共享类型、地图数据、卡片/道具/神明配置。
-- `packages/backend/`：Node.js + Express + Socket.IO 服务端，核心游戏逻辑在 `src/game/engine.ts`。
-- `packages/frontend/`：Vite + TypeScript 前端，棋盘渲染与交互。
+- `packages/shared/`：前后端共享类型、地图数据、卡片/道具/神明/公司/NPC/小游戏/股票趋势等配置。
+- `packages/backend/`：Node.js + Express + Socket.IO 服务端，核心游戏逻辑在 `src/game/engine.ts`；`src/ai/` 提供真实房间 AI 玩家；`src/playtest/` 提供自动化对局测试框架。
+- `packages/frontend/`：Vite + TypeScript 前端，棋盘渲染、小游戏、股票 K 线图与交互。
 - `packages/map-generator/`：地图生成器，多模板/2.5D 坐标/SVG 渲染。
 
 ## 开发规范
