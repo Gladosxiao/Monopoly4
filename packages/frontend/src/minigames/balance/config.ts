@@ -86,6 +86,33 @@ export const BALLOON_CONFIG = {
 
   /** 时间缩放上下限 */
   timeScale: { min: 0.5, max: 2.5 },
+
+  /**
+   * 飘动动画参数（纯视觉，不影响碰撞 / 得分 / 速度规则）。
+   * 所有频率单位为 rad/ms；振幅单位为像素（倾斜为弧度）。
+   * spawnBalloon 在生成时会从下列区间随机抽样，让每个气球的飘动节奏
+   * 互不相同，避免整齐划一的机械感。
+   */
+  animation: {
+    /** 横向主漂移振幅：周期 4.5–8s 的大幅左右飘 */
+    driftAmpX: { min: 10, max: 18 },
+    driftFreqX: { min: 0.0008, max: 0.0014 },
+    /** 横向次漂移：周期 1.7–3s 的小抖动，叠加产生非周期感 */
+    driftAmpX2: { min: 2.5, max: 5 },
+    driftFreqX2: { min: 0.0022, max: 0.0036 },
+    /** 上下起伏：模拟空气浮力 / 阻力 */
+    bobAmp: { min: 3, max: 6 },
+    bobFreq: { min: 0.0014, max: 0.0022 },
+    /** 倾斜（弧度）：气球随气流摆动 */
+    tiltAmp: { min: 0.10, max: 0.20 },
+    tiltFreq: { min: 0.0009, max: 0.0017 },
+    /** 缩放呼吸感：模拟远近 / 形变 */
+    scaleAmp: 0.045,
+    scaleFreq: { min: 0.0018, max: 0.0032 },
+    /** 绳子：基础长度、滞后的控制点频率 */
+    stringBaseLen: 32,
+    stringControlFreq: { min: 0.0006, max: 0.0012 },
+  },
 } as const;
 
 /** 喜从天降平衡参数 */
