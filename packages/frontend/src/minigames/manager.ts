@@ -201,7 +201,18 @@ export class MiniGameManager {
       <h2>游戏结束</h2>
       <div style="font-size: 48px; margin: 16px 0;">${result.score} 分</div>
       <div style="font-size: 24px; margin-bottom: 24px;">获得点券: ${result.coupons}</div>
-      <button id="minigame-close">确定</button>
+      <button id="minigame-close" style="
+        padding: 14px 48px;
+        font-size: 20px;
+        border-radius: 10px;
+        background: #4ecdc4;
+        color: #0f172a;
+        border: none;
+        cursor: pointer;
+        font-weight: 700;
+        box-shadow: 0 8px 20px rgba(0,0,0,0.3);
+        transition: transform 0.15s ease, filter 0.15s ease;
+      " onmouseover="this.style.transform='translateY(-2px)';this.style.filter='brightness(1.1)'" onmouseout="this.style.transform='translateY(0)';this.style.filter='none'">确定</button>
     `;
 
     modal.querySelector('#minigame-close')!.addEventListener('click', () => {

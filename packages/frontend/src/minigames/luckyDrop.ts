@@ -12,8 +12,8 @@ type DropItemKind =
   | 'silver' // 银元宝
   | 'coin' // 铜钱
   | 'chest' // 宝箱
-  | 'rock' // 石头
-  | 'bomb' // 炸弹
+  | 'spike' // 红色刺球（扣分）
+  | 'bomb' // 炸弹（扣分）
   | 'clock'; // 时钟：触发时间减缓
 
 /**
@@ -443,8 +443,8 @@ export class LuckyDropGame implements IMiniGame {
       radius = 15;
       value = 0;
       baseSpeed = 165;
-    } else if (rand < 0.82) {
-      kind = 'rock';
+    } else if (rand < 0.76) {
+      kind = 'spike';
       radius = 13;
       value = -5;
       baseSpeed = 180;
@@ -580,8 +580,8 @@ export class LuckyDropGame implements IMiniGame {
       case 'chest':
         this.drawChest(ctx, item.radius);
         break;
-      case 'rock':
-        this.drawRock(ctx, item.radius);
+      case 'spike':
+        this.drawSpike(ctx, item.radius);
         break;
       case 'bomb':
         this.drawBomb(ctx, item.radius);
@@ -706,31 +706,36 @@ export class LuckyDropGame implements IMiniGame {
   }
 
   /**
-   * 石头：灰色圆，带裂纹与阴影
+   * 红色刺球：红黑配色扣分道具
    */
-  private drawRock(ctx: CanvasRenderingContext2D, radius: number): void {
-    ctx.fillStyle = '#95a5a6';
+  private drawSpike(ctx: CanvasRenderingContext2D, radius: number): void {
+    // 黑色内核
+    ctx.fillStyle = '#2d3436';
     ctx.beginPath();
-    ctx.arc(0, 0, radius, 0, Math.PI * 2);
+    ctx.arc(0, 0, radius * 0.7, 0, Math.PI * 2);
     ctx.fill();
 
-    ctx.strokeStyle = '#546e7a';
-    ctx.lineWidth = 2;
-    ctx.stroke();
+    // 红色尖刺
+    ctx.fillStyle = '#e74c3c';
+    const spikeCount = 10;
+    for (let i = 0; i < spikeCount; i++) {
+      const angle = (i * Math.PI * 2) / spikeCount;
+      ctx.save();
+      ctx.rotate(angle);
+      ctx.beginPath();
+      ctx.moveTo(0, -radius * 0.5);
+      ctx.lineTo(radius * 0.25, -radius);
+      ctx.lineTo(0, radius * 0.5);
+      ctx.lineTo(-radius * 0.25, -radius);
+      ctx.closePath();
+      ctx.fill();
+      ctx.restore();
+    }
 
-    // 裂纹
-    ctx.strokeStyle = '#455a64';
-    ctx.lineWidth = 1.5;
+    // 中心高光
+    ctx.fillStyle = 'rgba(255,255,255,0.25)';
     ctx.beginPath();
-    ctx.moveTo(-radius * 0.3, -radius * 0.3);
-    ctx.lineTo(radius * 0.2, radius * 0.1);
-    ctx.lineTo(radius * 0.1, radius * 0.4);
-    ctx.stroke();
-
-    // 阴影
-    ctx.fillStyle = 'rgba(0,0,0,0.1)';
-    ctx.beginPath();
-    ctx.arc(radius * 0.25, radius * 0.25, radius * 0.35, 0, Math.PI * 2);
+    ctx.arc(-radius * 0.15, -radius * 0.15, radius * 0.2, 0, Math.PI * 2);
     ctx.fill();
   }
 

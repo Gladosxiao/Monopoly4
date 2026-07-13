@@ -46,8 +46,8 @@ const ITEM_DEFS: ItemDef[] = [
 
 const GAME_DURATION = 30000; // 游戏时长（毫秒）
 const MEMORIZE_DURATION = 3000; // 记忆阶段时长（毫秒）
-const GRID_COLS = 6;
-const GRID_ROWS = 4;
+const GRID_COLS = 8;
+const GRID_ROWS = 12;
 const MAX_COUPONS = 500; // 最高可获得点券
 
 // 浮动文字提示
@@ -176,9 +176,9 @@ export class PenguinDigGame implements IMiniGame {
 
   private generateGrid(): Cell[] {
     const cells: Cell[] = [];
-    const paddingX = 80;
-    const paddingY = 80;
-    const gap = 12;
+    const paddingX = 48;
+    const paddingY = 100;
+    const gap = 6;
     const cellW = (this.config.canvasWidth - paddingX * 2 - gap * (GRID_COLS - 1)) / GRID_COLS;
     const cellH = (this.config.canvasHeight - paddingY * 2 - gap * (GRID_ROWS - 1)) / GRID_ROWS;
 
@@ -327,7 +327,7 @@ export class PenguinDigGame implements IMiniGame {
     // 雪地坑/格子背景
     ctx.fillStyle = cell.revealed ? 'rgba(255,255,255,0.6)' : 'rgba(255,255,255,0.35)';
     ctx.beginPath();
-    ctx.roundRect(x, y, w, h, 12);
+    ctx.roundRect(x, y, w, h, 8);
     ctx.fill();
 
     ctx.strokeStyle = 'rgba(255,255,255,0.7)';
@@ -345,7 +345,7 @@ export class PenguinDigGame implements IMiniGame {
       ctx.fill();
 
       ctx.fillStyle = '#64b5f6';
-      ctx.font = `bold ${Math.min(w, h) * 0.22}px sans-serif`;
+      ctx.font = `bold ${Math.max(12, Math.min(w, h) * 0.35)}px sans-serif`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       ctx.fillText('?', cx, cy);
@@ -473,12 +473,12 @@ export class PenguinDigGame implements IMiniGame {
       }
       case 'empty':
       default: {
-        // 空坑：几片雪花
+        // 空坑：显示小雪花符号
         ctx.fillStyle = '#b0bec5';
-        ctx.font = `bold ${half}px sans-serif`;
+        ctx.font = `bold ${Math.max(10, half * 0.8)}px sans-serif`;
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        ctx.fillText('❄', 0, 0);
+        ctx.fillText('✕', 0, 0);
         break;
       }
     }
