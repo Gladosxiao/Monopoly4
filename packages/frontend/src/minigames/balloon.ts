@@ -375,8 +375,15 @@ export class BalloonMiniGame implements IMiniGame {
       speed = BALLOON_CONFIG.doubleSpeed.min + Math.random() * (BALLOON_CONFIG.doubleSpeed.max - BALLOON_CONFIG.doubleSpeed.min);
     } else if (kindRoll < BALLOON_CONFIG.kindWeights.double + BALLOON_CONFIG.kindWeights.mystery) {
       kind = 'mystery';
-      color = MYSTERY_COLOR;
       effect = this.randomMysteryEffect();
+      // 加速/减速气球使用醒目颜色，其余保持紫色
+      if (effect.label === '▲') {
+        color = BALLOON_CONFIG.speedUpColor;
+      } else if (effect.label === '▼') {
+        color = BALLOON_CONFIG.slowDownColor;
+      } else {
+        color = MYSTERY_COLOR;
+      }
       speed = BALLOON_CONFIG.mysterySpeed.min + Math.random() * (BALLOON_CONFIG.mysterySpeed.max - BALLOON_CONFIG.mysterySpeed.min);
     } else {
       kind = 'normal';
@@ -386,8 +393,13 @@ export class BalloonMiniGame implements IMiniGame {
       speed = BALLOON_CONFIG.normalBaseSpeed + score * BALLOON_CONFIG.normalScoreSpeedFactor + Math.random() * BALLOON_CONFIG.normalRandomSpeedRange;
     }
 
-    // 初始生成位置在屏幕中间区域，而非全部从底部冒出
-    const y = this.config.canvasHeight * (BALLOON_CONFIG.spawnHeightRatio.min + Math.random() * (BALLOON_CONFIG.spawnHeightRatio.max - BALLOON_CONFIG.spawnHeightRatio.min));
+    // 开场阶段从屏幕中部生成，之后从底部刷新
+    const elapsed = now - this.startTime;
+    const spawnRatio =
+      elapsed < BALLOON_CONFIG.introDurationMs
+        ? BALLOON_CONFIG.introSpawnHeightRatio
+        : BALLOON_CONFIG.mainSpawnHeightRatio;
+    const y = this.config.canvasHeight * (spawnRatio.min + Math.random() * (spawnRatio.max - spawnRatio.min));
 
     this.balloons.push({
       x,

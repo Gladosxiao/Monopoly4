@@ -37,35 +37,37 @@
 汽车      150
 ```
 
-普通道具（路障/遥控骰子级别）价格约 30 点券。因此 1.5 件普通道具约 45 点券。本设计将随机玩家目标期望点券定为 **60**，约等于 2 个遥控骰子，满足「至少购买 1.5 件普通道具」的要求。
+普通道具（路障/遥控骰子级别）价格约 30 点券。本次标定后随机玩家均值达到 **100+**，可购买 3 件以上普通道具，收益更有感。
 
-> 注：60 点券是「随机点击 / 随机接取」基准玩家的期望收益。熟练玩家通过精准操作可以获得更高收益，但三个小游戏之间的相对收益应保持接近。
+> 注：100+ 点券是「随机点击 / 随机接取」基准玩家的期望收益。熟练玩家通过精准操作可以获得更高收益，但三个小游戏之间的相对收益应保持接近。
 
 ## 4. 三个小游戏机制概要
 
 ### 4.1 七彩气球
 
 - 30 秒内点击气球得分。
-- 普通气球：**半径越小分值越高、速度越快**（+2 ~ +3），增加挑战性。
+- 普通气球：**半径越小分值越高、速度越快**（+3 ~ +5），增加挑战性。
 - 双倍气球：×2，按基础分加分。
 - 问号气球：预显示具体效果（+10 / -5 / 加速 / 减速 / -5s），**已移除清零效果**。
-- 气球从屏幕中间区域生成，向上飘动。
-- 生成间隔 750ms，普通气球基础速度 1.8 像素/帧。
+- **开场 2.5 秒从屏幕中部生成，之后从底部刷新**，给玩家适应时间。
+- **加速气球为红橙色，减速气球为蓝青色**，与普通紫色问号气球明显区分。
+- 生成间隔 650ms，普通气球基础速度 1.8 像素/帧。
 
 ### 4.2 喜从天降
 
-- 30 秒内控制底部平台接住掉落物。
-- 宝箱/金/银/玉币：加分（宝箱 80、金 40、银 20、玉币 4），**得分道具均不使用红色/黑色**。
+- **24 秒内**控制底部平台接住掉落物（因存在时钟减速，总时长缩短）。
+- 宝箱/金/银/玉币：加分（宝箱 150、金 75、银 35、玉币 8），**得分道具均不使用红色/黑色**。
 - 时钟：白底蓝色时钟，触发 5 秒慢动作，掉落物减速、倒计时减半，平台移动不受影响。
-- 红色刺球 / 黑色炸弹：**红黑配色扣分道具**（刺球 -20、炸弹 -40）。
+- 红色刺球 / 黑色炸弹：**红黑配色扣分道具**（刺球 -35、炸弹 -70）。
+- 难度曲线倍率由 1.2 下调至 **0.84**，后期速度降低约 30%。
 
 ### 4.3 企鹅挖宝
 
-- 8×12 = 96 格雪地网格（较早期版本扩展四倍）。
+- **7×10 = 70 格雪地网格**，较之前 8×12 减少约 27%，单格更大、操作更从容。
 - 开局显示宝藏与炸弹位置 3 秒，随后隐藏。
 - 玩家凭记忆点击格子挖掘。
 - 每次挖掘有 500ms 冷却，限制总点击次数。
-- 钻石/金块/宝石加分（钻石 7、金块 3、蓝宝石 2、黄玉 2、冰块 1），**红宝石已改为橙色黄玉以避免与黑红炸弹混淆**；炸弹扣分（-5），空挖不加分。
+- 钻石/金块/宝石加分（钻石 13、金块 6、蓝宝石 4、黄玉 4、冰块 2），**红宝石已改为橙色黄玉以避免与黑红炸弹混淆**；炸弹扣分（-10），空挖不加分。
 
 ## 5. 平衡标定方法
 
@@ -77,7 +79,7 @@
 
 - 七彩气球：每 400ms 尝试点击一次，80% 概率瞄准随机气球（带小偏移），命中概率 70%。
 - 喜从天降：平台 70% 注意力追踪最近掉落物，30% 随机移动，最大速度为上限的 85%。
-- 企鹅挖宝：在 96 格中随机挖掘，受 500ms 冷却限制。
+- 企鹅挖宝：在 70 格中随机挖掘，受 500ms 冷却限制。
 
 运行命令：
 
@@ -106,12 +108,12 @@ npx tsx packages/frontend/src/minigames/balance/run-simulator.ts
 ### 5.4 当前模拟结果
 
 ```
-balloon:    平均点券=58.2, 标准差=13.4, 范围=[14, 110], 平均操作=74.0, 平均命中=26.4
-luckyDrop:  平均点券=62.5, 标准差=65.6, 范围=[0, 328], 平均操作=24.7, 平均命中=22.2
-penguinDig: 平均点券=59.5, 标准差=25.2, 范围=[0, 129], 平均操作=54.0, 平均命中=54.0
+balloon:    平均点券=103.3, 标准差=18.7, 范围=[38, 164], 平均操作=74.0, 平均命中=27.3
+luckyDrop:  平均点券=107.4, 标准差=107.0, 范围=[0, 500], 平均操作=18.0, 平均命中=16.1
+penguinDig: 平均点券=115.1, 标准差=51.0, 范围=[0, 268], 平均操作=54.0, 平均命中=54.0
 ```
 
-三个游戏的随机玩家期望点券均在 **60 左右**（三游戏平均 60.1），达到设计目标。
+三个游戏的随机玩家期望点券均在 **100+**（三游戏平均 108.6），达到设计目标。若使用 `run-calibrator.ts` 基于默认模拟结果做一次示例标定，再用标定参数仿真验证，三游戏平均点券可收敛到约 **111**。
 
 ### 5.5 标定参数文件
 
@@ -124,34 +126,43 @@ packages/frontend/src/minigames/balance/config.ts
 关键参数：
 
 ```ts
-TARGET_RANDOM_COUPONS = 60;
+TARGET_RANDOM_COUPONS = 110;
 
 // 气球：越小分越高、越快；已移除清零效果
-BALLOON_CONFIG.radiusScoreOffset = 44;         // score = round((offset - radius) / step)
-BALLOON_CONFIG.radiusScoreStep = 8;            // 普通气球 +2~+3
+BALLOON_CONFIG.radiusScoreOffset = 52;         // score = round((offset - radius) / step)
+BALLOON_CONFIG.radiusScoreStep = 6;            // 普通气球 +3~+5
 BALLOON_CONFIG.normalBaseSpeed = 1.8;          // 基础速度，高分气球更快
-BALLOON_CONFIG.spawnIntervalMs = 750;          // 生成间隔
+BALLOON_CONFIG.spawnIntervalMs = 650;          // 生成间隔
+BALLOON_CONFIG.introDurationMs = 2500;         // 开场 2.5s 从屏幕中部生成
+BALLOON_CONFIG.introSpawnHeightRatio = { min: 0.4, max: 0.7 };
+BALLOON_CONFIG.mainSpawnHeightRatio = { min: 0.85, max: 0.95 };
+BALLOON_CONFIG.speedUpColor = '#ff5722';       // 红橙：加速
+BALLOON_CONFIG.slowDownColor = '#00bcd4';      // 蓝青：减速
 
-// 喜从天降：得分道具非红黑，扣分道具红黑
+// 喜从天降：得分道具非红黑，扣分道具红黑；总时长缩短、速度曲线降 30%
+LUCKY_DROP_CONFIG.duration = 24000;
+LUCKY_DROP_CONFIG.speedCurveMultiplier = 0.84; // 原 1.2 下调 30%
 LUCKY_DROP_CONFIG.items = [
-  { kind: 'chest',  probability: 0.008, value: 80 },
-  { kind: 'gold',   probability: 0.10,  value: 40 },
-  { kind: 'silver', probability: 0.28,  value: 20 },
-  { kind: 'coin',   probability: 0.48,  value: 4 },   // 青色玉币
+  { kind: 'chest',  probability: 0.008, value: 150 },
+  { kind: 'gold',   probability: 0.10,  value: 75 },
+  { kind: 'silver', probability: 0.28,  value: 35 },
+  { kind: 'coin',   probability: 0.48,  value: 8 },    // 青色玉币
   { kind: 'clock',  probability: 0.58,  value: 0, slowMotionMs: 5000 },
-  { kind: 'spike',  probability: 0.76,  value: -20 }, // 红色刺球
-  { kind: 'bomb',   probability: 1.0,   value: -40 }, // 黑色炸弹
+  { kind: 'spike',  probability: 0.76,  value: -35 },  // 红色刺球
+  { kind: 'bomb',   probability: 1.0,   value: -70 },  // 黑色炸弹
 ];
 
-// 企鹅挖宝：红宝石改为橙色黄玉，避免与黑红炸弹混淆
+// 企鹅挖宝：7×10 = 70 格；红宝石改为橙色黄玉，避免与黑红炸弹混淆
+PENGUIN_DIG_CONFIG.cols = 7;
+PENGUIN_DIG_CONFIG.rows = 10;
 PENGUIN_DIG_CONFIG.digCooldownMs = 500;
 PENGUIN_DIG_CONFIG.items = [
-  { type: 'diamond', score: 7, weight: 5 },
-  { type: 'gold',    score: 3, weight: 10 },
-  { type: 'sapphire',score: 2, weight: 15 },
-  { type: 'ruby',    score: 2, weight: 15 }, // 实际绘制为橙色黄玉
-  { type: 'ice',     score: 1, weight: 30 },
-  { type: 'bomb',    score: -5, weight: 12 },
+  { type: 'diamond',  score: 13, weight: 5 },
+  { type: 'gold',     score: 6,  weight: 10 },
+  { type: 'sapphire', score: 4,  weight: 15 },
+  { type: 'ruby',     score: 4,  weight: 15 }, // 实际绘制为橙色黄玉
+  { type: 'ice',      score: 2,  weight: 30 },
+  { type: 'bomb',     score: -10, weight: 12 },
 ];
 ```
 
@@ -166,30 +177,34 @@ PENGUIN_DIG_CONFIG.items = [
 3. 系统根据前两局的点券收益与过程指标计算用户基准期望。
 4. 调用 `calibratePenguinDig()` 反推企鹅挖宝的推荐冷却与宝藏分值倍率。
 5. 用户玩 **企鹅挖宝**，游戏自动应用标定参数。
-6. 页面显示完整标定报告与过程指标，验证三局点券是否接近。
+6. 标定结果通过 `saveCalibration()` 写入 `localStorage`，刷新页面后仍可通过 `loadCalibration()` 读取并自动应用到手动启动的企鹅挖宝。
+7. 页面显示完整标定报告与过程指标，验证三局点券是否接近。
 
-标定公式：
+标定公式（与 `calibrator.ts` 一致）：
 
 ```ts
 baselineCoupons = (balloonCoupons + luckyDropCoupons) / 2;
 
 // 根据气球点击间隔与命中率推断玩家真实点击频率
-estimatedClickInterval = balloonAvgTimeBetweenClicks * (1 + (1 - balloonAccuracy) * 0.5) * (1 - (catchRate - 0.5) * 0.2);
+estimatedClickInterval = balloonAvgTimeBetweenClicks
+  * (1 + (1 - balloonAccuracy) * 0.5)    // 命中率低则增加冷却，避免误触
+  * (1 - (catchRate - 0.5) * 0.2);       // 接取率高则降低冷却
 recommendedCooldownMs = clamp(estimatedClickInterval, 200, 1200);
 
 // 反推宝藏分值倍率，使期望点券 ≈ baselineCoupons
 recommendedScoreMultiplier = baselineCoupons / ((durationMs - memorizeMs) / recommendedCooldownMs * expectedScorePerDig);
 ```
 
-示例输出（目标基准 60 点券）：
+示例输出（目标基准 110 点券）：
 
 ```
-用户基准期望点券: 60
-参考指标：气球点击间隔 380ms，命中率 65%，喜从天降接取率 55%
-推荐企鹅挖宝点击冷却: 500ms（预计可点击 54 次）
-推荐企鹅挖宝宝藏分值倍率: ×1.02
-标定后随机玩家期望点券: 60
+用户基准期望点券: 110
+推荐企鹅挖宝点击冷却: 500ms
+推荐企鹅挖宝宝藏分值倍率: ×0.96
+标定后随机玩家期望点券: 110
 ```
+
+持久化文件：`packages/frontend/src/minigames/balance/storage.ts`
 
 ## 7. 当前上下文与设计讨论
 
@@ -200,7 +215,7 @@ recommendedScoreMultiplier = baselineCoupons / ((durationMs - memorizeMs) / reco
 3. **企鹅挖宝限制**：增加点击冷却，防止高点击频率玩家获得过高收益，同时保留记忆玩法。
 4. **动态标定**：通过玩家在前两个游戏中的实际表现，自动标定第三个游戏，使不同操作风格的玩家都能获得一致收益。
 
-实现时先建立「随机玩家模拟器」作为基准，再调整游戏参数使三游戏期望点券收敛到 60 左右。模拟器假设玩家：
+实现时先建立「随机玩家模拟器」作为基准，再调整游戏参数使三游戏期望点券收敛到 110 左右。模拟器假设玩家：
 
 - 七彩气球：能看到气球并大致瞄准点击，但仍有明显失误。
 - 喜从天降：主要追踪最近掉落物，但会分心或反应不及时。
@@ -210,7 +225,7 @@ recommendedScoreMultiplier = baselineCoupons / ((durationMs - memorizeMs) / reco
 
 ## 8. 后续可优化点
 
-- 精确统计用户真实点击次数与操作速度，替代当前的经验默认值。
+- 根据用户真实标定数据进一步微调分值倍率与冷却档位。
 - 增加更多难度档位（新手/普通/高手），让不同水平玩家都有合适的挑战与收益。
 - 根据对局阶段动态调整小游戏收益，避免前期点券过多影响平衡。
 
@@ -223,5 +238,7 @@ recommendedScoreMultiplier = baselineCoupons / ((durationMs - memorizeMs) / reco
 - `packages/frontend/src/minigames/balance/config.ts`
 - `packages/frontend/src/minigames/balance/simulator.ts`
 - `packages/frontend/src/minigames/balance/calibrator.ts`
+- `packages/frontend/src/minigames/balance/storage.ts`
+- `packages/frontend/src/minigames/index.ts`
 - `packages/frontend/src/test-minigames.ts`
 - `packages/frontend/test-minigames.html`

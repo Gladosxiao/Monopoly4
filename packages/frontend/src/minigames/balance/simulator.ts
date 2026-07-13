@@ -91,7 +91,11 @@ function simulateBalloonGame(): SimulationResult {
       lastSpawn = t;
       const radius = rand(BALLOON_CONFIG.radius.min, BALLOON_CONFIG.radius.max);
       const x = radius + Math.random() * (width - radius * 2);
-      const y = height * (BALLOON_CONFIG.spawnHeightRatio.min + Math.random() * (BALLOON_CONFIG.spawnHeightRatio.max - BALLOON_CONFIG.spawnHeightRatio.min));
+      const spawnRatio =
+        t < BALLOON_CONFIG.introDurationMs
+          ? BALLOON_CONFIG.introSpawnHeightRatio
+          : BALLOON_CONFIG.mainSpawnHeightRatio;
+      const y = height * (spawnRatio.min + Math.random() * (spawnRatio.max - spawnRatio.min));
       const roll = Math.random();
 
       let kind: SimBalloon['kind'];
@@ -354,7 +358,10 @@ function aggregateStats(type: SimulationResult['type'], results: SimulationResul
 }
 
 /** 运行所有小游戏的模拟 */
-export function runAllSimulations(runs = 1000): {
+export function runAllSimulations(
+  runs = 1000,
+  penguinCalibration?: { cooldownMs: number; scoreMultiplier: number }
+): {
   balloon: SimulationStats;
   luckyDrop: SimulationStats;
   penguinDig: SimulationStats;
@@ -366,7 +373,9 @@ export function runAllSimulations(runs = 1000): {
   for (let i = 0; i < runs; i++) {
     balloonResults.push(simulateBalloonGame());
     luckyDropResults.push(simulateLuckyDropGame());
-    penguinDigResults.push(simulatePenguinDigGame());
+    penguinDigResults.push(
+      simulatePenguinDigGame(penguinCalibration?.cooldownMs, penguinCalibration?.scoreMultiplier)
+    );
   }
 
   return {

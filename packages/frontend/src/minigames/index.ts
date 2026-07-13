@@ -5,6 +5,8 @@ export { MiniGameManager, miniGameManager } from './manager.js';
 export { runAllSimulations, printSimulationResults } from './balance/simulator.js';
 export { calibratePenguinDig, printCalibrationReport } from './balance/calibrator.js';
 export { BALLOON_CONFIG, LUCKY_DROP_CONFIG, PENGUIN_DIG_CONFIG, TARGET_RANDOM_COUPONS } from './balance/config.js';
+export { saveCalibration, loadCalibration, clearCalibration, formatCalibrationSummary } from './balance/storage.js';
+export type { StoredCalibration } from './balance/storage.js';
 
 import type { MiniGameResult, MiniGameType } from '@monopoly4/shared';
 import { miniGameManager } from './manager.js';

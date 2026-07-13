@@ -7,7 +7,14 @@
  * - 历史记录使用 localStorage 持久化（最近 5 条）
  */
 
-import { launchMiniGame, calibratePenguinDig } from './minigames/index.js';
+import {
+  launchMiniGame,
+  calibratePenguinDig,
+  saveCalibration,
+  loadCalibration,
+  clearCalibration,
+  formatCalibrationSummary,
+} from './minigames/index.js';
 import type { MiniGameType, MiniGameResult } from '@monopoly4/shared';
 
 /** 单条历史记录 */
@@ -186,13 +193,50 @@ function startGame(type: MiniGameType): void {
   activeGame = type;
   setButtonsDisabled(true);
 
-  const stopFn = launchMiniGame(type, {
+  // 企鹅挖宝手动启动时，如果有已保存的标定参数则自动应用
+  const options: { calibration?: { cooldownMs: number; scoreMultiplier: number }; onEnd: (result: MiniGameResult) => void } = {
     onEnd: (result) => handleEnd(type, result),
-  });
+  };
+  if (type === 'penguinDig') {
+    const stored = loadCalibration();
+    if (stored) {
+      options.calibration = {
+        cooldownMs: stored.result.recommendedCooldownMs,
+        scoreMultiplier: stored.result.recommendedScoreMultiplier,
+      };
+    }
+  }
+
+  const stopFn = launchMiniGame(type, options);
 
   // 暴露停止函数到 window，便于 Playwright/Puppeteer 自动化测试时提前结束
   // （小游戏本身无外部 API，只能通过返回的 stopFn 主动结束）
   (window as unknown as { __stopMiniGame?: () => unknown }).__stopMiniGame = stopFn;
+}
+
+/** 渲染已保存的标定数据 */
+function renderSavedCalibration(): void {
+  const reportEl = document.getElementById('calibration-report');
+  if (!reportEl) return;
+
+  const stored = loadCalibration();
+  if (!stored) {
+    reportEl.innerHTML = '<p style="color:#64748b;">尚未有标定数据，点击上方「开始标定测试」进行三游戏标定。</p>';
+    return;
+  }
+
+  reportEl.innerHTML = `
+    <div style="margin-bottom:12px;">
+      <p>📦 已加载最近一次标定数据</p>
+      <p style="font-size:13px;color:#94a3b8;">${formatCalibrationSummary(stored)}</p>
+    </div>
+    <button id="clear-calibration-btn" style="padding:8px 16px;font-size:13px;border-radius:8px;background:#334155;color:#fff;border:none;cursor:pointer;">清除标定数据</button>
+  `;
+
+  document.getElementById('clear-calibration-btn')?.addEventListener('click', () => {
+    clearCalibration();
+    renderSavedCalibration();
+  });
 }
 
 function bindButtons(): void {
@@ -277,6 +321,19 @@ function runCalibrationStep(
         );
       } else {
         updateCalibrationReport('done', undefined, result);
+        // 保存本次标定结果
+        const baseline = {
+          balloonAvgCoupons: calibrationState.steps[0].result.coupons,
+          luckyDropAvgCoupons: calibrationState.steps[1].result.coupons,
+          balloonAvgClicks: calibrationState.steps[0].result.metrics?.clickCount ?? 60,
+          luckyDropAvgClicks: calibrationState.steps[1].result.metrics?.clickCount ?? 40,
+          durationMs: 30000,
+          balloonMetrics: calibrationState.steps[0].result.metrics,
+          luckyDropMetrics: calibrationState.steps[1].result.metrics,
+        };
+        const cal = calibratePenguinDig(baseline);
+        saveCalibration({ baseline, result: cal, calibratedAt: Date.now() });
+        renderSavedCalibration();
         calibrationState.inProgress = false;
         setButtonsDisabled(false);
       }
@@ -359,6 +416,7 @@ function updateCalibrationReport(
 
 bindButtons();
 renderAll();
+renderSavedCalibration();
 
 // 支持 URL 参数自动启动小游戏，便于无头浏览器/自动化截图验证
 // 示例：http://localhost:5173/test-minigames.html?autostart=balloon
