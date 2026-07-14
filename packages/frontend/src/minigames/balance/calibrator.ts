@@ -85,7 +85,7 @@ export function calibratePenguinDig(baseline: CalibrationBaseline): CalibrationR
     scorePerDig === 0 || projectedClicks === 0
       ? 1
       : baselineCoupons / (projectedClicks * scorePerDig);
-  recommendedScoreMultiplier = Math.max(0.5, Math.min(3.0, recommendedScoreMultiplier));
+  recommendedScoreMultiplier = Math.max(0.5, Math.min(4.0, recommendedScoreMultiplier));
 
   // 标定后随机玩家（默认操作）的期望点券
   const projectedRandomCoupons = projectedClicks * scorePerDig * recommendedScoreMultiplier;

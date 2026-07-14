@@ -94,7 +94,7 @@ export class PenguinDigGame implements IMiniGame {
    */
   public applyCalibration(cooldownMs: number, scoreMultiplier: number): void {
     this.digCooldownMs = Math.max(200, Math.min(1200, cooldownMs));
-    this.scoreMultiplier = Math.max(0.5, Math.min(3.0, scoreMultiplier));
+    this.scoreMultiplier = Math.max(0.5, Math.min(4.0, scoreMultiplier));
   }
 
   /**

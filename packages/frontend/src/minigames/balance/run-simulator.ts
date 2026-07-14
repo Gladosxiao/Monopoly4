@@ -68,13 +68,25 @@ if (calibrationPath) {
 }
 
 const stats = runAllSimulations(RUNS, penguinCalibration, storedCalibration?.baseline);
-printSimulationResults(stats);
 
 if (storedCalibration) {
+  // 标定验证模式：气球和喜从天降使用用户实际得分，企鹅挖宝使用标定后仿真
+  const baseline = storedCalibration.baseline;
+  const penguin = stats.penguinDig;
+  const avg = (baseline.balloonAvgCoupons + baseline.luckyDropAvgCoupons + penguin.meanCoupons) / 3;
+
+  console.log('========== 用户标定验证 ==========');
+  console.log(`七彩气球（实际）: ${baseline.balloonAvgCoupons}`);
+  console.log(`喜从天降（实际）: ${baseline.luckyDropAvgCoupons}`);
+  console.log(`企鹅挖宝（标定后仿真）: ${penguin.meanCoupons.toFixed(1)}`);
+  console.log(`三游戏平均点券: ${avg.toFixed(1)}`);
+  console.log('==================================');
   console.log('');
   console.log('========== 用户标定记录 ==========');
   console.log(formatCalibrationSummary(storedCalibration));
   console.log('==================================');
+} else {
+  printSimulationResults(stats);
 }
 
 printCalibrationReport();
