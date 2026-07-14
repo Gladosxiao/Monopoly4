@@ -173,8 +173,8 @@ export const LUCKY_DROP_CONFIG = {
 
 /** 企鹅挖宝平衡参数 */
 export const PENGUIN_DIG_CONFIG = {
-  /** 游戏时长（毫秒）：15s */
-  duration: 15000,
+  /** 游戏时长（毫秒）：12s（比 15s 再减少 3s） */
+  duration: 12000,
 
   /** 记忆阶段时长（毫秒） */
   memorizeDuration: 3000,
@@ -198,14 +198,14 @@ export const PENGUIN_DIG_CONFIG = {
 
   /**
    * 埋藏物类型定义（分值、生成权重）。
-   * 所有得分已减半，配合 200ms 冷却避免收益过高。
+   * 得分在当前基础上再提升 2 倍，配合 12s 总时长平衡收益。
    */
   items: [
-    { type: 'diamond' as const, score: 8, weight: 5 },
-    { type: 'gold' as const, score: 4, weight: 10 },
-    { type: 'sapphire' as const, score: 3, weight: 15 },
-    { type: 'ruby' as const, score: 3, weight: 15 },
-    { type: 'ice' as const, score: 1, weight: 30 },
-    { type: 'bomb' as const, score: -6, weight: 12 },
+    { type: 'diamond' as const, score: 16, weight: 5 },
+    { type: 'gold' as const, score: 8, weight: 10 },
+    { type: 'sapphire' as const, score: 6, weight: 15 },
+    { type: 'ruby' as const, score: 6, weight: 15 },
+    { type: 'ice' as const, score: 2, weight: 30 },
+    { type: 'bomb' as const, score: -12, weight: 12 },
   ],
 } as const;
