@@ -2,6 +2,7 @@ import type { IMiniGame, MiniGameConfig, MiniGameResult, MiniGameType } from '@m
 import { BalloonMiniGame } from './balloon.js';
 import { LuckyDropGame } from './luckyDrop.js';
 import { PenguinDigGame } from './penguinDig.js';
+import { BALLOON_CONFIG, LUCKY_DROP_CONFIG, PENGUIN_DIG_CONFIG } from './balance/config.js';
 
 /** 小游戏管理器，负责创建实例、控制生命周期与结果回调 */
 export class MiniGameManager {
@@ -53,21 +54,21 @@ export class MiniGameManager {
       case 'balloon':
         return {
           type: 'balloon',
-          duration: 30000,
+          duration: BALLOON_CONFIG.duration,
           canvasWidth: 800,
           canvasHeight: 600,
         };
       case 'luckyDrop':
         return {
           type: 'luckyDrop',
-          duration: 30000,
+          duration: LUCKY_DROP_CONFIG.duration,
           canvasWidth: 800,
           canvasHeight: 600,
         };
       case 'penguinDig':
         return {
           type: 'penguinDig',
-          duration: 30000,
+          duration: PENGUIN_DIG_CONFIG.duration,
           canvasWidth: 800,
           canvasHeight: 600,
         };
