@@ -127,7 +127,7 @@ interface CalibrationResult {
   targetCoupons: number;            // 默认 100
   balloonScoreMultiplier: number;   // 100 / 用户气球实际平均点券
   luckyDropScoreMultiplier: number; // 100 / 用户喜从天降实际平均点券
-  penguinScoreMultiplier: number;   // 100 / (预计点击次数 × 单格期望分值)
+  penguinScoreMultiplier: number;   // 100 / (预计点击次数 × 单格期望分值) × 1.5
   recommendedCooldownMs: number;    // 企鹅挖宝点击冷却
   // ...
 }
@@ -157,12 +157,12 @@ penguinDig: 平均点券=130.9, 标准差=58.1, 范围=[0, 342], 平均操作=45
 ========== 用户标定验证（应用倍率后） ==========
 七彩气球：138 × 0.72 ≈ 99
 喜从天降：113 × 0.88 ≈ 99
-企鹅挖宝（标定后仿真）：114.4
-三游戏平均点券: 104.1
+企鹅挖宝（标定后仿真）：147.7
+三游戏平均点券: 115.2
 ================================================
 ```
 
-该用户三局收益通过个性化倍率收敛到约 **100 点券**；企鹅挖宝冷却已固定为 **200ms**，当前配置下倍率 ×0.76。
+该用户三局收益通过个性化倍率收敛到约 **100～115 点券**；企鹅挖宝冷却已固定为 **200ms**，当前配置下倍率 ×1.13（企鹅额外 ×1.5 收益加成）。
 
 ### 5.5 标定参数文件
 
@@ -259,30 +259,27 @@ const TARGET_USER_COUPONS = 100;
 balloonScoreMultiplier   = clamp(TARGET_USER_COUPONS / balloonAvgCoupons,   0.1, 2.0);
 luckyDropScoreMultiplier = clamp(TARGET_USER_COUPONS / luckyDropAvgCoupons, 0.1, 2.0);
 
-// 3. 企鹅挖宝：根据用户点击节奏推断冷却，再反推分值倍率
-estimatedClickInterval = balloonAvgTimeBetweenClicks
-  * (1 + (1 - balloonAccuracy) * 0.5)    // 命中率低则增加冷却，避免误触
-  * (1 - (catchRate - 0.5) * 0.2);       // 接取率高则降低冷却
-recommendedCooldownMs = clamp(estimatedClickInterval, 200, 1200);
+// 3. 企鹅挖宝：冷却固定为配置值（当前 200ms），反推分值倍率后再额外 ×1.5
+recommendedCooldownMs = PENGUIN_DIG_CONFIG.digCooldownMs;
 
 projectedClicks = (PENGUIN_DIG_CONFIG.duration - PENGUIN_DIG_CONFIG.memorizeDuration) / recommendedCooldownMs;
 penguinScoreMultiplier = clamp(
   TARGET_USER_COUPONS / (projectedClicks * expectedScorePerDig()),
   0.25,
   4.0
-);
+) * 1.5; // 企鹅挖宝收益额外加成
 ```
 
-示例输出（目标 100 点券，基于上述用户标定文件）：
+示例输出（目标 100 点券，基于 `/Users/sam/Downloads/minigame-calibration-1784044623954.json`）：
 
 ```
-用户基准期望点券: 317（气球 134 + 喜从天降 500）
+用户基准期望点券: 106（气球 138 + 喜从天降 113）
 目标点券: 100
-七彩气球得分倍率: ×0.75
-喜从天降得分倍率: ×0.20
-企鹅挖宝点击冷却: 545ms
-企鹅挖宝得分倍率: ×0.97
-标定后随机玩家期望点券: 102
+七彩气球得分倍率: ×0.72
+喜从天降得分倍率: ×0.88
+企鹅挖宝点击冷却: 200ms
+企鹅挖宝得分倍率: ×1.13
+标定后随机玩家期望点券: 150
 ```
 
 持久化文件：`packages/frontend/src/minigames/balance/storage.ts`

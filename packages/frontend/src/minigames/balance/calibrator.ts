@@ -86,10 +86,11 @@ export function calibratePenguinDig(baseline: CalibrationBaseline): CalibrationR
   // 企鹅挖宝默认期望（倍率 1.0）
   const defaultPenguinCoupons = projectedClicks * scorePerDig;
 
-  // 反推企鹅分值倍率，使期望点券接近目标
+  // 反推企鹅分值倍率，使期望点券接近目标；在此基础上再额外 ×1.5，让企鹅挖宝收益更有感
   let penguinScoreMultiplier =
     defaultPenguinCoupons <= 0 ? 1 : TARGET_USER_COUPONS / defaultPenguinCoupons;
   penguinScoreMultiplier = Math.max(0.25, Math.min(4.0, penguinScoreMultiplier));
+  penguinScoreMultiplier = Math.max(0.25, Math.min(6.0, penguinScoreMultiplier * 1.5));
 
   // 气球 / 喜从天降得分倍率：直接按比例压到目标值
   const balloonScoreMultiplier = Math.max(
