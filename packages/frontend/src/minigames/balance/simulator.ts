@@ -79,11 +79,11 @@ function simulateBalloonGame(metrics?: MiniGameMetrics): SimulationResult {
   let timeScale = 1;
   let endTime = duration;
 
-  // 若提供了用户标定指标，则按真实数据驱动模拟；否则使用默认经验值
-  const rawClickInterval = metrics?.avgTimeBetweenClicks ?? 400;
-  const clickInterval = rawClickInterval > 50 && rawClickInterval < 2000 ? rawClickInterval : 400;
-  const rawAccuracy = metrics?.accuracy ?? 0.7;
-  const hitChance = rawAccuracy > 0 && rawAccuracy <= 1 ? rawAccuracy : 0.7;
+  // 若提供了用户标定指标，则按真实数据驱动模拟；否则使用最新人类玩家标定均值
+  const rawClickInterval = metrics?.avgTimeBetweenClicks ?? 881;
+  const clickInterval = rawClickInterval > 50 && rawClickInterval < 2000 ? rawClickInterval : 881;
+  const rawAccuracy = metrics?.accuracy ?? 0.91;
+  const hitChance = rawAccuracy > 0 && rawAccuracy <= 1 ? rawAccuracy : 0.91;
   const aimRadiusMultiplier = 1.2;
 
   for (let t = 0; t < duration; t += 16.67) {
@@ -218,15 +218,15 @@ function simulateLuckyDropGame(metrics?: MiniGameMetrics): SimulationResult {
   let playerX = width / 2;
 
   // 使用用户标定指标：接取率决定追踪注意力，平台速度决定移动上限，方向变化决定抖动幅度
-  const rawCatchRate = metrics?.catchRate ?? 0.7;
-  const attentionProbability = rawCatchRate > 0 && rawCatchRate <= 1 ? rawCatchRate : 0.7;
-  const rawPlatformSpeed = metrics?.avgPlatformSpeed ?? 0;
+  const rawCatchRate = metrics?.catchRate ?? 0.52;
+  const attentionProbability = rawCatchRate > 0 && rawCatchRate <= 1 ? rawCatchRate : 0.52;
+  const rawPlatformSpeed = metrics?.avgPlatformSpeed ?? 0.187;
   const speedFactor =
     rawPlatformSpeed > 0
       ? Math.max(0.2, Math.min(1.0, (rawPlatformSpeed * 1000) / LUCKY_DROP_CONFIG.playerMaxSpeed))
-      : 0.85;
-  const directionChanges = metrics?.directionChangesPerSec ?? 2.5;
-  const jitterAmplitude = Math.max(10, directionChanges * 16); // px/s，默认 2.5 -> 40
+      : 0.445;
+  const directionChanges = metrics?.directionChangesPerSec ?? 0;
+  const jitterAmplitude = Math.max(10, directionChanges * 16); // px/s，默认 0 -> 10
 
   for (let t = 0; t < duration; t += 16.67) {
     const elapsedSec = t / 1000;

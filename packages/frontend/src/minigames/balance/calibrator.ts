@@ -72,24 +72,13 @@ export function calibratePenguinDig(baseline: CalibrationBaseline): CalibrationR
   // 企鹅挖宝使用自身配置时长，而不是用户前两局游戏的 durationMs
   const digDuration = PENGUIN_DIG_CONFIG.duration - PENGUIN_DIG_CONFIG.memorizeDuration;
 
-  // 从气球指标推断玩家的点击节奏
-  let estimatedClickInterval: number = PENGUIN_DIG_CONFIG.digCooldownMs;
+  // 过程指标（仅用于报告展示）
   const balloonAccuracy = baseline.balloonMetrics?.accuracy ?? 0.5;
   const avgTimeBetweenClicks = baseline.balloonMetrics?.avgTimeBetweenClicks ?? 400;
-
-  if (avgTimeBetweenClicks > 50 && avgTimeBetweenClicks < 2000) {
-    estimatedClickInterval = avgTimeBetweenClicks;
-  }
-
-  // 命中率低说明玩家偏休闲，额外增加冷却以避免误触过多
-  estimatedClickInterval *= 1 + (1 - Math.min(1, balloonAccuracy)) * 0.5;
-
-  // 喜从天降接取率高说明玩家追踪能力强，可适当降低冷却
   const catchRate = baseline.luckyDropMetrics?.catchRate ?? 0.5;
-  estimatedClickInterval *= 1 - (Math.min(1, catchRate) - 0.5) * 0.2;
 
-  // 限制冷却在合理范围
-  const recommendedCooldownMs = Math.max(200, Math.min(1200, estimatedClickInterval));
+  // 企鹅挖宝冷却直接采用配置值（当前为 200ms），不再按用户点击节奏动态推算
+  const recommendedCooldownMs = PENGUIN_DIG_CONFIG.digCooldownMs;
 
   // 根据冷却反推预计点击次数
   const projectedClicks = digDuration / recommendedCooldownMs;

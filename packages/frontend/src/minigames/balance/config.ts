@@ -18,8 +18,8 @@ export const BALLOON_CONFIG = {
   /** 游戏时长（毫秒） */
   duration: 30000,
 
-  /** 基础生成间隔（毫秒）：1.5 倍生成密度 */
-  spawnIntervalMs: 433,
+  /** 基础生成间隔（毫秒）：在当前 1.5 倍密度基础上再提升 1.5 倍 */
+  spawnIntervalMs: 289,
 
   /** 气球半径范围 */
   radius: { min: 24, max: 36 },
@@ -54,20 +54,20 @@ export const BALLOON_CONFIG = {
     mystery: 0.16, // double + mystery = 0.28，其余为 normal
   },
 
-  /** 普通气球基础速度（像素/帧，按 60fps 估算） */
-  normalBaseSpeed: 1.8,
+  /** 普通气球基础速度（像素/帧，按 60fps 估算）：在当前基础上提升 1.2 倍 */
+  normalBaseSpeed: 2.16,
 
   /** 分值对速度的加成系数：分值越高飞得越快 */
-  normalScoreSpeedFactor: 0.5,
+  normalScoreSpeedFactor: 0.6,
 
   /** 普通气球速度随机扰动范围 */
-  normalRandomSpeedRange: 0.6,
+  normalRandomSpeedRange: 0.72,
 
   /** 双倍气球速度范围 */
-  doubleSpeed: { min: 2.0, max: 2.8 },
+  doubleSpeed: { min: 2.4, max: 3.36 },
 
   /** 问号气球速度范围 */
-  mysterySpeed: { min: 1.8, max: 2.5 },
+  mysterySpeed: { min: 2.16, max: 3.0 },
 
   /** 开场阶段（毫秒）：气球从屏幕中部生成，方便玩家进入节奏 */
   introDurationMs: 2500,
@@ -155,13 +155,13 @@ export const LUCKY_DROP_CONFIG = {
    * 使该用户最终点券接近目标 100。
    */
   items: [
-    { kind: 'chest' as const, probability: 0.008, radius: 18, value: 53, baseSpeed: 140 },
-    { kind: 'gold' as const, probability: 0.10, radius: 17, value: 26, baseSpeed: 150 },
-    { kind: 'silver' as const, probability: 0.28, radius: 14, value: 12, baseSpeed: 160 },
-    { kind: 'coin' as const, probability: 0.48, radius: 10, value: 3, baseSpeed: 170 },
-    { kind: 'clock' as const, probability: 0.58, radius: 15, value: 0, baseSpeed: 165, slowMotionMs: 5000 },
-    { kind: 'spike' as const, probability: 0.76, radius: 13, value: -11, baseSpeed: 180 },
-    { kind: 'bomb' as const, probability: 1.0, radius: 13, value: -23, baseSpeed: 175 },
+    { kind: 'chest' as const, probability: 0.016, radius: 18, value: 26, baseSpeed: 140 },
+    { kind: 'gold' as const, probability: 0.20, radius: 17, value: 13, baseSpeed: 150 },
+    { kind: 'silver' as const, probability: 0.38, radius: 14, value: 6, baseSpeed: 160 },
+    { kind: 'coin' as const, probability: 0.58, radius: 10, value: 2, baseSpeed: 170 },
+    { kind: 'clock' as const, probability: 0.68, radius: 15, value: 0, baseSpeed: 165, slowMotionMs: 5000 },
+    { kind: 'spike' as const, probability: 0.86, radius: 13, value: -5, baseSpeed: 180 },
+    { kind: 'bomb' as const, probability: 1.0, radius: 13, value: -11, baseSpeed: 175 },
   ],
 
   /** 时间减缓倍率（掉落速度与倒计时流逝均受影响） */
@@ -188,8 +188,8 @@ export const PENGUIN_DIG_CONFIG = {
   /** 最高可获得点券 */
   maxCoupons: 500,
 
-  /** 默认点击冷却（毫秒）：0.1s，限制最快连点 */
-  digCooldownMs: 100,
+  /** 默认点击冷却（毫秒）：0.2s，限制最快连点 */
+  digCooldownMs: 200,
 
   /** 网格布局参数 */
   paddingX: 48,
@@ -198,14 +198,14 @@ export const PENGUIN_DIG_CONFIG = {
 
   /**
    * 埋藏物类型定义（分值、生成权重）。
-   * 分值已随时长缩短而上调，保持均值 100+。
+   * 所有得分已减半，配合 200ms 冷却避免收益过高。
    */
   items: [
-    { type: 'diamond' as const, score: 15, weight: 5 },
-    { type: 'gold' as const, score: 7, weight: 10 },
-    { type: 'sapphire' as const, score: 5, weight: 15 },
-    { type: 'ruby' as const, score: 5, weight: 15 },
-    { type: 'ice' as const, score: 2, weight: 30 },
-    { type: 'bomb' as const, score: -11, weight: 12 },
+    { type: 'diamond' as const, score: 8, weight: 5 },
+    { type: 'gold' as const, score: 4, weight: 10 },
+    { type: 'sapphire' as const, score: 3, weight: 15 },
+    { type: 'ruby' as const, score: 3, weight: 15 },
+    { type: 'ice' as const, score: 1, weight: 30 },
+    { type: 'bomb' as const, score: -6, weight: 12 },
   ],
 } as const;
