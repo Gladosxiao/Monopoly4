@@ -155,13 +155,13 @@ export const LUCKY_DROP_CONFIG = {
    * 使该用户最终点券接近目标 100。
    */
   items: [
-    { kind: 'chest' as const, probability: 0.008, radius: 18, value: 35, baseSpeed: 140 },
-    { kind: 'gold' as const, probability: 0.10, radius: 17, value: 17, baseSpeed: 150 },
-    { kind: 'silver' as const, probability: 0.28, radius: 14, value: 8, baseSpeed: 160 },
-    { kind: 'coin' as const, probability: 0.48, radius: 10, value: 2, baseSpeed: 170 },
+    { kind: 'chest' as const, probability: 0.008, radius: 18, value: 53, baseSpeed: 140 },
+    { kind: 'gold' as const, probability: 0.10, radius: 17, value: 26, baseSpeed: 150 },
+    { kind: 'silver' as const, probability: 0.28, radius: 14, value: 12, baseSpeed: 160 },
+    { kind: 'coin' as const, probability: 0.48, radius: 10, value: 3, baseSpeed: 170 },
     { kind: 'clock' as const, probability: 0.58, radius: 15, value: 0, baseSpeed: 165, slowMotionMs: 5000 },
-    { kind: 'spike' as const, probability: 0.76, radius: 13, value: -7, baseSpeed: 180 },
-    { kind: 'bomb' as const, probability: 1.0, radius: 13, value: -15, baseSpeed: 175 },
+    { kind: 'spike' as const, probability: 0.76, radius: 13, value: -11, baseSpeed: 180 },
+    { kind: 'bomb' as const, probability: 1.0, radius: 13, value: -23, baseSpeed: 175 },
   ],
 
   /** 时间减缓倍率（掉落速度与倒计时流逝均受影响） */
@@ -173,8 +173,8 @@ export const LUCKY_DROP_CONFIG = {
 
 /** 企鹅挖宝平衡参数 */
 export const PENGUIN_DIG_CONFIG = {
-  /** 游戏时长（毫秒）：20s */
-  duration: 20000,
+  /** 游戏时长（毫秒）：15s */
+  duration: 15000,
 
   /** 记忆阶段时长（毫秒） */
   memorizeDuration: 3000,
@@ -188,8 +188,8 @@ export const PENGUIN_DIG_CONFIG = {
   /** 最高可获得点券 */
   maxCoupons: 500,
 
-  /** 默认点击冷却（毫秒）：0.3s，限制最快连点 */
-  digCooldownMs: 300,
+  /** 默认点击冷却（毫秒）：0.1s，限制最快连点 */
+  digCooldownMs: 100,
 
   /** 网格布局参数 */
   paddingX: 48,

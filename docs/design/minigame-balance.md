@@ -57,17 +57,17 @@
 ### 4.2 喜从天降
 
 - **20 秒内**控制底部平台接住掉落物（因存在时钟减速，总时长缩短）。
-- 宝箱/金/银/玉币：加分（宝箱 35、金 17、银 8、玉币 2），**得分道具均不使用红色/黑色**。分值已根据最新用户标定结果（luckyDropScoreMultiplier ≈ 0.21）等比例下调，使该用户最终点券接近目标 100。
+- 宝箱/金/银/玉币：加分（宝箱 53、金 26、银 12、玉币 3），**得分道具均不使用红色/黑色**。分值在当前标定基础上再提升 1.5 倍，用于测试不同分值档位。
 - 时钟：白底蓝色时钟，触发 5 秒慢动作，掉落物减速、倒计时减半，平台移动不受影响。
-- 红色刺球 / 黑色炸弹：**红黑配色扣分道具**（刺球 -7、炸弹 -15）。
+- 红色刺球 / 黑色炸弹：**红黑配色扣分道具**（刺球 -11、炸弹 -23）。
 - 难度曲线倍率进一步下调至 **0.6**，末端速度约为初始的 1.6 倍，避免后期仍然过快。
 
 ### 4.3 企鹅挖宝
 
 - **7×10 = 70 格雪地网格**，较之前 8×12 减少约 27%，单格更大、操作更从容。
-- **游戏时长 20 秒**（含 3 秒记忆阶段），节奏更紧凑。
+- **游戏时长 15 秒**（含 3 秒记忆阶段），节奏更紧凑。
 - 玩家凭记忆点击格子挖掘。
-- 每次挖掘有 **300ms 冷却**（0.3s），限制总点击次数。
+- 每次挖掘有 **100ms 冷却**（0.1s），限制总点击次数。
 - 钻石/金块/宝石加分（钻石 15、金块 7、蓝宝石 5、翡翠 5、冰块 2），**原红宝石已改为绿色翡翠以与黑红炸弹彻底区分**；炸弹扣分（-11），空挖不加分。
 
 ## 5. 平衡标定方法
@@ -137,32 +137,32 @@ interface CalibrationResult {
 - **喜从天降**：结算得分在 `stop()` 中乘以 `luckyDropScoreMultiplier`。
 - **企鹅挖宝**：通过 `applyCalibration(cooldownMs, penguinScoreMultiplier)` 同时调整冷却与分值倍率。
 
-`MiniGameManager.createGame()` 会在创建实例时根据 `scoreMultipliers` 自动应用倍率；`test-minigames.ts` 手动启动任意小游戏时也会读取已保存的标定数据并传入。旧版标定 JSON（缺少倍率字段）会通过 `storage.ts` 的 `normalizeCalibration()` 自动反算补齐，保证用户已导出的历史文件仍然可用。
+`MiniGameManager.createGame()` 会在创建实例时根据 `scoreMultipliers` 自动应用倍率；`test-minigames.ts` 手动启动任意小游戏时也会读取已保存的标定数据并传入。`storage.ts` 的 `normalizeCalibration()` 会在每次读取/导入时根据**当前游戏配置**重新计算倍率，因此即使后续调整 `config.ts` 里的道具分值、时长等参数，旧标定文件也能自动适配，不会用过期倍率。
 
 ### 5.4 当前模拟结果
 
 **默认随机玩家模拟（未应用用户标定，当前配置）：**
 
 ```
-balloon:    平均点券=119.1, 标准差=20.7, 范围=[48, 191], 平均操作=74.0, 平均命中=31.5
-luckyDrop:  平均点券=22.8,  标准差=22.9, 范围=[0, 151], 平均操作=14.2, 平均命中=12.7
-penguinDig: 平均点券=144.7, 标准差=61.4, 范围=[0, 380], 平均操作=56.0, 平均命中=56.0
+balloon:    平均点券=118.4, 标准差=21.3, 范围=[34, 185], 平均操作=74.0, 平均命中=31.4
+luckyDrop:  平均点券=34.0,  标准差=34.7, 范围=[0, 201], 平均操作=14.1, 平均命中=12.7
+penguinDig: 平均点券=306.2, 标准差=109.1, 范围=[0, 500], 平均操作=120.0, 平均命中=120.0
 ```
 
-> 注：喜从天降分值已根据用户标定结果大幅下调，因此「随机玩家」基准暂时偏低；实际对局中会通过用户个性化倍率或后续二次标定重新收敛到目标 100。气球与企鹅挖宝随机基准仍在 100+。
+> 注：当前为激进测试参数（喜从天降分值×1.5、企鹅挖宝 15s/100ms），因此随机玩家基准不均匀；实际对局中通过用户个性化倍率收敛到目标 100。
 
-**用户标定实例（`/Users/sam/Downloads/minigame-calibration-1783961905414.json`）：**
+**用户标定实例（`/Users/sam/Downloads/minigame-calibration-1784043927967.json`，读取时按当前配置重新计算倍率）：**
 
 ```
 ========== 用户标定验证（应用倍率后） ==========
-七彩气球：134 × 0.75 ≈ 101
-喜从天降：500 × 0.20 ≈ 100
-企鹅挖宝（标定后仿真）：102.3
-三游戏平均点券: 101.1
+七彩气球：130 × 0.77 ≈ 100
+喜从天降：82 × 1.22 ≈ 100
+企鹅挖宝（标定后仿真）：93.1
+三游戏平均点券: 97.7
 ================================================
 ```
 
-该用户前两局实际收益差异较大（气球 134、喜从天降 500），通过个性化倍率压缩后，三局收益都收敛到约 **100 点券**，实现了「同一玩家不同小游戏收益一致」的目标。
+该用户三局收益通过个性化倍率收敛到约 **100 点券**；由于 `normalizeCalibration()` 会在读取时根据当前 `config.ts` 重新计算倍率，因此即使后续继续调整道具分值或时长，旧标定文件也不会失效。
 
 ### 5.5 标定参数文件
 
@@ -199,20 +199,20 @@ BALLOON_CONFIG.mysteryEffects = [
 LUCKY_DROP_CONFIG.duration = 20000;
 LUCKY_DROP_CONFIG.speedCurveMultiplier = 0.6; // 末端速度约 1.6 倍
 LUCKY_DROP_CONFIG.items = [
-  { kind: 'chest',  probability: 0.008, value: 35 },
-  { kind: 'gold',   probability: 0.10,  value: 17 },
-  { kind: 'silver', probability: 0.28,  value: 8 },
-  { kind: 'coin',   probability: 0.48,  value: 2 },    // 青色玉币
+  { kind: 'chest',  probability: 0.008, value: 53 },
+  { kind: 'gold',   probability: 0.10,  value: 26 },
+  { kind: 'silver', probability: 0.28,  value: 12 },
+  { kind: 'coin',   probability: 0.48,  value: 3 },    // 青色玉币
   { kind: 'clock',  probability: 0.58,  value: 0, slowMotionMs: 5000 },
-  { kind: 'spike',  probability: 0.76,  value: -7 },   // 红色刺球
-  { kind: 'bomb',   probability: 1.0,   value: -15 },  // 黑色炸弹
+  { kind: 'spike',  probability: 0.76,  value: -11 },  // 红色刺球
+  { kind: 'bomb',   probability: 1.0,   value: -23 },  // 黑色炸弹
 ];
 
-// 企鹅挖宝：7×10 = 70 格，时长 20s，点击冷却 300ms；原红宝石改为绿色翡翠
-PENGUIN_DIG_CONFIG.duration = 20000;
+// 企鹅挖宝：7×10 = 70 格，时长 15s，点击冷却 100ms；原红宝石改为绿色翡翠
+PENGUIN_DIG_CONFIG.duration = 15000;
 PENGUIN_DIG_CONFIG.cols = 7;
 PENGUIN_DIG_CONFIG.rows = 10;
-PENGUIN_DIG_CONFIG.digCooldownMs = 300;
+PENGUIN_DIG_CONFIG.digCooldownMs = 100;
 PENGUIN_DIG_CONFIG.items = [
   { type: 'diamond',  score: 15, weight: 5 },
   { type: 'gold',     score: 7,  weight: 10 },

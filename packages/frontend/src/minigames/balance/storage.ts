@@ -17,32 +17,16 @@ export interface StoredCalibration {
 }
 
 /**
- * 兼容旧版标定文件：若 result 中缺少新版倍率字段，
- * 则根据 baseline 重新调用 calibratePenguinDig 反算并补齐。
+ * 标定数据归一化。
+ *
+ * result 中的倍率完全由 baseline 与当前游戏配置（config.ts）推导得出，
+ * 因此每次读取/导入时都重新计算，避免游戏参数调整后旧标定文件里的倍率失效。
  */
 export function normalizeCalibration(data: StoredCalibration): StoredCalibration {
-  const result = data.result;
-  const hasAllMultipliers =
-    typeof result.balloonScoreMultiplier === 'number' &&
-    typeof result.luckyDropScoreMultiplier === 'number' &&
-    typeof result.penguinScoreMultiplier === 'number' &&
-    typeof result.targetCoupons === 'number';
-
-  if (hasAllMultipliers) {
-    return data;
-  }
-
   const recomputed = calibratePenguinDig(data.baseline);
   return {
     baseline: data.baseline,
-    result: {
-      ...recomputed,
-      // 保留旧文件中已有的字段（如 projectedRandomCoupons 可能已被记录）
-      projectedRandomCoupons:
-        typeof result.projectedRandomCoupons === 'number'
-          ? result.projectedRandomCoupons
-          : recomputed.projectedRandomCoupons,
-    },
+    result: recomputed,
     calibratedAt: data.calibratedAt,
   };
 }
