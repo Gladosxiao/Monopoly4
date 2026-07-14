@@ -17,6 +17,8 @@ export interface LaunchMiniGameOptions {
   onEnd?: (result: MiniGameResult) => void;
   /** 仅对企鹅挖宝生效：标定参数 */
   calibration?: { cooldownMs?: number; scoreMultiplier?: number };
+  /** 个性化得分倍率（由标定结果计算，使该用户三局得分接近） */
+  scoreMultipliers?: { balloon?: number; luckyDrop?: number; penguinDig?: number };
 }
 
 /**
@@ -31,5 +33,5 @@ export function launchMiniGame(
   type: MiniGameType,
   options: LaunchMiniGameOptions = {}
 ): () => MiniGameResult | null {
-  return miniGameManager.start(type, options, options.calibration);
+  return miniGameManager.start(type, options, options.calibration, options.scoreMultipliers);
 }

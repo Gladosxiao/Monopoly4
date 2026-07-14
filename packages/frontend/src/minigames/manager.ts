@@ -14,18 +14,32 @@ export class MiniGameManager {
   private cleanupFns: Array<() => void> = [];
 
   /** 根据类型创建小游戏实例 */
-  createGame(type: MiniGameType, calibration?: { cooldownMs?: number; scoreMultiplier?: number }): IMiniGame {
+  createGame(
+    type: MiniGameType,
+    calibration?: { cooldownMs?: number; scoreMultiplier?: number },
+    scoreMultipliers?: { balloon?: number; luckyDrop?: number; penguinDig?: number }
+  ): IMiniGame {
     const config = this.getDefaultConfig(type);
     switch (type) {
-      case 'balloon':
-        return new BalloonMiniGame();
-      case 'luckyDrop':
-        return new LuckyDropGame(config);
+      case 'balloon': {
+        const game = new BalloonMiniGame();
+        if (scoreMultipliers?.balloon) {
+          game.applyScoreMultiplier(scoreMultipliers.balloon);
+        }
+        return game;
+      }
+      case 'luckyDrop': {
+        const game = new LuckyDropGame(config);
+        if (scoreMultipliers?.luckyDrop) {
+          game.applyScoreMultiplier(scoreMultipliers.luckyDrop);
+        }
+        return game;
+      }
       case 'penguinDig': {
         const game = new PenguinDigGame();
-        if (calibration) {
-          game.applyCalibration(calibration.cooldownMs ?? 500, calibration.scoreMultiplier ?? 1);
-        }
+        const penguinMultiplier =
+          scoreMultipliers?.penguinDig ?? calibration?.scoreMultiplier ?? 1;
+        game.applyCalibration(calibration?.cooldownMs ?? 500, penguinMultiplier);
         return game;
       }
       default:
@@ -69,11 +83,12 @@ export class MiniGameManager {
       onUpdate?: (score: number) => void;
       onEnd?: (result: MiniGameResult) => void;
     },
-    calibration?: { cooldownMs?: number; scoreMultiplier?: number }
+    calibration?: { cooldownMs?: number; scoreMultiplier?: number },
+    scoreMultipliers?: { balloon?: number; luckyDrop?: number; penguinDig?: number }
   ): () => MiniGameResult | null {
     this.reset();
 
-    const game = this.createGame(type, calibration);
+    const game = this.createGame(type, calibration, scoreMultipliers);
     this.currentGame = game;
 
     this.container = this.createOverlay();

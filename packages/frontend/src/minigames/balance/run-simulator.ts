@@ -12,7 +12,7 @@
 import fs from 'fs';
 import { runAllSimulations, printSimulationResults } from './simulator.js';
 import { printCalibrationReport } from './calibrator.js';
-import { formatCalibrationSummary, type StoredCalibration } from './storage.js';
+import { formatCalibrationSummary, normalizeCalibration, type StoredCalibration } from './storage.js';
 
 const RUNS = 2000;
 
@@ -44,7 +44,7 @@ function loadCalibrationFile(path: string): StoredCalibration | null {
     ) {
       return null;
     }
-    return data;
+    return normalizeCalibration(data);
   } catch {
     return null;
   }
@@ -63,24 +63,27 @@ if (calibrationPath) {
   storedCalibration = loaded;
   penguinCalibration = {
     cooldownMs: loaded.result.recommendedCooldownMs,
-    scoreMultiplier: loaded.result.recommendedScoreMultiplier,
+    scoreMultiplier: loaded.result.penguinScoreMultiplier ?? loaded.result.recommendedScoreMultiplier,
   };
 }
 
 const stats = runAllSimulations(RUNS, penguinCalibration, storedCalibration?.baseline);
 
 if (storedCalibration) {
-  // 标定验证模式：气球和喜从天降使用用户实际得分，企鹅挖宝使用标定后仿真
+  // 标定验证模式：展示应用个性化倍率后的预期最终得分
   const baseline = storedCalibration.baseline;
-  const penguin = stats.penguinDig;
-  const avg = (baseline.balloonAvgCoupons + baseline.luckyDropAvgCoupons + penguin.meanCoupons) / 3;
+  const result = storedCalibration.result;
+  const balloonAdjusted = Math.round(baseline.balloonAvgCoupons * result.balloonScoreMultiplier);
+  const luckyDropAdjusted = Math.round(baseline.luckyDropAvgCoupons * result.luckyDropScoreMultiplier);
+  const penguinAdjusted = stats.penguinDig.meanCoupons;
+  const avg = (balloonAdjusted + luckyDropAdjusted + penguinAdjusted) / 3;
 
-  console.log('========== 用户标定验证 ==========');
-  console.log(`七彩气球（实际）: ${baseline.balloonAvgCoupons}`);
-  console.log(`喜从天降（实际）: ${baseline.luckyDropAvgCoupons}`);
-  console.log(`企鹅挖宝（标定后仿真）: ${penguin.meanCoupons.toFixed(1)}`);
+  console.log('========== 用户标定验证（应用倍率后） ==========');
+  console.log(`七彩气球：${baseline.balloonAvgCoupons} × ${result.balloonScoreMultiplier} ≈ ${balloonAdjusted}`);
+  console.log(`喜从天降：${baseline.luckyDropAvgCoupons} × ${result.luckyDropScoreMultiplier} ≈ ${luckyDropAdjusted}`);
+  console.log(`企鹅挖宝（标定后仿真）：${penguinAdjusted.toFixed(1)}`);
   console.log(`三游戏平均点券: ${avg.toFixed(1)}`);
-  console.log('==================================');
+  console.log('================================================');
   console.log('');
   console.log('========== 用户标定记录 ==========');
   console.log(formatCalibrationSummary(storedCalibration));

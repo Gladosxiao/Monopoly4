@@ -63,6 +63,7 @@ export class LuckyDropGame implements IMiniGame {
   private hasEnded = false;
 
   private score = 0;
+  private scoreMultiplier = 1;
   private startTime = 0;
   private lastFrameTime = 0;
   private remainingMs = 0;
@@ -110,6 +111,13 @@ export class LuckyDropGame implements IMiniGame {
   constructor(config: MiniGameConfig) {
     this.config = { ...config };
     this.remainingMs = config.duration;
+  }
+
+  /**
+   * 应用个性化得分倍率（由标定结果计算）。
+   */
+  applyScoreMultiplier(multiplier: number): void {
+    this.scoreMultiplier = Math.max(0.1, Math.min(5.0, multiplier));
   }
 
   /**
@@ -178,10 +186,11 @@ export class LuckyDropGame implements IMiniGame {
     }
     this.isRunning = false;
 
+    const finalScore = Math.max(0, Math.round(this.score * this.scoreMultiplier));
     const result: MiniGameResult = {
       type: this.config.type,
-      score: this.score,
-      coupons: Math.min(this.score, 500),
+      score: finalScore,
+      coupons: Math.min(finalScore, 500),
       duration,
       metrics: this.computeMetrics(duration),
     };

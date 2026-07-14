@@ -114,6 +114,7 @@ export class BalloonMiniGame implements IMiniGame {
   private ended = false;
   private rafId = 0;
   private lastFrameTime = 0;
+  private scoreMultiplier = 1;
 
   // 过程指标采集
   private clickTimes: number[] = [];
@@ -132,6 +133,11 @@ export class BalloonMiniGame implements IMiniGame {
       canvasWidth: 800,
       canvasHeight: 600,
     };
+  }
+
+  /** 应用个性化得分倍率（由标定结果计算） */
+  applyScoreMultiplier(multiplier: number): void {
+    this.scoreMultiplier = Math.max(0.1, Math.min(5.0, multiplier));
   }
 
   /** 启动游戏，绑定 Canvas 与事件 */
@@ -167,11 +173,13 @@ export class BalloonMiniGame implements IMiniGame {
 
   /** 停止游戏并返回结果 */
   stop(): MiniGameResult {
+    const rawScore = Math.round(this.score * this.scoreMultiplier);
+    const finalScore = Math.max(0, rawScore);
     if (this.ended) {
       return {
         type: GAME_TYPE,
-        score: this.score,
-        coupons: Math.min(this.score, 500),
+        score: finalScore,
+        coupons: Math.min(finalScore, 500),
         duration: Math.round(performance.now() - this.startTime),
         metrics: this.computeMetrics(),
       };
@@ -179,10 +187,10 @@ export class BalloonMiniGame implements IMiniGame {
     this.ended = true;
     this.cleanup();
     const duration = Math.round(performance.now() - this.startTime);
-    const coupons = Math.min(this.score, 500);
+    const coupons = Math.min(finalScore, 500);
     const result: MiniGameResult = {
       type: GAME_TYPE,
-      score: this.score,
+      score: finalScore,
       coupons,
       duration,
       metrics: this.computeMetrics(),

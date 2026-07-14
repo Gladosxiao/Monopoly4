@@ -5,7 +5,7 @@
  * 刷新页面后仍可读取，并用于仿真器验证标定后收益。
  */
 
-import type { CalibrationBaseline, CalibrationResult } from './calibrator.js';
+import { calibratePenguinDig, type CalibrationBaseline, type CalibrationResult } from './calibrator.js';
 
 const CALIBRATION_STORAGE_KEY = 'monopoly4-minigame-calibration-v1';
 
@@ -14,6 +14,37 @@ export interface StoredCalibration {
   baseline: CalibrationBaseline;
   result: CalibrationResult;
   calibratedAt: number;
+}
+
+/**
+ * 兼容旧版标定文件：若 result 中缺少新版倍率字段，
+ * 则根据 baseline 重新调用 calibratePenguinDig 反算并补齐。
+ */
+export function normalizeCalibration(data: StoredCalibration): StoredCalibration {
+  const result = data.result;
+  const hasAllMultipliers =
+    typeof result.balloonScoreMultiplier === 'number' &&
+    typeof result.luckyDropScoreMultiplier === 'number' &&
+    typeof result.penguinScoreMultiplier === 'number' &&
+    typeof result.targetCoupons === 'number';
+
+  if (hasAllMultipliers) {
+    return data;
+  }
+
+  const recomputed = calibratePenguinDig(data.baseline);
+  return {
+    baseline: data.baseline,
+    result: {
+      ...recomputed,
+      // 保留旧文件中已有的字段（如 projectedRandomCoupons 可能已被记录）
+      projectedRandomCoupons:
+        typeof result.projectedRandomCoupons === 'number'
+          ? result.projectedRandomCoupons
+          : recomputed.projectedRandomCoupons,
+    },
+    calibratedAt: data.calibratedAt,
+  };
 }
 
 /** 保存标定结果 */
@@ -42,7 +73,7 @@ export function loadCalibration(): StoredCalibration | null {
     ) {
       return null;
     }
-    return data;
+    return normalizeCalibration(data);
   } catch {
     return null;
   }
@@ -78,7 +109,7 @@ export function importCalibration(json: string): boolean {
     ) {
       return false;
     }
-    saveCalibration(data);
+    saveCalibration(normalizeCalibration(data));
     return true;
   } catch {
     return false;
@@ -93,12 +124,11 @@ export function formatCalibrationSummary(data: StoredCalibration): string {
   const lm = baseline.luckyDropMetrics;
   const parts = [
     `标定时间: ${date}`,
-    `气球点券: ${baseline.balloonAvgCoupons}`,
-    `喜从天降点券: ${baseline.luckyDropAvgCoupons}`,
-    `基准点券: ${result.baselineCoupons}`,
+    `气球点券: ${baseline.balloonAvgCoupons} → ×${result.balloonScoreMultiplier}`,
+    `喜从天降点券: ${baseline.luckyDropAvgCoupons} → ×${result.luckyDropScoreMultiplier}`,
+    `目标点券: ${result.targetCoupons}`,
     `企鹅冷却: ${result.recommendedCooldownMs}ms`,
-    `企鹅倍率: ×${result.recommendedScoreMultiplier}`,
-    `预计企鹅点券: ${result.projectedRandomCoupons}`,
+    `企鹅倍率: ×${result.penguinScoreMultiplier}`,
   ];
   if (bm) {
     parts.push(

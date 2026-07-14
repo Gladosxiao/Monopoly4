@@ -17,6 +17,7 @@ import {
   formatCalibrationSummary,
 } from './minigames/index.js';
 import type { MiniGameType, MiniGameResult } from '@monopoly4/shared';
+import type { CalibrationResult } from './minigames/balance/calibrator.js';
 
 /** 单条历史记录 */
 interface HistoryEntry {
@@ -206,16 +207,21 @@ function startGame(type: MiniGameType): void {
   activeGame = type;
   setButtonsDisabled(true);
 
-  // 企鹅挖宝手动启动时，如果有已保存的标定参数则自动应用
-  const options: { calibration?: { cooldownMs: number; scoreMultiplier: number }; onEnd: (result: MiniGameResult) => void } = {
+  // 如果有已保存的标定数据，自动应用三个游戏的个性化得分倍率，使该用户三局得分接近
+  const stored = loadCalibration();
+  const options: import('./minigames/index.js').LaunchMiniGameOptions = {
     onEnd: (result) => handleEnd(type, result),
   };
-  if (type === 'penguinDig') {
-    const stored = loadCalibration();
-    if (stored) {
+  if (stored) {
+    options.scoreMultipliers = {
+      balloon: stored.result.balloonScoreMultiplier,
+      luckyDrop: stored.result.luckyDropScoreMultiplier,
+      penguinDig: stored.result.penguinScoreMultiplier,
+    };
+    if (type === 'penguinDig') {
       options.calibration = {
         cooldownMs: stored.result.recommendedCooldownMs,
-        scoreMultiplier: stored.result.recommendedScoreMultiplier,
+        scoreMultiplier: stored.result.penguinScoreMultiplier,
       };
     }
   }
@@ -386,14 +392,7 @@ function runCalibrationStep(
 
 function updateCalibrationReport(
   phase: 'step1' | 'step2' | 'calibrated' | 'done',
-  calibration?: {
-    baselineCoupons: number;
-    recommendedCooldownMs: number;
-    recommendedScoreMultiplier: number;
-    projectedRandomCoupons: number;
-    projectedClicks: number;
-    usedMetrics: { avgTimeBetweenClicks: number; balloonAccuracy: number; luckyDropCatchRate: number };
-  },
+  calibration?: CalibrationResult,
   latestResult?: MiniGameResult
 ): void {
   const reportEl = document.getElementById('calibration-report');
@@ -429,10 +428,12 @@ function updateCalibrationReport(
     case 'calibrated':
       if (calibration) {
         reportEl.innerHTML = `
-          <p>📊 用户基准点券：<strong>${calibration.baselineCoupons}</strong></p>
+          <p>📊 用户基准点券：<strong>${calibration.baselineCoupons}</strong>（目标 ${calibration.targetCoupons}）</p>
           <p>🐭 参考指标：气球点击间隔 ${calibration.usedMetrics.avgTimeBetweenClicks}ms，命中率 ${formatPct(calibration.usedMetrics.balloonAccuracy)}，喜从天降接取率 ${formatPct(calibration.usedMetrics.luckyDropCatchRate)}</p>
+          <p>🎈 七彩气球得分倍率：<strong>×${calibration.balloonScoreMultiplier}</strong></p>
+          <p>🎁 喜从天降得分倍率：<strong>×${calibration.luckyDropScoreMultiplier}</strong></p>
           <p>🐧 推荐企鹅挖宝冷却：<strong>${calibration.recommendedCooldownMs}ms</strong>（预计可点击 ${calibration.projectedClicks} 次）</p>
-          <p>🐧 推荐宝藏分值倍率：<strong>×${calibration.recommendedScoreMultiplier}</strong></p>
+          <p>🐧 企鹅挖宝得分倍率：<strong>×${calibration.penguinScoreMultiplier}</strong></p>
           <p>🎯 标定后随机玩家期望：<strong>${calibration.projectedRandomCoupons}</strong> 点券</p>
           <p>请继续玩 <strong>企鹅挖宝</strong> 验证效果…</p>
         `;

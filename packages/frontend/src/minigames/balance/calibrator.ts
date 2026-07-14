@@ -2,11 +2,14 @@
  * 小游戏用户表现标定器
  * --------------------------------
  * 根据用户在前两个小游戏（七彩气球、喜从天降）中的实际点券收益与过程指标，
- * 反推企鹅挖宝的推荐点击冷却与宝藏分值倍率，使三游戏收益期望一致。
+ * 反推三个小游戏的个性化得分倍率，使该用户三局最终得分都接近同一目标（默认 100）。
  */
 
 import type { MiniGameMetrics } from '@monopoly4/shared';
 import { PENGUIN_DIG_CONFIG, TARGET_RANDOM_COUPONS } from './config.js';
+
+/** 用户个性化点券目标（在 100 上下） */
+const TARGET_USER_COUPONS = 100;
 
 /** 用户前两局表现输入 */
 export interface CalibrationBaseline {
@@ -23,12 +26,24 @@ export interface CalibrationBaseline {
 
 /** 标定结果 */
 export interface CalibrationResult {
+  /** 用户前两局平均点券（仅作参考） */
   baselineCoupons: number;
+  /** 个性化目标点券 */
+  targetCoupons: number;
+  /** 推荐企鹅挖宝点击冷却 */
   recommendedCooldownMs: number;
+  /** 推荐企鹅挖宝宝藏分值倍率（使企鹅期望 ≈ targetCoupons） */
   recommendedScoreMultiplier: number;
+  /** 标定后随机玩家（默认操作）的期望点券 */
   projectedRandomCoupons: number;
   /** 标定后预计玩家可点击次数 */
   projectedClicks: number;
+  /** 七彩气球得分倍率（使该用户气球期望 ≈ targetCoupons） */
+  balloonScoreMultiplier: number;
+  /** 喜从天降得分倍率（使该用户喜从天降期望 ≈ targetCoupons） */
+  luckyDropScoreMultiplier: number;
+  /** 企鹅挖宝得分倍率（使该用户企鹅期望 ≈ targetCoupons） */
+  penguinScoreMultiplier: number;
   /** 使用的关键指标摘要 */
   usedMetrics: {
     avgTimeBetweenClicks: number;
@@ -45,18 +60,17 @@ function expectedScorePerDig(): number {
 }
 
 /**
- * 根据用户前两局表现，标定企鹅挖宝参数。
+ * 根据用户前两局表现，计算三个小游戏的个性化得分倍率。
  *
  * 思路：
- * 1. 以气球与喜从天降的平均点券作为用户基准期望。
- * 2. 利用气球的平均点击间隔与命中率，估算该玩家在企鹅挖宝中的真实点击频率。
- * 3. 反推点击冷却，使玩家总点击次数与其操作速度匹配。
- * 4. 再反推宝藏分值倍率，使期望点券接近基准。
+ * 1. 气球 / 喜从天降直接用「目标 / 实际」得到得分倍率。
+ * 2. 企鹅挖宝根据用户点击节奏反推冷却，再反推分值倍率使期望点券接近目标。
  */
 export function calibratePenguinDig(baseline: CalibrationBaseline): CalibrationResult {
   const baselineCoupons = (baseline.balloonAvgCoupons + baseline.luckyDropAvgCoupons) / 2;
   const scorePerDig = expectedScorePerDig();
-  const digDuration = baseline.durationMs - PENGUIN_DIG_CONFIG.memorizeDuration;
+  // 企鹅挖宝使用自身配置时长，而不是用户前两局游戏的 durationMs
+  const digDuration = PENGUIN_DIG_CONFIG.duration - PENGUIN_DIG_CONFIG.memorizeDuration;
 
   // 从气球指标推断玩家的点击节奏
   let estimatedClickInterval: number = PENGUIN_DIG_CONFIG.digCooldownMs;
@@ -80,22 +94,37 @@ export function calibratePenguinDig(baseline: CalibrationBaseline): CalibrationR
   // 根据冷却反推预计点击次数
   const projectedClicks = digDuration / recommendedCooldownMs;
 
-  // 反推分值倍率，使期望点券等于基准，并限制在合理范围（与游戏内 applyCalibration 一致）
-  let recommendedScoreMultiplier =
-    scorePerDig === 0 || projectedClicks === 0
-      ? 1
-      : baselineCoupons / (projectedClicks * scorePerDig);
-  recommendedScoreMultiplier = Math.max(0.5, Math.min(4.0, recommendedScoreMultiplier));
+  // 企鹅挖宝默认期望（倍率 1.0）
+  const defaultPenguinCoupons = projectedClicks * scorePerDig;
 
-  // 标定后随机玩家（默认操作）的期望点券
-  const projectedRandomCoupons = projectedClicks * scorePerDig * recommendedScoreMultiplier;
+  // 反推企鹅分值倍率，使期望点券接近目标
+  let penguinScoreMultiplier =
+    defaultPenguinCoupons <= 0 ? 1 : TARGET_USER_COUPONS / defaultPenguinCoupons;
+  penguinScoreMultiplier = Math.max(0.25, Math.min(4.0, penguinScoreMultiplier));
+
+  // 气球 / 喜从天降得分倍率：直接按比例压到目标值
+  const balloonScoreMultiplier = Math.max(
+    0.1,
+    Math.min(2.0, baseline.balloonAvgCoupons > 0 ? TARGET_USER_COUPONS / baseline.balloonAvgCoupons : 1)
+  );
+  const luckyDropScoreMultiplier = Math.max(
+    0.1,
+    Math.min(2.0, baseline.luckyDropAvgCoupons > 0 ? TARGET_USER_COUPONS / baseline.luckyDropAvgCoupons : 1)
+  );
+
+  // 标定后随机玩家（默认操作）的期望点券（企鹅）
+  const projectedRandomCoupons = defaultPenguinCoupons * penguinScoreMultiplier;
 
   return {
     baselineCoupons: Math.round(baselineCoupons),
+    targetCoupons: TARGET_USER_COUPONS,
     recommendedCooldownMs: Math.round(recommendedCooldownMs),
-    recommendedScoreMultiplier: Math.round(recommendedScoreMultiplier * 100) / 100,
+    recommendedScoreMultiplier: Math.round(penguinScoreMultiplier * 100) / 100,
     projectedRandomCoupons: Math.round(projectedRandomCoupons),
     projectedClicks: Math.round(projectedClicks),
+    balloonScoreMultiplier: Math.round(balloonScoreMultiplier * 100) / 100,
+    luckyDropScoreMultiplier: Math.round(luckyDropScoreMultiplier * 100) / 100,
+    penguinScoreMultiplier: Math.round(penguinScoreMultiplier * 100) / 100,
     usedMetrics: {
       avgTimeBetweenClicks: Math.round(avgTimeBetweenClicks),
       balloonAccuracy: Math.round(balloonAccuracy * 100) / 100,
