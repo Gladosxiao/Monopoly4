@@ -226,7 +226,7 @@ export class LuckyDropGame implements IMiniGame {
     const catchRate = this.itemsSpawned > 0 ? this.itemsCaught / this.itemsSpawned : 0;
 
     return {
-      clickCount: this.itemsCaught,
+      clickCount: this.itemsSpawned,
       hitCount: this.itemsCaught,
       accuracy: catchRate,
       avgPlatformSpeed,
