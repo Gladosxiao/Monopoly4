@@ -513,11 +513,11 @@ export class BalloonMiniGame implements IMiniGame {
       if (t.life <= 0) this.floatingTexts.splice(i, 1);
     }
 
-    this.render(now, remaining);
+    this.render(now);
     this.rafId = requestAnimationFrame(this.loop);
   };
 
-  private render(now: number, remaining: number): void {
+  private render(now: number): void {
     if (!this.ctx || !this.canvas) return;
     const ctx = this.ctx;
     const width = this.config.canvasWidth;
@@ -557,12 +557,7 @@ export class BalloonMiniGame implements IMiniGame {
       ctx.globalAlpha = 1;
     });
 
-    // HUD
-    ctx.fillStyle = '#1a1a2e';
-    ctx.font = 'bold 24px sans-serif';
-    ctx.textAlign = 'left';
-    ctx.fillText(`得分: ${this.score}`, 16, 36);
-    ctx.fillText(`时间: ${(remaining / 1000).toFixed(1)}s`, 16, 68);
+    // 得分/时间由外层管理器的 DOM HUD 统一展示，画布内不再重复绘制
   }
 
   private drawBalloon(ctx: CanvasRenderingContext2D, b: Balloon, now: number): void {

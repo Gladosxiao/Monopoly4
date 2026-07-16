@@ -889,31 +889,16 @@ export class LuckyDropGame implements IMiniGame {
   // ==================== HUD ====================
 
   private drawHud(ctx: CanvasRenderingContext2D): void {
-    const remainingSec = Math.ceil(this.remainingMs / 1000);
-    const scoreText = `得分: ${this.score}`;
-    const timeText = `剩余时间: ${remainingSec}s`;
+    // 得分/时间由外层管理器的 DOM HUD 统一展示，画布内只保留慢动作状态提示
+    if (this.timeScale >= 1) return;
 
     ctx.save();
-    ctx.font = 'bold 18px sans-serif';
+    ctx.font = 'bold 14px sans-serif';
     ctx.textBaseline = 'top';
-
-    // 阴影文字
     ctx.fillStyle = 'rgba(0, 0, 0, 0.25)';
-    ctx.fillText(scoreText, 13, 13);
-    ctx.fillText(timeText, 13, 38);
-
-    // 慢动作时时间数字变蓝
-    ctx.fillStyle = this.timeScale < 1 ? '#1976d2' : '#2d3436';
-    ctx.fillText(scoreText, 12, 12);
-    ctx.fillText(timeText, 12, 37);
-
-    // 慢动作状态提示
-    if (this.timeScale < 1) {
-      ctx.font = 'bold 14px sans-serif';
-      ctx.fillStyle = '#2196f3';
-      ctx.fillText('⏳ 慢动作中', 12, 62);
-    }
-
+    ctx.fillText('⏳ 慢动作中', 13, 13);
+    ctx.fillStyle = '#2196f3';
+    ctx.fillText('⏳ 慢动作中', 12, 12);
     ctx.restore();
   }
 

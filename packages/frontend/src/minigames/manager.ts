@@ -97,9 +97,17 @@ export class MiniGameManager {
     this.timerEl = this.createHudElement('timer', `时间: ${(game.config.duration / 1000).toFixed(0)}s`);
     this.scoreEl = this.createHudElement('score', '得分: 0');
 
-    this.container.appendChild(this.canvas);
-    this.container.appendChild(this.timerEl);
-    this.container.appendChild(this.scoreEl);
+    // 舞台容器：HUD 紧贴画布顶角显示，而不是散落在屏幕角落
+    const stage = document.createElement('div');
+    stage.className = 'minigame-stage';
+    stage.style.position = 'relative';
+    stage.style.maxWidth = '100%';
+    stage.style.maxHeight = '100%';
+    stage.style.display = 'flex';
+    stage.appendChild(this.canvas);
+    stage.appendChild(this.scoreEl);
+    stage.appendChild(this.timerEl);
+    this.container.appendChild(stage);
     document.body.appendChild(this.container);
 
     game.onUpdate = (score: number) => {
@@ -189,19 +197,26 @@ export class MiniGameManager {
     el.className = `minigame-hud ${className}`;
     el.textContent = text;
     el.style.position = 'absolute';
-    el.style.padding = '8px 16px';
-    el.style.background = 'rgba(26, 26, 46, 0.8)';
-    el.style.color = '#fff';
-    el.style.borderRadius = '8px';
-    el.style.fontSize = '18px';
+    el.style.padding = '6px 14px';
+    el.style.background = 'rgba(10, 14, 26, 0.65)';
+    el.style.backdropFilter = 'blur(6px)';
+    el.style.color = '#ffffff';
+    el.style.borderRadius = '999px';
+    el.style.border = '1px solid rgba(255, 255, 255, 0.18)';
+    el.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.25)';
+    el.style.fontSize = '16px';
     el.style.fontWeight = 'bold';
     el.style.pointerEvents = 'none';
+    el.style.fontVariantNumeric = 'tabular-nums';
+    el.style.zIndex = '2';
     if (className === 'timer') {
-      el.style.top = '16px';
-      el.style.right = '16px';
+      el.style.top = '12px';
+      el.style.right = '12px';
     } else {
-      el.style.top = '16px';
-      el.style.left = '16px';
+      // 得分是关键信息：金色强调
+      el.style.top = '12px';
+      el.style.left = '12px';
+      el.style.color = '#f5d76e';
     }
     return el;
   }

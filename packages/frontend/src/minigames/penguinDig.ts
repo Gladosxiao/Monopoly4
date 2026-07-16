@@ -325,7 +325,7 @@ export class PenguinDigGame implements IMiniGame {
     }
 
     // 绘制 UI
-    this.drawUI(ctx, remaining);
+    this.drawUI(ctx);
   }
 
   private drawSnowTexture(ctx: CanvasRenderingContext2D, w: number, h: number): void {
@@ -510,16 +510,8 @@ export class PenguinDigGame implements IMiniGame {
     ctx.restore();
   }
 
-  private drawUI(ctx: CanvasRenderingContext2D, remaining: number): void {
-    const seconds = Math.ceil(remaining / 1000);
-
-    ctx.font = 'bold 24px sans-serif';
-    ctx.fillStyle = '#263238';
-    ctx.textAlign = 'left';
-    ctx.fillText(`得分: ${this.score}`, 20, 40);
-    ctx.textAlign = 'right';
-    ctx.fillText(`时间: ${seconds}s`, this.canvas!.width - 20, 40);
-
+  private drawUI(ctx: CanvasRenderingContext2D): void {
+    // 得分/时间由外层管理器的 DOM HUD 统一展示，画布内只保留玩法提示
     // 记忆阶段提示
     if (this.phase === 'memorize') {
       const memorizeRemaining = Math.max(0, this.memorizeEndTime - performance.now());
