@@ -2180,8 +2180,9 @@ select:disabled {
    ======================================================================== */
 
 .stock-chart-card {
-  /* 与其他 info-card 一致，但允许自然高度 */
+  /* 与其他 info-card 一致，但允许自然高度；最小高度保证 K 线图可见 */
   flex-shrink: 0;
+  min-height: 320px;
 }
 
 .stock-chart-card-header {

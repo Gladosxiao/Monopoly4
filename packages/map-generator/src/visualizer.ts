@@ -182,7 +182,8 @@ function renderTileSvg(
 function renderTokensSvg(tokens: PlayerToken[], layout: BoardLayout): string {
   if (tokens.length === 0) return '';
 
-  const radius = Math.max(6, Math.min(layout.tileSize, 24) * 0.25);
+  // 让棋子半径占 tileSize 的 30%，但不小于 16px，不超过 tileSize/2.5
+  const radius = Math.max(16, Math.min(layout.tileSize * 0.3, layout.tileSize / 2.5));
   const elements: string[] = [];
 
   const groups = new Map<number, PlayerToken[]>();
@@ -196,20 +197,20 @@ function renderTokensSvg(tokens: PlayerToken[], layout: BoardLayout): string {
     const center = getTileCenter(layout, index);
     const rect = getTileRect(layout, index);
     const count = groupTokens.length;
-    const offsetStep = radius * 1.6;
+    const offsetStep = radius * 1.2;
     const totalWidth = (count - 1) * offsetStep;
     const startX = center.x - totalWidth / 2;
 
     for (let i = 0; i < count; i++) {
       const token = groupTokens[i];
       const x = startX + i * offsetStep;
-      const y = center.y + rect.height * 0.15;
+      const y = center.y;
       const label = token.name ? token.name.slice(0, 1) : '';
       elements.push(
         `<g title="${escapeXml(token.name || token.id)}">` +
-          `<circle cx="${x}" cy="${y}" r="${radius}" fill="${token.color}" stroke="#2c3e50" stroke-width="2"/>` +
+          `<circle cx="${x}" cy="${y}" r="${radius}" fill="${token.color}" stroke="#fff" stroke-width="3" filter="drop-shadow(0 2px 4px rgba(0,0,0,0.3))"/>` +
           (label
-            ? `<text x="${x}" y="${y + radius * 0.4}" text-anchor="middle" font-size="${radius * 0.9}" fill="#fff">${escapeXml(label)}</text>`
+            ? `<text x="${x}" y="${y + radius * 0.35}" text-anchor="middle" font-size="${radius * 0.85}" font-weight="bold" fill="#fff">${escapeXml(label)}</text>`
             : '') +
           `</g>`
       );

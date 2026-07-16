@@ -27,6 +27,17 @@
       box-sizing: border-box;
     }
 
+    @media (max-width: 900px) {
+      .test-layout {
+        grid-template-columns: 1fr;
+        grid-template-rows: auto auto auto auto;
+      }
+      .test-chart-card {
+        max-width: none;
+        min-height: 420px;
+      }
+    }
+
     /* 模拟游戏页面 side-panel 实际场景：限制 K 线图卡片宽度 */
     .test-chart-card {
       max-width: 416px;
@@ -45,6 +56,14 @@
       margin: 0;
       font-size: 18px;
       font-weight: 600;
+      white-space: nowrap;
+    }
+    .test-header {
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    .test-controls {
+      flex-wrap: wrap;
     }
     .test-controls {
       display: flex;
@@ -97,14 +116,24 @@
     }
     .test-stock-row .name {
       font-weight: 600;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
     .test-stock-row .meta {
       font-size: 11px;
       color: #94a3b8;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
     .test-stock-row .price {
       font-variant-numeric: tabular-nums;
       font-weight: 700;
+      white-space: nowrap;
+    }
+    .test-stock-row > div:first-child {
+      min-width: 0;
     }
     .test-chart-card {
       background: #1a2236;
