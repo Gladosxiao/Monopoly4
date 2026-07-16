@@ -424,10 +424,10 @@ function drawPathLines(ctx: CanvasRenderingContext2D, layout: BoardLayout): void
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
 
-  // 普通连接段：柔和白色细线，不喧宾夺主
-  ctx.shadowColor = 'rgba(255, 255, 255, 0.15)';
-  ctx.shadowBlur = layout.tileSize * 0.06;
-  ctx.strokeStyle = 'rgba(255, 255, 255, 0.22)';
+  // 普通连接段：柔和外发光 + 较亮内芯的双层线，既有导向性又不喧宾夺主
+  ctx.shadowColor = 'rgba(120, 170, 255, 0.25)';
+  ctx.shadowBlur = layout.tileSize * 0.08;
+  ctx.strokeStyle = 'rgba(160, 190, 235, 0.28)';
   ctx.lineWidth = lineW;
   ctx.beginPath();
   ctx.moveTo(centers[0].x, centers[0].y);
@@ -437,8 +437,17 @@ function drawPathLines(ctx: CanvasRenderingContext2D, layout: BoardLayout): void
   ctx.stroke();
   ctx.shadowColor = 'transparent';
 
+  ctx.strokeStyle = 'rgba(220, 232, 255, 0.45)';
+  ctx.lineWidth = lineW * 0.45;
+  ctx.beginPath();
+  ctx.moveTo(centers[0].x, centers[0].y);
+  for (let i = 1; i < centers.length; i++) {
+    ctx.lineTo(centers[i].x, centers[i].y);
+  }
+  ctx.stroke();
+
   // 方向箭头：每隔几段在路径中点绘制小箭头
-  ctx.fillStyle = 'rgba(255, 255, 255, 0.35)';
+  ctx.fillStyle = 'rgba(220, 232, 255, 0.55)';
   const arrowStep = Math.max(1, Math.floor(centers.length / 12));
   for (let i = 0; i < centers.length - 1; i += arrowStep) {
     const a = centers[i];
@@ -532,8 +541,8 @@ function getShapeMetrics(shape: TileShape, rect: Rect): ShapeMetrics {
   const minDim = Math.min(w, h);
   const radius = Math.max(3, minDim * 0.1);
   const headerH = Math.max(14, h * 0.28);
-  // 圆形格统一为 tile 短边的 35%，名称居中显示
-  const r = shape === 'circle' ? minDim * 0.35 : minDim / 2;
+  // 圆形格统一为 tile 短边的 38%，名称居中显示
+  const r = shape === 'circle' ? minDim * 0.38 : minDim / 2;
   return { x, y, w, h, radius, headerH, cx: x + w / 2, cy: y + h / 2, r };
 }
 
@@ -753,6 +762,19 @@ export function renderBoard(
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   ctx.scale(dpr, dpr);
 
+  // 背景：深蓝径向渐变，中心略亮、四周压暗，营造桌面聚光感
+  const bgW = Math.max(width, cssWidth);
+  const bgH = Math.max(height, cssHeight);
+  const bgGrad = ctx.createRadialGradient(
+    bgW / 2, bgH / 2, Math.min(bgW, bgH) * 0.15,
+    bgW / 2, bgH / 2, Math.max(bgW, bgH) * 0.72
+  );
+  bgGrad.addColorStop(0, '#22315c');
+  bgGrad.addColorStop(0.6, '#182449');
+  bgGrad.addColorStop(1, '#0d1428');
+  ctx.fillStyle = bgGrad;
+  ctx.fillRect(0, 0, bgW, bgH);
+
   const map = state.map as any;
 
   // 使用蛇形布局：S 形蜿蜒铺满可用空间，任意格数都能高效排布
@@ -934,25 +956,23 @@ export function renderBoard(
       return;
     }
 
-    // 圆形功能格：不绘制标题栏，名称直接居中显示在圆内
+    // 圆形功能格：不绘制标题栏，名称以类型色居中显示在圆内（浅底上用彩色字更清晰）
     if (shape === 'circle') {
       ctx.save();
       // 根据名称长度自动缩放字体，确保不超出小圆
       const maxFontSize = Math.max(8, minDim * 0.22);
-      const maxWidth = m.r * 1.4;
+      const maxWidth = m.r * 1.35;
       ctx.font = `bold ${maxFontSize}px sans-serif`;
       let nameFontSize = maxFontSize;
       const nameWidth = ctx.measureText(tile.name).width;
       if (nameWidth > maxWidth && nameWidth > 0) {
-        nameFontSize = Math.max(7, Math.floor(maxFontSize * (maxWidth / nameWidth)));
+        nameFontSize = Math.max(6, Math.floor(maxFontSize * (maxWidth / nameWidth)));
         ctx.font = `bold ${nameFontSize}px sans-serif`;
       }
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      setTextShadow(ctx, 'rgba(0,0,0,0.8)');
-      ctx.fillStyle = '#ffffff';
+      ctx.fillStyle = darkenColor(typeColor, 0.15);
       ctx.fillText(tile.name, drawCenter.x, drawCenter.y);
-      clearTextShadow(ctx);
       ctx.restore();
       return;
     }
@@ -972,9 +992,10 @@ export function renderBoard(
       return;
     }
 
-    // 顶部标题栏：深色底 + 白字，底部带类型色/分组色细线
+    // 顶部标题栏：深色底 + 白字；地产已有主时底部细线改为所有者颜色，作为归属提示
+    const tileOwner = tile.ownerId ? state.players.find((p) => p.id === tile.ownerId) : undefined;
     const headerFill = isProperty ? darkenColor(groupColor, 0.6) : typeColor;
-    const accentColor = isProperty ? '#ffffff' : typeColor;
+    const accentColor = isProperty ? (tileOwner?.color ?? '#ffffff') : typeColor;
     const { headerY, headerH } = drawTileHeader(ctx, shape, m, headerFill, accentColor);
 
     // 标题文字（白字，居中）
@@ -989,65 +1010,41 @@ export function renderBoard(
     clearTextShadow(ctx);
     ctx.restore();
 
-    // 所有者标识：标题栏下方显示与棋子一致的角色 token
-    let ownerExtraH = 0;
-    if (tile.ownerId) {
-      const owner = state.players.find((p) => p.id === tile.ownerId);
-      if (owner) {
-        const barH = Math.max(3, m.h * 0.06);
-        const barY = m.y + m.headerH + 2;
-        ctx.save();
-        ctx.fillStyle = owner.color;
-        roundRectPath(ctx, m.x + 3, barY, m.w - 6, barH, barH / 2);
-        ctx.fill();
-        ctx.restore();
-
-        const tokenSize = Math.max(16, minDim * 0.35);
-        const tokenR = tokenSize / 2;
-        const tokenX = m.x + tokenR + 4;
-        const tokenY = barY + barH + tokenR + 2;
-        drawOwnerToken(ctx, tokenX, tokenY, tokenSize, owner);
-
-        ownerExtraH = barH + tokenSize + 6;
-      }
+    // 所有者标识：小 token 以徽章形式骑跨标题栏下缘左侧，等级 pill 骑跨右侧，
+    // 不再独占整行，把空间留给建筑与租金信息
+    if (isProperty && tileOwner) {
+      const tokenSize = Math.max(13, minDim * 0.22);
+      const edgeY = m.y + m.headerH - 1;
+      drawOwnerToken(ctx, m.x + tokenSize / 2 + 5, edgeY, tokenSize, tileOwner);
+      drawLevelPill(ctx, m.x + m.w - 5, edgeY, tile.level, minDim);
     }
 
-    // 地产内容（价格/建筑/等级/过路费）
+    // 地产内容：建筑图标居中，底部深色条带统一显示金钱信息（租金金色 / 售价白色），
+    // 保证数值完整落在地块内且一眼可读
     if (isProperty) {
-      const owner = state.players.find((p) => p.id === tile.ownerId);
-      const contentTop = m.y + m.headerH + ownerExtraH + 2;
-      const contentY = contentTop + (m.h - (contentTop - m.y)) / 2;
-      if (owner) {
-        // 等级徽章：右上角醒目显示
-        const badgeSize = Math.max(12, minDim * 0.28);
-        const badgeX = m.x + m.w - badgeSize / 2 - 4;
-        const badgeY = m.y + m.headerH + badgeSize / 2 + 3;
-        drawLevelBadge(ctx, badgeX, badgeY, badgeSize, tile.level);
-
-        const iconSize = minDim * 0.35;
+      const stripH = Math.max(13, m.h * 0.2);
+      const stripY = m.y + m.h - stripH - 4;
+      const contentTop = m.y + m.headerH + 6;
+      if (tileOwner) {
         const buildingType = tile.buildingType ?? 'house';
-        const centerY = contentTop + (m.h - (contentTop - m.y)) / 2 - minDim * 0.03;
-        drawBuildingWithLevel(ctx, drawCenter.x, centerY, iconSize, buildingType, tile.level);
-
-        // 显示按等级/建筑类型估算的过路费
+        const zoneH = stripY - contentTop;
+        if (zoneH > 10) {
+          const iconSize = Math.min(minDim * 0.32, zoneH * 0.85);
+          drawBuildingWithLevel(ctx, drawCenter.x, contentTop + zoneH / 2, iconSize, buildingType, tile.level);
+        }
         const { value: displayRent, approximate } = computeDisplayRent(tile, state);
-        setTextShadow(ctx, 'rgba(0,0,0,0.8)');
-        ctx.font = `bold ${Math.max(8, minDim * 0.12)}px sans-serif`;
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillStyle = '#e8c547';
-        const rentText = approximate && displayRent > 0 ? `≈$${formatMoney(displayRent)}` : `$${formatMoney(displayRent)}`;
-        ctx.fillText(rentText, drawCenter.x, centerY + minDim * 0.26);
-        clearTextShadow(ctx);
+        let stripText: string;
+        let stripColor = '#f5d76e';
+        if (displayRent > 0) {
+          stripText = approximate ? `≈$${formatMoney(displayRent)}` : `$${formatMoney(displayRent)}`;
+        } else {
+          // 公园/研究所等无租金建筑，条带内改显建筑类型名
+          stripText = BUILDING_LABELS[buildingType];
+          stripColor = '#cfd8e3';
+        }
+        drawMoneyStrip(ctx, m, stripY, stripH, stripText, stripColor);
       } else {
-        const priceFontSize = Math.max(9, minDim * 0.15);
-        ctx.font = `bold ${priceFontSize}px sans-serif`;
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        setTextShadow(ctx, 'rgba(0,0,0,0.8)');
-        ctx.fillStyle = '#ffffff';
-        ctx.fillText(`$${formatMoney(tile.basePrice)}`, drawCenter.x, contentY);
-        clearTextShadow(ctx);
+        drawMoneyStrip(ctx, m, stripY, stripH, `$${formatMoney(tile.basePrice)}`, '#eaf2ff');
       }
     }
 
@@ -1275,12 +1272,20 @@ function drawBuildingIcon(
       break;
     }
     case 'park': {
-      // 公园：树干 + 树冠
+      // 公园：树干 + 双层树冠，树冠带白色描边避免糊成色块
       ctx.fillStyle = '#795548';
-      ctx.fillRect(cx - size * 0.1, cy, size * 0.2, half);
+      ctx.fillRect(cx - size * 0.08, cy + size * 0.05, size * 0.16, half * 0.95);
       ctx.fillStyle = color;
       ctx.beginPath();
-      ctx.arc(cx, cy - size * 0.15, half, 0, Math.PI * 2);
+      ctx.arc(cx, cy - size * 0.12, half * 0.78, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(255,255,255,0.85)';
+      ctx.lineWidth = Math.max(1, size * 0.05);
+      ctx.stroke();
+      // 树冠高光
+      ctx.fillStyle = 'rgba(255,255,255,0.35)';
+      ctx.beginPath();
+      ctx.arc(cx - half * 0.25, cy - size * 0.32, half * 0.3, 0, Math.PI * 2);
       ctx.fill();
       break;
     }
@@ -1327,50 +1332,66 @@ function drawBuildingIcon(
   ctx.restore();
 }
 
-/** 绘制醒目的等级徽章（Lv.X），放在建筑旁 */
-function drawLevelBadge(
+/** 绘制等级徽章：金色 pill（Lv.X），骑跨标题栏下缘右侧，保证文字完整可读 */
+function drawLevelPill(
   ctx: CanvasRenderingContext2D,
-  cx: number,
+  rightX: number,
   cy: number,
-  size: number,
-  level: number
+  level: number,
+  minDim: number
 ): void {
-  const r = Math.max(size * 0.45, 8);
   const displayLevel = Math.max(0, Math.min(level, 5));
+  const fontSize = Math.max(8, minDim * 0.12);
   ctx.save();
+  ctx.font = `bold ${fontSize}px sans-serif`;
+  const text = `Lv.${displayLevel}`;
+  const textW = ctx.measureText(text).width;
+  const padX = fontSize * 0.45;
+  const pillW = textW + padX * 2;
+  const pillH = fontSize * 1.55;
+  const x = rightX - pillW;
+  const y = cy - pillH / 2;
 
-  // 外圈金色光环
-  ctx.shadowColor = 'rgba(212, 160, 23, 0.5)';
-  ctx.shadowBlur = r * 0.3;
+  ctx.shadowColor = 'rgba(0,0,0,0.35)';
+  ctx.shadowBlur = 3;
+  ctx.shadowOffsetY = 1;
   ctx.fillStyle = '#d4a017';
-  ctx.beginPath();
-  ctx.arc(cx, cy, r, 0, Math.PI * 2);
+  roundRectPath(ctx, x, y, pillW, pillH, pillH / 2);
   ctx.fill();
 
-  // 内圈深色背景，让白字更突出
   ctx.shadowColor = 'transparent';
-  ctx.fillStyle = '#2c3e50';
-  ctx.beginPath();
-  ctx.arc(cx, cy, r * 0.82, 0, Math.PI * 2);
-  ctx.fill();
-
-  // 白色边框
-  ctx.strokeStyle = '#ffffff';
-  ctx.lineWidth = Math.max(1, r * 0.1);
-  ctx.beginPath();
-  ctx.arc(cx, cy, r * 0.82, 0, Math.PI * 2);
+  ctx.strokeStyle = 'rgba(255,255,255,0.85)';
+  ctx.lineWidth = 1;
+  roundRectPath(ctx, x, y, pillW, pillH, pillH / 2);
   ctx.stroke();
 
-  // 等级数字 + Lv 前缀
-  const fontSize = Math.max(8, r * 0.95);
+  ctx.fillStyle = '#2c2405';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(text, x + pillW / 2, cy + 0.5);
+  ctx.restore();
+}
+
+/** 绘制地产底部金钱信息条带：深色半透明底 + 居中数值，租金金色、售价白色 */
+function drawMoneyStrip(
+  ctx: CanvasRenderingContext2D,
+  m: ShapeMetrics,
+  stripY: number,
+  stripH: number,
+  text: string,
+  color: string
+): void {
+  ctx.save();
+  ctx.fillStyle = 'rgba(10, 15, 28, 0.55)';
+  roundRectPath(ctx, m.x + 4, stripY, m.w - 8, stripH, Math.min(6, stripH / 2));
+  ctx.fill();
+
+  const fontSize = Math.max(7, stripH * 0.58);
   ctx.font = `bold ${fontSize}px sans-serif`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillStyle = '#ffffff';
-  setTextShadow(ctx, 'rgba(0,0,0,0.8)');
-  ctx.fillText(`Lv.${displayLevel}`, cx, cy);
-  clearTextShadow(ctx);
-
+  ctx.fillStyle = color;
+  ctx.fillText(text, m.cx, stripY + stripH / 2 + 0.5);
   ctx.restore();
 }
 
