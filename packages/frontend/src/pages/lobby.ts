@@ -86,6 +86,12 @@ export async function renderLobbyPage(error?: string): Promise<void> {
   try {
     const rooms = await listRooms();
     const list = container.querySelector<HTMLUListElement>('#room-list')!;
+    if (rooms.length === 0) {
+      const li = document.createElement('li');
+      li.className = 'room-list-empty';
+      li.textContent = '暂无进行中的房间，创建一个开始游戏吧！';
+      list.appendChild(li);
+    }
     rooms.forEach((room) => {
       const li = document.createElement('li');
       li.innerHTML = `

@@ -1020,9 +1020,9 @@ export function renderBoard(
     }
 
     // 地产内容：建筑图标居中，底部深色条带统一显示金钱信息（租金金色 / 售价白色），
-    // 保证数值完整落在地块内且一眼可读
+    // 保证数值完整落在地块内且一眼可读；条带高度按短边计算，避免跨格竖向地产条带过高
     if (isProperty) {
-      const stripH = Math.max(13, m.h * 0.2);
+      const stripH = Math.max(13, minDim * 0.2);
       const stripY = m.y + m.h - stripH - 4;
       const contentTop = m.y + m.headerH + 6;
       if (tileOwner) {

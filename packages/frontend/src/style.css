@@ -808,6 +808,23 @@ select:disabled {
   box-shadow: none;
 }
 
+#room-list li.room-list-empty {
+  grid-column: 1 / -1;
+  justify-content: center;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+  padding: var(--space-6);
+  border-style: dashed;
+  background: transparent;
+  cursor: default;
+}
+
+#room-list li.room-list-empty:hover {
+  transform: none;
+  box-shadow: none;
+  border-color: var(--color-border);
+}
+
 #room-list li button:hover:not(:disabled) {
   background: var(--color-primary);
   color: #fff;
@@ -1126,6 +1143,49 @@ select:disabled {
   color: var(--color-text);
   border-color: var(--color-border);
   font-size: var(--font-size-sm);
+}
+
+/* 头部状态条：日期 / 物价指数 / 当前回合等关键信息 */
+.game-status-bar {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.status-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  border-radius: 999px;
+  background: var(--color-surface-1);
+  border: 1px solid var(--color-border);
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.status-chip strong {
+  color: var(--color-text-strong);
+  font-weight: 600;
+}
+
+.status-chip-turn {
+  border-color: rgba(46, 204, 113, 0.35);
+  background: var(--color-success-soft);
+}
+
+.status-chip-turn .turn-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.15);
+  animation: pulse 1.4s ease-in-out infinite;
 }
 
 .game-body {

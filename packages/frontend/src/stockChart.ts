@@ -205,7 +205,7 @@ export class StockChart {
     const trend = this.getSelectedTrend();
 
     if (!stock) {
-      this.header.innerHTML = '<span class="stock-chart-empty">点击上方表格中的股票查看 K 线</span>';
+      this.header.innerHTML = '<span class="stock-chart-empty">点击「股市与公司」表格中的股票查看 K 线</span>';
       return;
     }
 
@@ -503,7 +503,7 @@ export class StockChart {
     ctx.font = '13px system-ui, -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText('点击上方股票查看 K 线', layout.width / 2, layout.height / 2);
+    ctx.fillText('点击股票表格中的任意一行查看 K 线', layout.width / 2, layout.height / 2);
   }
 
   private drawGrid(

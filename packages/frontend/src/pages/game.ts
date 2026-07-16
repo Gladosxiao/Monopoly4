@@ -223,17 +223,11 @@ export async function renderGamePage(roomId: string): Promise<void> {
   container.innerHTML = `
     <header>
       <h1>🎲 游戏中 <span class="room-tag">${escapeHtml(roomId)}</span></h1>
+      <div class="game-status-bar" id="game-status-bar"></div>
       <button id="btn-exit" class="ghost btn-sm">退出房间</button>
     </header>
     <div class="game-body">
       <div class="game-content">
-        <div class="stock-top-panel">
-          <div class="stock-top-header">
-            <h2>股市与公司</h2>
-            <button id="btn-toggle-stock" class="btn-icon" title="展开/折叠">−</button>
-          </div>
-          <div id="stock-market"></div>
-        </div>
         <div class="game-layout">
           <div class="board-wrap">
             <div class="board-zoom-controls">
@@ -259,6 +253,13 @@ export async function renderGamePage(roomId: string): Promise<void> {
               <div id="game-actions"></div>
             </div>
           </div>
+        </div>
+        <div class="stock-top-panel">
+          <div class="stock-top-header">
+            <h2>股市与公司</h2>
+            <button id="btn-toggle-stock" class="btn-icon" title="展开/折叠">−</button>
+          </div>
+          <div id="stock-market"></div>
         </div>
         <div class="backpack-wide-panel">
           <div class="backpack-wide-header">
@@ -427,6 +428,7 @@ export async function renderGamePage(roomId: string): Promise<void> {
     }
 
     renderBoardWithSelection(state);
+    renderStatusBar(container, state);
     renderPlayersInfo(container, state);
     renderBackpack(container, state);
     renderActions(container, state);
@@ -588,6 +590,25 @@ export function renderPlayerInfoCard(player: Player, state: GameState, isSelf = 
     ${player.isBankrupt ? '<div class="bankrupt">已破产</div>' : ''}
   `;
   return div;
+}
+
+/** 渲染头部状态条：日期 / 物价指数 / 当前回合玩家等关键信息一目了然 */
+export function renderStatusBar(container: HTMLElement, state: GameState): void {
+  const el = container.querySelector<HTMLDivElement>('#game-status-bar');
+  if (!el) return;
+  const currentPlayer = state.players[state.currentPlayerIndex];
+  const turnChip = currentPlayer
+    ? `<span class="status-chip status-chip-turn" title="当前回合">
+        <span class="turn-dot" style="background:${escapeHtml(currentPlayer.color)}"></span>
+        <strong style="color:${escapeHtml(currentPlayer.color)}">${escapeHtml(currentPlayer.username)}</strong> 行动中
+      </span>`
+    : '';
+  el.innerHTML = `
+    <span class="status-chip" title="游戏日期">📅 第 <strong>${state.month}</strong> 月 第 <strong>${state.day}</strong> 天</span>
+    <span class="status-chip" title="物价指数">💹 物价指数 <strong>${state.priceIndex.toFixed(2)}</strong></span>
+    <span class="status-chip" title="乐透奖池">🎰 奖池 <strong>$${state.lotteryJackpot.toLocaleString()}</strong></span>
+    ${turnChip}
+  `;
 }
 
 export function renderPlayersInfo(container: HTMLElement, state: GameState): void {
