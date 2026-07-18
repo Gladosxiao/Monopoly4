@@ -97,29 +97,29 @@ function cyclicDistance(a: number, b: number, total: number): number {
 }
 
 /**
- * 运行单次模拟，返回每个格子的停留次数。
+ * 运行单次模拟，返回每个格子的停留次数与经过次数。
  */
-function runSingleSimulation(map: GameMap, config: SimulationConfig): number[] {
-  const visits = Array(map.path.length).fill(0);
-  const totalTurns = config.playerCount * config.roundsPerPlayer;
+function runSingleSimulation(map: GameMap, config: SimulationConfig): { stops: number[]; passes: number[] } {
+  const stops = Array(map.path.length).fill(0);
+  const passes = Array(map.path.length).fill(0);
 
   for (let p = 0; p < config.playerCount; p++) {
     let position = 0;
-    let laps = 0;
     for (let r = 0; r < config.roundsPerPlayer; r++) {
       const diceCount = config.variableDice
         ? Math.floor(Math.random() * config.diceCount) + 1
         : config.diceCount;
       const steps = rollDice(diceCount);
-      const prev = position;
-      position = (position + steps) % map.path.length;
-      if (position < prev && config.includeSalary) {
-        laps++;
+      // 记录经过的每一格
+      for (let i = 0; i < steps; i++) {
+        position = (position + 1) % map.path.length;
+        passes[position]++;
       }
-      visits[position]++;
+      // 最终停留格额外记一次停留
+      stops[position]++;
     }
   }
-  return visits;
+  return { stops, passes };
 }
 
 /**
@@ -127,21 +127,24 @@ function runSingleSimulation(map: GameMap, config: SimulationConfig): number[] {
  */
 export function simulateMap(map: GameMap, config: SimulationConfig = DEFAULT_SIMULATION_CONFIG): SimulationResult {
   const totalTurnsPerIteration = config.playerCount * config.roundsPerPlayer;
-  const aggregatedVisits = Array(map.path.length).fill(0);
+  const aggregatedStops = Array(map.path.length).fill(0);
+  const aggregatedPasses = Array(map.path.length).fill(0);
   let totalSteps = 0;
 
   for (let iter = 0; iter < config.iterations; iter++) {
-    const visits = runSingleSimulation(map, config);
-    for (let i = 0; i < visits.length; i++) aggregatedVisits[i] += visits[i];
-    // 统计总步数（粗略估计）
-    totalSteps += totalTurnsPerIteration * (config.variableDice ? config.diceCount * 3.5 : config.diceCount * 3.5);
+    const { stops, passes } = runSingleSimulation(map, config);
+    for (let i = 0; i < stops.length; i++) {
+      aggregatedStops[i] += stops[i];
+      aggregatedPasses[i] += passes[i];
+    }
+    totalSteps += passes.reduce((a, b) => a + b, 0);
   }
 
-  const totalVisits = aggregatedVisits.reduce((a, b) => a + b, 0);
+  const totalVisits = aggregatedStops.reduce((a, b) => a + b, 0);
   const totalTurnsSimulated = totalTurnsPerIteration * config.iterations;
 
   const tileStats: TileVisitStat[] = map.tiles.map((tile) => {
-    const visits = aggregatedVisits[tile.index];
+    const visits = aggregatedStops[tile.index];
     return {
       index: tile.index,
       type: tile.type,
@@ -161,7 +164,7 @@ export function simulateMap(map: GameMap, config: SimulationConfig = DEFAULT_SIM
   ];
   for (const type of allTypes) {
     const tilesOfType = map.tiles.filter((t) => t.type === type);
-    const visits = tilesOfType.reduce((sum, t) => sum + aggregatedVisits[t.index], 0);
+    const visits = tilesOfType.reduce((sum, t) => sum + aggregatedStops[t.index], 0);
     typeStats[type] = {
       count: tilesOfType.length,
       visits,
@@ -174,7 +177,7 @@ export function simulateMap(map: GameMap, config: SimulationConfig = DEFAULT_SIM
     if (tile.type === 'property' && tile.size === 'small' && tile.group !== undefined) {
       const g = groups.get(tile.group) ?? { count: 0, visits: 0, totalPrice: 0 };
       g.count++;
-      g.visits += aggregatedVisits[tile.index];
+      g.visits += aggregatedStops[tile.index];
       g.totalPrice += tile.basePrice;
       groups.set(tile.group, g);
     }
@@ -228,14 +231,22 @@ export function simulateMap(map: GameMap, config: SimulationConfig = DEFAULT_SIM
     }
   }
 
-  const heatmap = aggregatedVisits.map((v) => v / config.iterations);
+  const heatmap = aggregatedStops.map((v) => v / config.iterations);
 
-  // 卡片/道具/点券获取估算
-  const totalCards = typeStats.card.visits; // 卡片格每访问一次得一张卡片
+  // 卡片/道具/点券获取估算：使用经过次数（卡片格与点券格均为踩到触发）
+  const totalCards = map.tiles
+    .filter((t) => t.type === 'card')
+    .reduce((sum, t) => sum + aggregatedPasses[t.index], 0);
   const totalCoupons =
-    typeStats.coupon10.visits * 10 +
-    typeStats.coupon30.visits * 30 +
-    typeStats.coupon50.visits * 50;
+    map.tiles
+      .filter((t) => t.type === 'coupon10')
+      .reduce((sum, t) => sum + aggregatedPasses[t.index], 0) * 10 +
+    map.tiles
+      .filter((t) => t.type === 'coupon30')
+      .reduce((sum, t) => sum + aggregatedPasses[t.index], 0) * 30 +
+    map.tiles
+      .filter((t) => t.type === 'coupon50')
+      .reduce((sum, t) => sum + aggregatedPasses[t.index], 0) * 50;
   const avgCouponsPerPlayer = totalCoupons / config.iterations / config.playerCount;
   const avgCardsPerPlayer = totalCards / config.iterations / config.playerCount;
   const avgShopPurchasesPerPlayer =

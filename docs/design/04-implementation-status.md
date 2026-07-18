@@ -156,11 +156,11 @@
 | 功能 | 设计文档要求 | 当前实现 | 状态 |
 |---|---|---|---|
 | 掷骰 | 选择骰子数后掷骰 | `game:roll` 已支持可选 `diceCount` | ✅ 已实现 |
-| 移动阶段 | `moving` 状态 | `movePlayer` 改为逐格移动，状态 `rolling→moving→acting` | ✅ 已实现 |
-| 经过地块效果 | `onPassTile` | 起点工资、陷阱触发、NPC 同格效果已在逐格移动中触发 | ✅ 已实现 |
+| 移动阶段 | `moving` 状态 | `movePlayer` 逐格移动，状态 `rolling→moving→acting`；前端 `moveAnimation.ts` 支持逐格动画 | ✅ 已实现 |
+| 经过地块效果 | `onPassTile` | 起点工资、陷阱、NPC、神明拾取、工程车拆除、卡片格、得点券格均在逐格移动中触发 | ✅ 已实现 |
 | 抵达地块效果 | `onArriveTile` | `handleTileEffect` 已实现大部分 | ✅ 已实现 |
 | 状态效果递减 | 每天递减 | `decrementEffects` 在跨天时调用 | ✅ 已实现 |
-| 月度结算 | 每 30 天 | 物价指数与存款利息已实现 | ⚠️ 部分实现 |
+| 月度结算 | 每 30 天 | 物价指数、存款利息、股东分红、乐透开奖、土地到期均已实现 | ✅ 已实现 |
 | 检查胜利条件 | 需要 | 资金目标/时间限制/唯一幸存者均已实现 | ✅ 已实现 |
 
 **代码位置**：`packages/backend/src/game/engine.ts`（movePlayer、handleTileEffect、endTurn）
@@ -173,7 +173,7 @@
 |---|---|---|---|
 | 卡片定义 | 30 张 | `packages/shared/src/data/cards.ts` 完整定义 | ✅ 已实现 |
 | 商店购买 | 点券购买，15 张上限，需在商店格 | `cardSystem.buyCard` 已实现，受 `tile.type === 'shop'` 限制 | ✅ 已实现 |
-| 卡片格获得 | 经过获得随机卡片 | `handleTileEffect` 在 `tile.type === 'card'` 时随机发卡 | ✅ 已实现 |
+| 卡片格获得 | 经过获得随机卡片 | `onPassTile` 在 `tile.type === 'card'` 时随机发卡（踩到即触发，非停留） | ✅ 已实现 |
 | 使用卡片 | 30 张效果 | `cardSystem/effects.ts` 中 30 张均已落地（部分简化） | ✅ 已实现 |
 | 出售卡片 | 出售为点券 | `cardSystem.sellCard` 已实现 | ✅ 已实现 |
 | 卡片效果注册表 | `CardEffectRegistry` | `CARD_EFFECT_REGISTRY` 已实现于 `cardSystem/effects.ts` | ✅ 已实现 |
@@ -234,9 +234,11 @@
 | 月度分红 | `dividendPayout` | ✅ 已实现 |
 | 复杂轮盘（出国天数/投保天数） | 航空公司/保险公司转盘已接入；商场 1-8 倍、旅馆 1-6 天已记录 | ✅ 已实现 |
 | 骗保策略道具联动 | 住院自动理赔已接入陷阱/NPC；每次理赔消耗 7 天保险防止无限骗保 | ✅ 已实现 |
+| 股票 K 线图 | `stockChart.ts` 已实现 9 种走势模板、OHLC 蜡烛图、悬停 tooltip、走势背景高亮 | ✅ 已实现 |
+| 股票走势 prevPrice | 走势模式下 `prevPrice` 保留旧价格，避免被新价格覆盖 | ✅ 已修复 |
 
-**代码位置**：`packages/backend/src/game/financialSystem/`、`packages/shared/src/data/companies.ts`
-**详细文档**：`docs/design/10-events-finance.md`
+**代码位置**：`packages/backend/src/game/financialSystem/`、`packages/shared/src/data/companies.ts`、`packages/frontend/src/stockChart.ts`
+**详细文档**：`docs/design/10-events-finance.md`、`docs/design/12-stock-trend-system.md`
 
 ---
 
@@ -250,7 +252,7 @@
 | 公司格 | 默认 3 家公司地块特效（占地图 <10%） | ✅ 已实现 |
 | 税务格 | 固定 -5000 | ⚠️ 临时实现 |
 | 卡片格 | 经过随机获得一张卡片 | ✅ 已实现 |
-| 得点券格 | 30 点券 | ⚠️ 临时实现 |
+| 得点券格 | 10/30/50 点券 | `onPassTile` 踩到即获得对应点券 | ✅ 已实现 |
 | 商店格 | 可购买卡片/道具 | ✅ 已实现 |
 | 医院格 | 抵达医院时若处于 hospital 状态可提前出院 | ✅ 已实现 |
 | 监狱格 | 地图无 prison 格，`jail` 状态仅跳过回合 | ⚠️ 部分实现 |

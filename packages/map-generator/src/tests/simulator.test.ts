@@ -8,26 +8,26 @@ import { generateMap, generateBalancedMap, PLAYER4_TEMPLATE, MAP80_TEMPLATE } fr
 import { simulateMap, evaluateBalance, DEFAULT_SIMULATION_CONFIG } from '../simulator.js';
 
 describe('simulateMap', () => {
-  it('模拟 PLAYER4 模板人均卡片+道具约 3 个', () => {
+  it('模拟 PLAYER4 模板人均卡片+道具约 7-10 个', () => {
     const map = generateMap(PLAYER4_TEMPLATE);
     const result = simulateMap(map, {
       ...DEFAULT_SIMULATION_CONFIG,
       roundsPerPlayer: 40,
       iterations: 2000,
     });
-    assert.ok(result.avgTotalCardsAndItemsPerPlayer >= 2, `人均卡+道 ${result.avgTotalCardsAndItemsPerPlayer} 小于 2`);
-    assert.ok(result.avgTotalCardsAndItemsPerPlayer <= 6, `人均卡+道 ${result.avgTotalCardsAndItemsPerPlayer} 大于 6`);
+    assert.ok(result.avgTotalCardsAndItemsPerPlayer >= 6, `人均卡+道 ${result.avgTotalCardsAndItemsPerPlayer} 小于 6`);
+    assert.ok(result.avgTotalCardsAndItemsPerPlayer <= 10, `人均卡+道 ${result.avgTotalCardsAndItemsPerPlayer} 大于 10`);
   });
 
-  it('模拟 MAP80 模板人均点券约 130', () => {
+  it('模拟 MAP80 模板人均点券约 500', () => {
     const map = generateMap(MAP80_TEMPLATE);
     const result = simulateMap(map, {
       ...DEFAULT_SIMULATION_CONFIG,
       roundsPerPlayer: 80,
       iterations: 1000,
     });
-    assert.ok(result.avgCouponsPerPlayer >= 100, `人均点券 ${result.avgCouponsPerPlayer} 小于 100`);
-    assert.ok(result.avgCouponsPerPlayer <= 200, `人均点券 ${result.avgCouponsPerPlayer} 大于 200`);
+    assert.ok(result.avgCouponsPerPlayer >= 400, `人均点券 ${result.avgCouponsPerPlayer} 小于 400`);
+    assert.ok(result.avgCouponsPerPlayer <= 600, `人均点券 ${result.avgCouponsPerPlayer} 大于 600`);
   });
 
   it('绕圈数计算正确', () => {
@@ -54,7 +54,7 @@ describe('simulateMap', () => {
     });
     // 机车平均每次 1.5 颗骰子，约 5.25 步
     assert.ok(result.avgLapsPerPlayer >= 4.0, `机车绕圈数 ${result.avgLapsPerPlayer} 过小`);
-    assert.ok(result.avgTotalCardsAndItemsPerPlayer >= 2, `机车人均卡+道 ${result.avgTotalCardsAndItemsPerPlayer} 不足`);
+    assert.ok(result.avgTotalCardsAndItemsPerPlayer >= 8, `机车人均卡+道 ${result.avgTotalCardsAndItemsPerPlayer} 不足`);
   });
 
   it('汽车（1-3 颗骰子）移动最快且仍能获得卡片道具', () => {
@@ -68,7 +68,7 @@ describe('simulateMap', () => {
     });
     // 汽车平均每次 2 颗骰子，约 7 步
     assert.ok(result.avgLapsPerPlayer >= 5.0, `汽车绕圈数 ${result.avgLapsPerPlayer} 过小`);
-    assert.ok(result.avgTotalCardsAndItemsPerPlayer >= 2, `汽车人均卡+道 ${result.avgTotalCardsAndItemsPerPlayer} 不足`);
+    assert.ok(result.avgTotalCardsAndItemsPerPlayer >= 12, `汽车人均卡+道 ${result.avgTotalCardsAndItemsPerPlayer} 不足`);
   });
 
   it('均衡性评分在合理范围', () => {

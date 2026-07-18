@@ -797,6 +797,42 @@ function onPassTile(state: GameState, tileIndex: number, player: Player): boolea
     }
   }
 
+  // 卡片格：经过即免费获得一张卡片（非停留）
+  if (tile.type === 'card') {
+    if (player.cards.length >= 15) {
+      state.logs.push({
+        timestamp: Date.now(),
+        type: 'player:cardFull',
+        actorId: player.id,
+        message: `${player.username} 经过卡片格，但卡片已满 15 张`,
+      });
+    } else {
+      const cardId = CARD_IDS[Math.floor(Math.random() * CARD_IDS.length)];
+      const def = CARD_DEFINITIONS[cardId];
+      const instanceId = `${cardId}-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+      player.cards.push({ instanceId, cardId });
+      state.logs.push({
+        timestamp: Date.now(),
+        type: 'player:card',
+        actorId: player.id,
+        message: `${player.username} 经过卡片格，获得 ${def.name}`,
+      });
+    }
+  }
+
+  // 得点券格：踩到即获得对应点券
+  if (tile.type === 'coupon' || tile.type === 'coupon10' || tile.type === 'coupon30' || tile.type === 'coupon50') {
+    const value: number =
+      tile.type === 'coupon10' ? 10 : tile.type === 'coupon30' ? 30 : tile.type === 'coupon50' ? 50 : (tile.couponValue ?? 30);
+    player.coupons += value;
+    state.logs.push({
+      timestamp: Date.now(),
+      type: 'player:coupon',
+      actorId: player.id,
+      message: `${player.username} 经过点券格，获得 ${value} 点券`,
+    });
+  }
+
   return false;
 }
 
@@ -804,10 +840,12 @@ function onPassTile(state: GameState, tileIndex: number, player: Player): boolea
  * 处理玩家到达当前地块后的效果。
  * - property：买地/升级/支付过路费
  * - tax：缴纳税款
- * - card/coupon30：获得点券
  * - fate/chance：触发命运事件
  * - news：触发全局新闻事件
  * - company：触发公司特效
+ *
+ * 注意：卡片格与得点券格属于“经过触发”，逻辑在 `onPassTile` 中实现，
+ * 本函数不再重复处理，避免同回合内重复获得。
  */
 export function handleTileEffect(state: GameState): GameState {
   const player = getCurrentPlayer(state);
@@ -864,36 +902,6 @@ export function handleTileEffect(state: GameState): GameState {
   } else if (tile.type === 'tax') {
     const tax = 5000;
     payMoney(state, player, tax, '税款');
-  } else if (tile.type === 'card') {
-    if (player.cards.length >= 15) {
-      state.logs.push({
-        timestamp: Date.now(),
-        type: 'player:cardFull',
-        actorId: player.id,
-        message: `${player.username} 经过卡片格，但卡片已满 15 张`,
-      });
-    } else {
-      const cardId = CARD_IDS[Math.floor(Math.random() * CARD_IDS.length)];
-      const def = CARD_DEFINITIONS[cardId];
-      const instanceId = `${cardId}-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
-      player.cards.push({ instanceId, cardId });
-      state.logs.push({
-        timestamp: Date.now(),
-        type: 'player:card',
-        actorId: player.id,
-        message: `${player.username} 经过卡片格，获得 ${def.name}`,
-      });
-    }
-  } else if (tile.type === 'coupon' || tile.type === 'coupon10' || tile.type === 'coupon30' || tile.type === 'coupon50') {
-    const value: number =
-      tile.type === 'coupon10' ? 10 : tile.type === 'coupon30' ? 30 : tile.type === 'coupon50' ? 50 : (tile.couponValue ?? 30);
-    player.coupons += value;
-    state.logs.push({
-      timestamp: Date.now(),
-      type: 'player:coupon',
-      actorId: player.id,
-      message: `${player.username} 获得 ${value} 点券`,
-    });
   } else if (tile.type === 'fate' || tile.type === 'chance') {
     const outcome = triggerFateEvent(state, player, tile, tile.type);
     applyEventOutcome(state, player, outcome);

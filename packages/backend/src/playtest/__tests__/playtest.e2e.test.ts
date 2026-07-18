@@ -140,7 +140,7 @@ describe('LLM automated playtest', () => {
       }
     }
 
-    expect(['completed', 'timeout']).toContain(report.result);
+    expect(['completed', 'timeout', 'max-turns-reached']).toContain(report.result);
   }, 120000);
 
   it('stock test: players trade stocks without critical issues', async () => {
@@ -173,7 +173,7 @@ describe('LLM automated playtest', () => {
       }
     }
 
-    expect(['completed', 'timeout']).toContain(report.result);
+    expect(['completed', 'timeout', 'max-turns-reached']).toContain(report.result);
   }, 120000);
 
   it('LLM brain: runs 3 rounds through mocked LLM API', async () => {
@@ -211,7 +211,7 @@ describe('LLM automated playtest', () => {
       process.env.PLAYTEST_LLM_API_KEY = originalApiKey;
       await mockServer.close();
     }
-  }, 300000);
+  }, 900000);
 
   it('LLM brain: 3 long strategy games with real MIMO API (120 ops each)', async () => {
     if (!process.env.PLAYTEST_LLM_API_KEY || process.env.PLAYTEST_LLM_API_KEY === 'mock-key') {

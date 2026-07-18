@@ -166,7 +166,6 @@ function updateOHLCHistory(stock: Stock, basePrice: number, ohlc: OHLC): void {
   });
   // 只保留最近 20 条
   if (stock.ohlcHistory.length > 20) stock.ohlcHistory.shift();
-  stock.prevPrice = stock.price;
 }
 
 /**
@@ -183,10 +182,12 @@ function updateStockPriceWithTrend(state: GameState, stock: Stock): void {
     } else {
       // 按模板计算价格
       const ohlc = template.ohlc[existingTrend.currentIndex];
+      const prevPrice = stock.price;
       stock.price = Math.round(existingTrend.startPrice * (1 + ohlc.close));
       stock.fluctuation = Math.round(ohlc.close * 1000) / 10;
       existingTrend.currentIndex++;
       updateOHLCHistory(stock, existingTrend.startPrice, ohlc);
+      stock.prevPrice = prevPrice;
       return; // 走势模式下跳过随机波动
     }
   }
@@ -205,9 +206,11 @@ function updateStockPriceWithTrend(state: GameState, stock: Stock): void {
     });
     // 第一天价格
     const firstOhlc = template.ohlc[0];
+    const prevPrice = stock.price;
     stock.price = Math.round(stock.price * (1 + firstOhlc.close));
     stock.fluctuation = Math.round(firstOhlc.close * 1000) / 10;
     updateOHLCHistory(stock, stock.price / (1 + firstOhlc.close), firstOhlc);
+    stock.prevPrice = prevPrice;
     return;
   }
 
