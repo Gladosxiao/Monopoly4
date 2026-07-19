@@ -224,16 +224,6 @@ docker compose -f docker-compose.production.yml up -d
 
 详细步骤见 [`docs/design/08-deployment.md`](docs/design/08-deployment.md)。
 
-### 前端 GitHub Pages + 后端分离部署
-
-也支持前端部署到 GitHub Pages：
-
-1. 在仓库 **Settings → Pages** 中将 Source 改为 **GitHub Actions**。
-2. 在仓库 Variables 中设置 `BACKEND_URL`（如 `https://monopoly4-api.kimi.example.com`）。
-3. 推送代码后自动部署前端到 Pages，同时 `deploy.yml` 部署后端到服务器。
-
-后端 `ALLOWED_ORIGINS` 必须包含 GitHub Pages 域名。
-
 ### 手动部署脚本
 
 ```bash

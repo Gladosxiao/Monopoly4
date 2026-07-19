@@ -33,8 +33,7 @@
 ├── docker-compose.production.yml                # 生产部署 Docker Compose
 ├── .github/workflows/                           # CI/CD 流水线
 │   ├── ci.yml                                   # 持续集成（构建+测试）
-│   ├── deploy.yml                               # 自动部署到服务器
-│   └── pages.yml                                # 前端 GitHub Pages 部署
+│   └── deploy.yml                               # 自动部署到服务器
 ├── docs/                                        # 设计文档与指南（已追踪）
 │   ├── test-mode-guide.md                       # 测试模式完整说明
 │   ├── design/                                  # 架构与子系统设计文档
